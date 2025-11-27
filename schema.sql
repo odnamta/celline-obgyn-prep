@@ -12,18 +12,34 @@ CREATE TABLE decks (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Cards table
+-- Cards table (supports both flashcards and MCQs)
 CREATE TABLE cards (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   deck_id UUID NOT NULL REFERENCES decks(id) ON DELETE CASCADE,
+  -- Card type discriminator
+  card_type TEXT DEFAULT 'flashcard' CHECK (card_type IN ('flashcard', 'mcq')),
+  -- Flashcard fields
   front TEXT NOT NULL,
   back TEXT NOT NULL,
+  -- MCQ fields (nullable for flashcards)
+  stem TEXT,
+  options JSONB,
+  correct_index INTEGER,
+  explanation TEXT,
+  -- Shared fields
   image_url TEXT,
   interval INTEGER DEFAULT 0,
   ease_factor REAL DEFAULT 2.5,
   next_review TIMESTAMPTZ DEFAULT NOW(),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Migration: Add MCQ fields to existing cards table
+-- ALTER TABLE cards ADD COLUMN card_type TEXT DEFAULT 'flashcard' CHECK (card_type IN ('flashcard', 'mcq'));
+-- ALTER TABLE cards ADD COLUMN stem TEXT;
+-- ALTER TABLE cards ADD COLUMN options JSONB;
+-- ALTER TABLE cards ADD COLUMN correct_index INTEGER;
+-- ALTER TABLE cards ADD COLUMN explanation TEXT;
 
 -- RLS Policies for decks
 ALTER TABLE decks ENABLE ROW LEVEL SECURITY;
@@ -126,3 +142,331 @@ CREATE POLICY "Users can update own logs" ON study_logs
 
 -- Index on (user_id, study_date) for efficient queries
 CREATE INDEX idx_study_logs_user_date ON study_logs(user_id, study_date);
+
+
+-- ============================================
+-- Course Hierarchy Tables (V2)
+-- ============================================
+
+-- Courses table
+CREATE TABLE courses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- RLS Policies for courses
+ALTER TABLE courses ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage own courses" ON courses
+  FOR ALL USING (auth.uid() = user_id);
+
+-- Index on user_id
+CREATE INDEX idx_courses_user_id ON courses(user_id);
+
+-- Units table
+CREATE TABLE units (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  order_index INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- RLS Policies for units (via course ownership)
+ALTER TABLE units ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage units in own courses" ON units
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM courses WHERE courses.id = units.course_id AND courses.user_id = auth.uid())
+  );
+
+-- Index on course_id
+CREATE INDEX idx_units_course_id ON units(course_id);
+
+-- Lessons table
+CREATE TABLE lessons (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  unit_id UUID NOT NULL REFERENCES units(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  order_index INTEGER NOT NULL DEFAULT 0,
+  target_item_count INTEGER DEFAULT 10,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- RLS Policies for lessons (via unit/course ownership)
+ALTER TABLE lessons ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage lessons in own courses" ON lessons
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM units 
+      JOIN courses ON courses.id = units.course_id 
+      WHERE units.id = lessons.unit_id AND courses.user_id = auth.uid()
+    )
+  );
+
+-- Index on unit_id
+CREATE INDEX idx_lessons_unit_id ON lessons(unit_id);
+
+-- Lesson items table
+CREATE TABLE lesson_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  lesson_id UUID NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+  item_type TEXT NOT NULL CHECK (item_type IN ('mcq', 'card')),
+  item_id UUID NOT NULL,
+  order_index INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- RLS Policies for lesson_items (via lesson/unit/course ownership)
+ALTER TABLE lesson_items ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage lesson_items in own courses" ON lesson_items
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM lessons
+      JOIN units ON units.id = lessons.unit_id
+      JOIN courses ON courses.id = units.course_id
+      WHERE lessons.id = lesson_items.lesson_id AND courses.user_id = auth.uid()
+    )
+  );
+
+-- Index on lesson_id
+CREATE INDEX idx_lesson_items_lesson_id ON lesson_items(lesson_id);
+
+-- Lesson progress table
+CREATE TABLE lesson_progress (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  lesson_id UUID NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+  last_completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  best_score INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, lesson_id)
+);
+
+-- RLS Policies for lesson_progress (user ownership)
+ALTER TABLE lesson_progress ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage own lesson_progress" ON lesson_progress
+  FOR ALL USING (auth.uid() = user_id);
+
+-- Index on (user_id, lesson_id)
+CREATE INDEX idx_lesson_progress_user_lesson ON lesson_progress(user_id, lesson_id);
+
+
+-- ============================================
+-- Source Document Tables (V2 - Bulk Import)
+-- ============================================
+
+-- Sources table for PDF/document tracking
+CREATE TABLE sources (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'pdf_book',
+  file_url TEXT NOT NULL,
+  metadata JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- RLS Policies for sources (user ownership)
+ALTER TABLE sources ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage own sources" ON sources
+  FOR ALL USING (auth.uid() = user_id);
+
+-- Index on user_id
+CREATE INDEX idx_sources_user_id ON sources(user_id);
+
+
+-- Deck sources join table (links decks to sources)
+CREATE TABLE deck_sources (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  deck_id UUID NOT NULL REFERENCES decks(id) ON DELETE CASCADE,
+  source_id UUID NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(deck_id, source_id)
+);
+
+-- RLS Policies for deck_sources (via deck ownership)
+ALTER TABLE deck_sources ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage deck_sources for own decks" ON deck_sources
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM decks WHERE decks.id = deck_sources.deck_id AND decks.user_id = auth.uid())
+  );
+
+-- Index on deck_id
+CREATE INDEX idx_deck_sources_deck_id ON deck_sources(deck_id);
+
+
+-- ============================================
+-- MIGRATION GUIDE: V2 Tables
+-- ============================================
+-- 
+-- If you're getting "Could not find the table 'public.courses'" error,
+-- it means the V2 tables haven't been created in your Supabase database.
+-- 
+-- STEP-BY-STEP INSTRUCTIONS:
+-- 
+-- 1. Open your Supabase Dashboard
+-- 2. Go to SQL Editor
+-- 3. Copy and run the following SQL blocks IN ORDER:
+--
+-- ============================================
+-- BLOCK 1: Course Hierarchy Tables
+-- ============================================
+/*
+-- Courses table
+CREATE TABLE IF NOT EXISTS courses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE courses ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage own courses" ON courses
+  FOR ALL USING (auth.uid() = user_id);
+
+CREATE INDEX IF NOT EXISTS idx_courses_user_id ON courses(user_id);
+
+-- Units table
+CREATE TABLE IF NOT EXISTS units (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  order_index INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE units ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage units in own courses" ON units
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM courses WHERE courses.id = units.course_id AND courses.user_id = auth.uid())
+  );
+
+CREATE INDEX IF NOT EXISTS idx_units_course_id ON units(course_id);
+
+-- Lessons table
+CREATE TABLE IF NOT EXISTS lessons (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  unit_id UUID NOT NULL REFERENCES units(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  order_index INTEGER NOT NULL DEFAULT 0,
+  target_item_count INTEGER DEFAULT 10,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE lessons ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage lessons in own courses" ON lessons
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM units 
+      JOIN courses ON courses.id = units.course_id 
+      WHERE units.id = lessons.unit_id AND courses.user_id = auth.uid()
+    )
+  );
+
+CREATE INDEX IF NOT EXISTS idx_lessons_unit_id ON lessons(unit_id);
+
+-- Lesson items table
+CREATE TABLE IF NOT EXISTS lesson_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  lesson_id UUID NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+  item_type TEXT NOT NULL CHECK (item_type IN ('mcq', 'card')),
+  item_id UUID NOT NULL,
+  order_index INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE lesson_items ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage lesson_items in own courses" ON lesson_items
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM lessons
+      JOIN units ON units.id = lessons.unit_id
+      JOIN courses ON courses.id = units.course_id
+      WHERE lessons.id = lesson_items.lesson_id AND courses.user_id = auth.uid()
+    )
+  );
+
+CREATE INDEX IF NOT EXISTS idx_lesson_items_lesson_id ON lesson_items(lesson_id);
+
+-- Lesson progress table
+CREATE TABLE IF NOT EXISTS lesson_progress (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  lesson_id UUID NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+  last_completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  best_score INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, lesson_id)
+);
+
+ALTER TABLE lesson_progress ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage own lesson_progress" ON lesson_progress
+  FOR ALL USING (auth.uid() = user_id);
+
+CREATE INDEX IF NOT EXISTS idx_lesson_progress_user_lesson ON lesson_progress(user_id, lesson_id);
+*/
+
+-- ============================================
+-- BLOCK 2: Source Document Tables
+-- ============================================
+/*
+-- Sources table
+CREATE TABLE IF NOT EXISTS sources (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'pdf_book',
+  file_url TEXT NOT NULL,
+  metadata JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE sources ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage own sources" ON sources
+  FOR ALL USING (auth.uid() = user_id);
+
+CREATE INDEX IF NOT EXISTS idx_sources_user_id ON sources(user_id);
+
+-- Deck sources join table
+CREATE TABLE IF NOT EXISTS deck_sources (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  deck_id UUID NOT NULL REFERENCES decks(id) ON DELETE CASCADE,
+  source_id UUID NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(deck_id, source_id)
+);
+
+ALTER TABLE deck_sources ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage deck_sources for own decks" ON deck_sources
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM decks WHERE decks.id = deck_sources.deck_id AND decks.user_id = auth.uid())
+  );
+
+CREATE INDEX IF NOT EXISTS idx_deck_sources_deck_id ON deck_sources(deck_id);
+*/
+
+-- ============================================
+-- HOW TO RUN:
+-- ============================================
+-- 1. Copy BLOCK 1 (everything between the /* and */ markers)
+-- 2. Paste into Supabase SQL Editor and click "Run"
+-- 3. Copy BLOCK 2 and run it the same way
+-- 4. Refresh your app - the error should be gone!
+-- ============================================

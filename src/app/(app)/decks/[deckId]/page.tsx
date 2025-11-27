@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createSupabaseServerClient, getUser } from '@/lib/supabase/server'
-import { CreateCardForm } from '@/components/cards/CreateCardForm'
+import { CardFormTabs } from '@/components/cards/CardFormTabs'
 import { Button } from '@/components/ui/Button'
 import type { Card, Deck } from '@/types/database'
 
@@ -69,7 +69,12 @@ export default async function DeckDetailsPage({ params }: DeckDetailsPageProps) 
       <div className="mb-8 flex flex-wrap gap-3">
         <Link href={`/study/${deckId}`}>
           <Button size="lg">
-            Study Now
+            Study Flashcards
+          </Button>
+        </Link>
+        <Link href={`/study/mcq/${deckId}`}>
+          <Button size="lg">
+            Study MCQs
           </Button>
         </Link>
         {/* Requirement 7.4: Link to bulk import page */}
@@ -80,10 +85,10 @@ export default async function DeckDetailsPage({ params }: DeckDetailsPageProps) 
         </Link>
       </div>
 
-      {/* Add new card form */}
+      {/* Add new card form with tabs for flashcard/MCQ */}
       <div className="mb-8 p-4 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm dark:shadow-none">
         <h2 className="text-lg font-medium text-slate-900 dark:text-slate-100 mb-4">Add New Card</h2>
-        <CreateCardForm deckId={deckId} />
+        <CardFormTabs deckId={deckId} />
       </div>
 
       {/* Card list */}
@@ -105,12 +110,27 @@ export default async function DeckDetailsPage({ params }: DeckDetailsPageProps) 
                 key={card.id}
                 className="p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm dark:shadow-none"
               >
-                <p className="text-slate-900 dark:text-slate-100 line-clamp-2">{card.front}</p>
-                {card.image_url && (
-                  <span className="inline-flex items-center mt-2 px-2 py-0.5 rounded text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400">
-                    Has image
-                  </span>
+                {/* Display content based on card type */}
+                {card.card_type === 'mcq' ? (
+                  <p className="text-slate-900 dark:text-slate-100 line-clamp-2">{card.stem}</p>
+                ) : (
+                  <p className="text-slate-900 dark:text-slate-100 line-clamp-2">{card.front}</p>
                 )}
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {/* Card type badge */}
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs ${
+                    card.card_type === 'mcq' 
+                      ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+                      : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                  }`}>
+                    {card.card_type === 'mcq' ? 'MCQ' : 'Flashcard'}
+                  </span>
+                  {card.image_url && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400">
+                      Has image
+                    </span>
+                  )}
+                </div>
               </div>
             ))}
           </div>

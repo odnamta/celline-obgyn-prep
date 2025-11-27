@@ -1,0 +1,317 @@
+# Implementation Plan
+
+## Feature Set 1: MCQ Engine
+
+- [x] 1. Extend database schema for MCQs
+  - [x] 1.1 Add MCQ fields to cards table
+    - Add `card_type` column with CHECK constraint ('flashcard' | 'mcq'), default 'flashcard'
+    - Add `stem` TEXT column (nullable)
+    - Add `options` JSONB column (nullable)
+    - Add `correct_index` INTEGER column (nullable)
+    - Add `explanation` TEXT column (nullable)
+    - Update schema.sql with ALTER TABLE statements
+    - _Requirements: 1.1, 1.5_
+  - [x] 1.2 Update TypeScript types for MCQ
+    - Add CardType type to types/database.ts
+    - Extend Card interface with MCQ fields
+    - Add MCQCard interface extending Card
+    - _Requirements: 1.1_
+  - [x] 1.3 Write property test for MCQ options round-trip
+    - **Property 1: MCQ Options Round-Trip Consistency**
+    - **Validates: Requirements 1.2**
+
+- [x] 2. Implement MCQ validation
+  - [x] 2.1 Create MCQ validation schema
+    - Add createMCQSchema to lib/validations.ts
+    - Validate non-empty stem, min 2 options, valid correct_index bounds
+    - Use Zod refine for cross-field validation
+    - _Requirements: 1.4, 3.2_
+  - [x] 2.2 Write property test for MCQ validation
+    - **Property 2: MCQ Validation Correctness**
+    - **Validates: Requirements 1.4, 3.2**
+
+- [x] 3. Implement MCQ Server Actions
+  - [x] 3.1 Create createMCQAction Server Action
+    - Implement in actions/mcq-actions.ts
+    - Validate input with createMCQSchema
+    - Verify deck ownership via RLS
+    - Insert card with card_type='mcq' and MCQ fields
+    - Revalidate deck page
+    - _Requirements: 1.1, 3.3, 3.4_
+  - [x] 3.2 Create answerMCQAction Server Action
+    - Implement in actions/mcq-actions.ts
+    - Fetch MCQ card and verify ownership
+    - Determine correctness (selectedIndex === correct_index)
+    - Map to SRS rating: correct → 3 (Good), incorrect → 1 (Again)
+    - Call existing SM-2 calculation and update card
+    - Update user_stats and study_logs (reuse rateCardAction logic)
+    - Return isCorrect, correctIndex, explanation
+    - _Requirements: 2.1, 2.4, 2.5, 2.6_
+  - [x] 3.3 Write property test for MCQ answer correctness mapping
+    - **Property 4: MCQ Answer Correctness Mapping**
+    - **Validates: Requirements 2.4, 2.5**
+  - [x] 3.4 Write property test for MCQ stats integration
+    - **Property 5: MCQ Stats Integration**
+    - **Validates: Requirements 2.6**
+  - [x] 3.5 Write property test for MCQ deck authorization
+    - **Property 3: MCQ Deck Authorization**
+    - **Validates: Requirements 1.3, 3.4**
+
+- [x] 4. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 5. Implement MCQ Study UI
+  - [x] 5.1 Create MCQQuestion component
+    - Implement components/study/MCQQuestion.tsx as Client Component
+    - Display stem with MarkdownContent
+    - Render options as large tappable buttons (mobile-first)
+    - Handle option selection and call onAnswer callback
+    - Show correct/incorrect highlighting after answer
+    - Display explanation (if present) after answer
+    - _Requirements: 2.1, 2.2, 2.3_
+  - [x] 5.2 Create MCQStudySession component
+    - Implement components/study/MCQStudySession.tsx as Client Component
+    - Manage current question index and session state
+    - Display progress indicator ("Question 3 of 10")
+    - Handle answer submission via answerMCQAction
+    - Show "Next Question" button after answering
+    - Track correct/incorrect counts for summary
+    - _Requirements: 2.7, 2.8_
+  - [x] 5.3 Create MCQ study page
+    - Implement app/(app)/study/mcq/[deckId]/page.tsx
+    - Fetch due MCQ cards for deck (card_type='mcq', next_review <= now)
+    - Pass cards to MCQStudySession component
+    - Show completion state when no cards remain
+    - _Requirements: 2.1_
+
+- [x] 6. Implement MCQ Authoring UI
+  - [x] 6.1 Create CreateMCQForm component
+    - Implement components/cards/CreateMCQForm.tsx as Client Component
+    - Stem textarea with markdown helper text
+    - 4 option inputs with add/remove capability
+    - Radio buttons for correct answer selection
+    - Explanation textarea (optional)
+    - Image upload field (optional)
+    - Submit via createMCQAction
+    - Reset form on success, maintain deck context
+    - _Requirements: 3.1, 3.3_
+  - [x] 6.2 Add MCQ creation to deck page
+    - Add "Add MCQ" button/tab to deck details page
+    - Render CreateMCQForm when MCQ mode selected
+    - _Requirements: 3.1_
+
+- [x] 7. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+## Feature Set 2: Course/Unit/Lesson Path
+
+- [x] 8. Create course hierarchy schema
+  - [x] 8.1 Add courses table
+    - Create courses table with id, user_id, title, description, created_at
+    - Add RLS policy for user ownership
+    - Add index on user_id
+    - _Requirements: 4.1_
+  - [x] 8.2 Add units table
+    - Create units table with id, course_id, title, order_index, created_at
+    - Add RLS policy via course ownership
+    - Add index on course_id
+    - Add ON DELETE CASCADE from courses
+    - _Requirements: 4.2_
+  - [x] 8.3 Add lessons table
+    - Create lessons table with id, unit_id, title, order_index, target_item_count, created_at
+    - Add RLS policy via unit/course ownership
+    - Add index on unit_id
+    - Add ON DELETE CASCADE from units
+    - _Requirements: 4.3_
+  - [x] 8.4 Add lesson_items table
+    - Create lesson_items table with id, lesson_id, item_type, item_id, order_index, created_at
+    - Add CHECK constraint on item_type ('mcq' | 'card')
+    - Add RLS policy via lesson/unit/course ownership
+    - Add index on lesson_id
+    - Add ON DELETE CASCADE from lessons
+    - _Requirements: 4.4_
+  - [x] 8.5 Add lesson_progress table
+    - Create lesson_progress table with id, user_id, lesson_id, last_completed_at, best_score, created_at
+    - Add UNIQUE constraint on (user_id, lesson_id)
+    - Add RLS policy for user ownership
+    - Add index on (user_id, lesson_id)
+    - _Requirements: 7.1, 7.2_
+  - [x] 8.6 Update TypeScript types for course hierarchy
+    - Add Course, Unit, Lesson, LessonItem, LessonProgress interfaces
+    - Add LessonItemType and LessonStatus types
+    - _Requirements: 4.1, 4.2, 4.3, 4.4_
+  - [x] 8.7 Write property test for course hierarchy RLS
+    - **Property 6: Course Hierarchy RLS**
+    - **Validates: Requirements 4.1, 4.2, 4.3**
+  - [x] 8.8 Write property test for cascade delete
+    - **Property 7: Course Hierarchy Cascade Delete**
+    - **Validates: Requirements 4.5, 4.6**
+
+- [x] 9. Implement lesson status logic
+  - [x] 9.1 Create lesson status helper
+    - Implement lib/lesson-status.ts with calculateLessonStatus function
+    - First lesson of first unit is always unlocked
+    - Subsequent lessons locked until previous completed
+    - Completed status when lesson_progress exists
+    - _Requirements: 6.3, 6.4_
+  - [x] 9.2 Write property test for lesson lock status
+    - **Property 11: Lesson Lock Status Logic**
+    - **Validates: Requirements 6.2, 6.3, 6.4, 6.5, 7.3**
+
+- [x] 10. Implement course Server Actions
+  - [x] 10.1 Create course CRUD actions
+    - Implement actions/course-actions.ts
+    - createCourseAction, updateCourseAction, deleteCourseAction
+    - Validate with Zod, enforce RLS
+    - _Requirements: 4.1_
+  - [x] 10.2 Create unit CRUD actions
+    - createUnitAction, updateUnitAction, deleteUnitAction
+    - Validate course ownership
+    - _Requirements: 4.2_
+  - [x] 10.3 Create lesson CRUD actions
+    - createLessonAction, updateLessonAction, deleteLessonAction
+    - Validate unit/course ownership
+    - _Requirements: 4.3_
+  - [x] 10.4 Create lesson item actions
+    - addLessonItemAction, removeLessonItemAction, reorderLessonItemsAction
+    - Validate lesson ownership and item existence
+    - _Requirements: 4.4_
+  - [x] 10.5 Create getLessonItems helper
+    - Fetch lesson_items with joined card data, ordered by order_index
+    - Return array of { item, card } objects
+    - _Requirements: 5.1_
+  - [x] 10.6 Write property test for lesson items ordering
+    - **Property 8: Lesson Items Ordering**
+    - **Validates: Requirements 5.1**
+
+- [x] 11. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 12. Implement lesson study flow
+  - [x] 12.1 Create LessonStudy component
+    - Implement components/study/LessonStudy.tsx as Client Component
+    - Iterate through lesson_items in order
+    - Route to MCQQuestion or Flashcard based on item_type
+    - Track progress (current index, correct count)
+    - Display progress indicator
+    - _Requirements: 5.1, 5.2, 5.3_
+  - [x] 12.2 Write property test for item type routing
+    - **Property 9: Lesson Item Type Routing**
+    - **Validates: Requirements 5.2, 5.3**
+  - [x] 12.3 Create completeLessonAction Server Action
+    - Record completion in lesson_progress (upsert)
+    - Update best_score if new score is higher
+    - Update user_stats and study_logs for streak/heatmap
+    - _Requirements: 5.4, 5.6, 7.1, 7.4_
+  - [x] 12.4 Write property test for lesson progress persistence
+    - **Property 10: Lesson Progress Persistence**
+    - **Validates: Requirements 5.4, 7.1, 7.4**
+  - [x] 12.5 Create LessonSummary component
+    - Display score (correct/total)
+    - List mistakes with correct answers
+    - Show "Repeat Lesson" and "Continue" buttons
+    - _Requirements: 5.5_
+  - [x] 12.6 Create lesson study page
+    - Implement app/(app)/lesson/[lessonId]/page.tsx
+    - Verify lesson is unlocked before rendering
+    - Fetch lesson items via getLessonItems
+    - Pass to LessonStudy component
+    - _Requirements: 5.1_
+
+- [x] 13. Implement course map UI
+  - [x] 13.1 Create CourseMap component
+    - Implement components/course/CourseMap.tsx
+    - Display units vertically
+    - Display lessons as tiles within each unit
+    - Show lock/unlock/completed status with icons
+    - _Requirements: 6.1, 6.2, 6.5_
+  - [x] 13.2 Create LessonTile component
+    - Display lesson title and status indicator
+    - Handle tap: navigate if unlocked, show message if locked
+    - _Requirements: 6.6, 6.7_
+  - [x] 13.3 Create course page
+    - Implement app/(app)/course/[courseId]/page.tsx
+    - Fetch course with units, lessons, and progress
+    - Calculate lesson statuses
+    - Pass to CourseMap component
+    - _Requirements: 6.1_
+  - [x] 13.4 Create LessonOverview page
+    - Implement app/(app)/lesson/[lessonId]/overview/page.tsx
+    - Display lesson title, item count, best score
+    - Show "Start Lesson" button
+    - _Requirements: 5.1_
+  - [x] 13.5 Write property test for lesson progress RLS
+    - **Property 12: Lesson Progress RLS**
+    - **Validates: Requirements 7.2**
+
+- [x] 14. Add course navigation to dashboard
+  - [x] 14.1 Create courses list on dashboard
+    - Fetch user's courses
+    - Display course cards with progress summary
+    - Add "Continue Course" button linking to course map
+    - _Requirements: 6.1_
+  - [x] 14.2 Create course creation UI
+    - Add "Create Course" form to dashboard or dedicated page
+    - _Requirements: 4.1_
+
+- [x] 15. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+## Feature Set 3: Bulk Import Enhancement
+
+- [x] 16. Create source document schema
+  - [x] 16.1 Add sources table
+    - Create sources table with id, user_id, title, type, file_url, metadata, created_at
+    - Add RLS policy for user ownership
+    - Add index on user_id
+    - _Requirements: 8.1, 8.2_
+  - [x] 16.2 Add deck_sources table
+    - Create deck_sources table with id, deck_id, source_id, created_at
+    - Add UNIQUE constraint on (deck_id, source_id)
+    - Add RLS policy via deck ownership
+    - Add ON DELETE CASCADE from both decks and sources
+    - _Requirements: 8.3_
+  - [x] 16.3 Update TypeScript types for sources
+    - Add Source and DeckSource interfaces
+    - _Requirements: 8.1_
+  - [x] 16.4 Write property test for source access control
+    - **Property 13: Source Access Control**
+    - **Validates: Requirements 8.2, 9.5**
+
+- [x] 17. Implement PDF upload
+  - [x] 17.1 Create uploadSourceAction Server Action
+    - Implement in actions/source-actions.ts
+    - Validate file type (PDF only) and size
+    - Upload to Supabase Storage with user-scoped path
+    - Create source record
+    - Optionally link to deck via deck_sources
+    - _Requirements: 8.4, 9.2, 9.3_
+  - [x] 17.2 Write property test for PDF upload validation
+    - **Property 14: PDF Upload Validation**
+    - **Validates: Requirements 8.4**
+  - [x] 17.3 Write property test for source-deck linking
+    - **Property 15: Source-Deck Linking**
+    - **Validates: Requirements 8.3, 9.3**
+  - [x] 17.4 Create getSourcesForDeck helper
+    - Fetch sources linked to a deck via deck_sources
+    - _Requirements: 8.3_
+
+- [x] 18. Enhance bulk import UI
+  - [x] 18.1 Add PDF upload section to bulk import page
+    - Display "Upload PDF" button if no source linked
+    - Show linked source title and filename when present
+    - Handle file selection and upload via uploadSourceAction
+    - _Requirements: 9.1, 9.4_
+  - [x] 18.2 Create split-view layout
+    - Large textarea on left for pasting PDF text
+    - CreateMCQForm on right for quick entry
+    - Responsive: stack vertically on mobile
+    - _Requirements: 10.1, 10.3_
+  - [x] 18.3 Add helper instructions
+    - Add instructional text guiding copy/paste workflow
+    - Include placeholder for future "AI Suggest MCQs" button
+    - _Requirements: 10.2, 10.4_
+
+- [x] 19. Final Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
