@@ -8,12 +8,12 @@ import {
 } from '../lib/use-responsive-day-count';
 
 /**
- * **Feature: v3.1-bugfix-ux-polish, Property 1: Heatmap Day Count by Viewport**
- * **Validates: Requirements 1.1, 1.2**
+ * **Feature: v3.2-visual-polish, Property 1: Heatmap Day Count by Viewport**
+ * **Validates: Requirements 1.2, 1.3**
  * 
- * For any viewport width, the heatmap SHALL display exactly 28 days when width
- * is below the large breakpoint (1024px), and exactly 60 days when width is at
- * or above the large breakpoint.
+ * For any viewport width, the heatmap SHALL display exactly 28 days (4 rows × 7 cols)
+ * when width is below the large breakpoint (1024px), and exactly 84 days (12 rows × 7 cols)
+ * when width is at or above the large breakpoint.
  */
 describe('Property 1: Heatmap Day Count by Viewport', () => {
   test('Viewport below large breakpoint returns 28 days', () => {
@@ -29,7 +29,7 @@ describe('Property 1: Heatmap Day Count by Viewport', () => {
     );
   });
 
-  test('Viewport at or above large breakpoint returns 60 days', () => {
+  test('Viewport at or above large breakpoint returns 84 days', () => {
     fc.assert(
       fc.property(
         fc.integer({ min: LARGE_BREAKPOINT, max: 4000 }),
@@ -42,7 +42,7 @@ describe('Property 1: Heatmap Day Count by Viewport', () => {
     );
   });
 
-  test('Exact breakpoint boundary returns 60 days', () => {
+  test('Exact breakpoint boundary returns 84 days', () => {
     const result = getDayCountForViewport(LARGE_BREAKPOINT);
     expect(result).toBe(LARGE_SCREEN_DAYS);
   });
@@ -52,7 +52,7 @@ describe('Property 1: Heatmap Day Count by Viewport', () => {
     expect(result).toBe(SMALL_SCREEN_DAYS);
   });
 
-  test('Day count is always either 28 or 60', () => {
+  test('Day count is always either 28 or 84', () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 0, max: 5000 }),
@@ -68,6 +68,6 @@ describe('Property 1: Heatmap Day Count by Viewport', () => {
   test('Constants are correctly defined', () => {
     expect(LARGE_BREAKPOINT).toBe(1024);
     expect(SMALL_SCREEN_DAYS).toBe(28);
-    expect(LARGE_SCREEN_DAYS).toBe(60);
+    expect(LARGE_SCREEN_DAYS).toBe(84);
   });
 });

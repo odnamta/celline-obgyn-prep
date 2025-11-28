@@ -8,19 +8,21 @@ import { useState, useEffect } from 'react'
 export const LARGE_BREAKPOINT = 1024
 
 /**
- * Day counts for different viewport sizes
+ * Day counts for different viewport sizes (GitHub-style layout)
+ * Mobile: 28 days (4 weeks = 4 rows × 7 cols)
+ * Desktop: 84 days (12 weeks = 12 rows × 7 cols)
  */
 export const SMALL_SCREEN_DAYS = 28
-export const LARGE_SCREEN_DAYS = 60
+export const LARGE_SCREEN_DAYS = 84
 
 /**
  * Pure function to determine day count based on viewport width.
  * Exported for property testing.
  * 
  * @param viewportWidth - Current viewport width in pixels
- * @returns 28 for small screens, 60 for large screens
+ * @returns 28 for small screens, 84 for large screens
  * 
- * Requirements: 1.1, 1.2
+ * Requirements: 1.2, 1.3
  */
 export function getDayCountForViewport(viewportWidth: number): number {
   return viewportWidth >= LARGE_BREAKPOINT ? LARGE_SCREEN_DAYS : SMALL_SCREEN_DAYS
@@ -28,9 +30,9 @@ export function getDayCountForViewport(viewportWidth: number): number {
 
 /**
  * Hook that returns the appropriate day count based on viewport size.
- * Returns 28 days for small screens (< 1024px), 60 days for large screens.
+ * Returns 28 days for small screens (< 1024px), 84 days for large screens.
  * 
- * Requirements: 1.1, 1.2
+ * Requirements: 1.2, 1.3
  */
 export function useResponsiveDayCount(): number {
   // Default to small screen for SSR

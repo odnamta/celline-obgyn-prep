@@ -99,20 +99,21 @@ describe('Property 3: Text Selection Transfer', () => {
 });
 
 /**
- * **Feature: v3.1-bugfix-ux-polish, Property 4: Focus Sequencing After Paste**
+ * **Feature: v3.2-visual-polish, Property 4: Focus Sequencing After Paste**
  * **Validates: Requirements 5.3**
  * 
- * For any target field in the sequence [stem, optionA, optionB, optionC, explanation],
+ * For any target field in the sequence [stem, optionA, optionB, optionC, optionD, explanation],
  * after pasting text into that field, focus SHALL move to the next field in the
  * sequence (or remain on explanation if already at the end).
  */
 describe('Property 4: Focus Sequencing After Paste', () => {
   test('getNextField returns correct next field for all fields except last', () => {
-    // Test each field in sequence
+    // Test each field in sequence (now includes optionD)
     expect(getNextField('stem')).toBe('optionA');
     expect(getNextField('optionA')).toBe('optionB');
     expect(getNextField('optionB')).toBe('optionC');
-    expect(getNextField('optionC')).toBe('explanation');
+    expect(getNextField('optionC')).toBe('optionD');
+    expect(getNextField('optionD')).toBe('explanation');
     expect(getNextField('explanation')).toBe(null);
   });
 
@@ -121,8 +122,8 @@ describe('Property 4: Focus Sequencing After Paste', () => {
     expect(getNextField(lastField)).toBe(null);
   });
 
-  test('Field sequence is correctly ordered', () => {
-    expect(FIELD_SEQUENCE).toEqual(['stem', 'optionA', 'optionB', 'optionC', 'explanation']);
+  test('Field sequence is correctly ordered (includes optionD)', () => {
+    expect(FIELD_SEQUENCE).toEqual(['stem', 'optionA', 'optionB', 'optionC', 'optionD', 'explanation']);
   });
 
   test('For any field except last, next field is the subsequent element in sequence', () => {
@@ -139,8 +140,8 @@ describe('Property 4: Focus Sequencing After Paste', () => {
     );
   });
 
-  test('Sequence contains exactly 5 fields', () => {
-    expect(FIELD_SEQUENCE.length).toBe(5);
+  test('Sequence contains exactly 6 fields (stem + 4 options + explanation)', () => {
+    expect(FIELD_SEQUENCE.length).toBe(6);
   });
 
   test('All fields in sequence are unique', () => {

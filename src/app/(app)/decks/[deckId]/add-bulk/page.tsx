@@ -75,6 +75,9 @@ export default function BulkImportPage() {
       case 'optionC':
         setOptions(prev => { const next = [...prev]; next[2] = text; return next })
         break
+      case 'optionD':
+        setOptions(prev => { const next = [...prev]; next[3] = text; return next })
+        break
       case 'explanation':
         setExplanation(text)
         break
@@ -90,6 +93,7 @@ export default function BulkImportPage() {
       else if (nextField === 'optionA') optionRefs.current[0]?.focus()
       else if (nextField === 'optionB') optionRefs.current[1]?.focus()
       else if (nextField === 'optionC') optionRefs.current[2]?.focus()
+      else if (nextField === 'optionD') optionRefs.current[3]?.focus()
       else if (nextField === 'explanation') explanationRef.current?.focus()
     }, 50)
   }, [showToast])
@@ -421,8 +425,8 @@ function BulkMCQForm({
           </div>
         ))}
         
-        {/* Add option button - max 10 options */}
-        {options.length < 10 && (
+        {/* Add option button - max 5 options (A-E) */}
+        {options.length < 5 && (
           <button
             type="button"
             onClick={() => setOptions([...options, ''])}
@@ -436,7 +440,7 @@ function BulkMCQForm({
         )}
         
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Min 2, max 10 options (A-J)
+          Min 2, max 5 options (A-E)
         </p>
       </div>
 
