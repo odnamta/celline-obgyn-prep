@@ -53,6 +53,12 @@ function buildUserPrompt(sourceText: string, deckName?: string): string {
  * Requirements: FR-2
  */
 export async function draftMCQFromText(input: DraftMCQInput): Promise<MCQDraftResult> {
+  // Check if OpenAI API key is configured (server-side only)
+  if (!process.env.OPENAI_API_KEY) {
+    console.warn('draftMCQFromText: missing OPENAI_API_KEY')
+    return { ok: false, error: 'NOT_CONFIGURED' }
+  }
+
   // Validate input with Zod schema (FR-2.1, FR-2.2)
   const validationResult = draftMCQInputSchema.safeParse(input)
   

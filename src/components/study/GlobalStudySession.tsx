@@ -39,6 +39,12 @@ export function GlobalStudySession({
   nextBatchUrl,
 }: GlobalStudySessionProps) {
   const { showToast } = useToast()
+  
+  // Fixed session count - captured at mount, never changes during session
+  // This ensures "Card X of Y" denominator stays constant
+  const [sessionCardCount] = useState(() => initialCards.length)
+  const [sessionCards] = useState(() => initialCards)
+  
   const [currentIndex, setCurrentIndex] = useState(0)
   const [correctCount, setCorrectCount] = useState(0)
   const [incorrectCount, setIncorrectCount] = useState(0)
@@ -52,8 +58,10 @@ export function GlobalStudySession({
   const [isAnswered, setIsAnswered] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
 
-  const currentCard = initialCards[currentIndex] || null
-  const remainingInBatch = initialCards.length - currentIndex - 1
+  // Use sessionCards (fixed at mount) instead of initialCards (may change)
+  const currentCard = sessionCards[currentIndex] || null
+  const remainingInBatch = sessionCardCount - currentIndex - 1
+  // Global due count is separate from session progress
   const remainingDueCount = totalDueRemaining - (currentIndex + 1)
 
   // Persist session state to localStorage on each change
@@ -62,11 +70,11 @@ export function GlobalStudySession({
       currentIndex,
       correctCount,
       incorrectCount,
-      cardIds: initialCards.map(c => c.id),
+      cardIds: sessionCards.map(c => c.id),
       timestamp: new Date().toISOString(),
     }
     saveSessionState(state)
-  }, [currentIndex, correctCount, incorrectCount, initialCards])
+  }, [currentIndex, correctCount, incorrectCount, sessionCards])
 
   useEffect(() => {
     if (!isComplete) {
@@ -88,7 +96,7 @@ export function GlobalStudySession({
 
   // Move to next card or complete session
   const moveToNext = () => {
-    if (currentIndex < initialCards.length - 1) {
+    if (currentIndex < sessionCardCount - 1) {
       setCurrentIndex(prev => prev + 1)
       setIsRevealed(false)
       setIsAnswered(false)
@@ -174,10 +182,10 @@ export function GlobalStudySession({
 
   return (
     <div>
-      {/* Progress indicator */}
+      {/* Progress indicator - uses fixed sessionCardCount, not mutable props */}
       <div className="mb-6 text-center">
         <span className="text-sm text-slate-600 dark:text-slate-400">
-          Card {currentIndex + 1} of {initialCards.length}
+          Card {currentIndex + 1} of {sessionCardCount}
           {remainingInBatch > 0 && ` • ${remainingInBatch} remaining in batch`}
         </span>
       </div>

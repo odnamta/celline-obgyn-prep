@@ -45,7 +45,7 @@ export type MCQDraft = z.infer<typeof mcqDraftSchema>
 /**
  * Error types for MCQ drafting.
  */
-export type MCQDraftError = 'TEXT_TOO_SHORT' | 'OPENAI_ERROR' | 'PARSE_ERROR'
+export type MCQDraftError = 'TEXT_TOO_SHORT' | 'OPENAI_ERROR' | 'PARSE_ERROR' | 'NOT_CONFIGURED'
 
 /**
  * Discriminated union result type for draftMCQFromText.

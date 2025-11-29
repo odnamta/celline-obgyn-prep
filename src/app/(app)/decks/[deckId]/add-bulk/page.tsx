@@ -158,6 +158,9 @@ export default function BulkImportPage() {
           case 'TEXT_TOO_SHORT':
             showToast('Please select a longer paragraph (at least 50 characters)', 'error')
             break
+          case 'NOT_CONFIGURED':
+            showToast('AI is not configured yet. Please set OPENAI_API_KEY in .env.local', 'error')
+            break
           case 'OPENAI_ERROR':
           case 'PARSE_ERROR':
             showToast('Something went wrong. Please try again.', 'error')
