@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createSupabaseServerClient, getUser } from '@/lib/supabase/server'
 import { CardFormTabs } from '@/components/cards/CardFormTabs'
+import { CardList } from '@/components/cards/CardList'
 import { Button } from '@/components/ui/Button'
 import type { Card, Deck } from '@/types/database'
 
@@ -96,44 +97,8 @@ export default async function DeckDetailsPage({ params }: DeckDetailsPageProps) 
         <h2 className="text-lg font-medium text-slate-900 dark:text-slate-100 mb-4">Cards</h2>
         {cardsError ? (
           <p className="text-red-600 dark:text-red-400">Error loading cards: {cardsError.message}</p>
-        ) : cardList.length === 0 ? (
-          <div className="text-center py-8 bg-slate-100 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 rounded-lg">
-            <p className="text-slate-600 dark:text-slate-400">No cards yet</p>
-            <p className="text-slate-500 text-sm mt-1">
-              Add your first card using the form above!
-            </p>
-          </div>
         ) : (
-          <div className="space-y-3">
-            {cardList.map((card) => (
-              <div
-                key={card.id}
-                className="p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm dark:shadow-none"
-              >
-                {/* Display content based on card type */}
-                {card.card_type === 'mcq' ? (
-                  <p className="text-slate-900 dark:text-slate-100 line-clamp-2">{card.stem}</p>
-                ) : (
-                  <p className="text-slate-900 dark:text-slate-100 line-clamp-2">{card.front}</p>
-                )}
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {/* Card type badge */}
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs ${
-                    card.card_type === 'mcq' 
-                      ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
-                      : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                  }`}>
-                    {card.card_type === 'mcq' ? 'MCQ' : 'Flashcard'}
-                  </span>
-                  {card.image_url && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400">
-                      Has image
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+          <CardList cards={cardList} deckId={deckId} />
         )}
       </div>
     </div>

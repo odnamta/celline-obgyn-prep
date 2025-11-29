@@ -83,3 +83,161 @@ export async function createCardAction(
 
   return { success: true, data }
 }
+
+
+/**
+ * Result type for card update/delete operations
+ */
+export type CardActionResult = 
+  | { ok: true }
+  | { ok: false; error: string }
+
+/**
+ * Input type for updating a flashcard
+ */
+interface UpdateFlashcardInput {
+  cardId: string
+  type: 'flashcard'
+  front: string
+  back: string
+  imageUrl?: string
+}
+
+/**
+ * Input type for updating an MCQ
+ */
+interface UpdateMCQInput {
+  cardId: string
+  type: 'mcq'
+  stem: string
+  options: string[]
+  correctIndex: number
+  explanation?: string
+}
+
+export type UpdateCardInput = UpdateFlashcardInput | UpdateMCQInput
+
+/**
+ * Server Action for updating an existing card.
+ * Handles both flashcard and MCQ types.
+ * Requirements: FR-2, FR-4
+ */
+export async function updateCard(input: UpdateCardInput): Promise<CardActionResult> {
+  // Get authenticated user
+  const user = await getUser()
+  if (!user) {
+    return { ok: false, error: 'Authentication required' }
+  }
+
+  const supabase = await createSupabaseServerClient()
+
+  // Fetch card and verify ownership via deck
+  const { data: card, error: cardError } = await supabase
+    .from('cards')
+    .select('id, deck_id, decks!inner(user_id)')
+    .eq('id', input.cardId)
+    .single()
+
+  if (cardError || !card) {
+    return { ok: false, error: 'Card not found' }
+  }
+
+  // Check ownership
+  const deckData = card.decks as unknown as { user_id: string }
+  if (deckData.user_id !== user.id) {
+    return { ok: false, error: 'Access denied' }
+  }
+
+  // Build update payload based on card type
+  let updatePayload: Record<string, unknown>
+
+  if (input.type === 'flashcard') {
+    // Validate flashcard fields
+    if (!input.front?.trim() || !input.back?.trim()) {
+      return { ok: false, error: 'Front and back are required' }
+    }
+    updatePayload = {
+      front: input.front.trim(),
+      back: input.back.trim(),
+      image_url: input.imageUrl?.trim() || null,
+    }
+  } else {
+    // Validate MCQ fields
+    if (!input.stem?.trim()) {
+      return { ok: false, error: 'Question stem is required' }
+    }
+    if (!input.options || input.options.length < 2) {
+      return { ok: false, error: 'At least 2 options are required' }
+    }
+    if (input.correctIndex < 0 || input.correctIndex >= input.options.length) {
+      return { ok: false, error: 'Invalid correct answer index' }
+    }
+    updatePayload = {
+      stem: input.stem.trim(),
+      options: input.options.map(o => o.trim()),
+      correct_index: input.correctIndex,
+      explanation: input.explanation?.trim() || null,
+    }
+  }
+
+  // Update the card
+  const { error: updateError } = await supabase
+    .from('cards')
+    .update(updatePayload)
+    .eq('id', input.cardId)
+
+  if (updateError) {
+    return { ok: false, error: updateError.message }
+  }
+
+  // Revalidate deck page
+  revalidatePath(`/decks/${card.deck_id}`)
+
+  return { ok: true }
+}
+
+/**
+ * Server Action for deleting a card.
+ * Requirements: FR-3, FR-4
+ */
+export async function deleteCard(cardId: string): Promise<CardActionResult> {
+  // Get authenticated user
+  const user = await getUser()
+  if (!user) {
+    return { ok: false, error: 'Authentication required' }
+  }
+
+  const supabase = await createSupabaseServerClient()
+
+  // Fetch card and verify ownership via deck
+  const { data: card, error: cardError } = await supabase
+    .from('cards')
+    .select('id, deck_id, decks!inner(user_id)')
+    .eq('id', cardId)
+    .single()
+
+  if (cardError || !card) {
+    return { ok: false, error: 'Card not found' }
+  }
+
+  // Check ownership
+  const deckData = card.decks as unknown as { user_id: string }
+  if (deckData.user_id !== user.id) {
+    return { ok: false, error: 'Access denied' }
+  }
+
+  // Delete the card
+  const { error: deleteError } = await supabase
+    .from('cards')
+    .delete()
+    .eq('id', cardId)
+
+  if (deleteError) {
+    return { ok: false, error: deleteError.message }
+  }
+
+  // Revalidate deck page
+  revalidatePath(`/decks/${card.deck_id}`)
+
+  return { ok: true }
+}
