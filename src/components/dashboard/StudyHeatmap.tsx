@@ -104,72 +104,78 @@ export function StudyHeatmap({ studyLogs, currentYear }: StudyHeatmapProps) {
 
   return (
     <div className="w-full">
-      <div className="flex items-center justify-between mb-2">
+      {/* Header with title and year selector */}
+      <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300">
           {totalContributions} cards reviewed in {displayYear}
         </h3>
-      </div>
-      <div className="flex gap-4">
-        <div className="flex-1 overflow-x-auto">
-          <div className="inline-flex flex-col min-w-fit">
-            <div className="flex">
-              <div className="w-[30px] flex-shrink-0" />
-              <div className="relative h-[15px]" style={{ width: `${numWeeks * 13}px` }}>
-                {monthLabels.map(({ month, weekIndex }, i) => (
-                  <span key={`${month}-${weekIndex}-${i}`} className="absolute text-[11px] text-slate-500 dark:text-slate-400" style={{ left: `${weekIndex * 13}px` }}>
-                    {month}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-start">
-              <div className="flex flex-col gap-[2px] text-[10px] text-slate-400 dark:text-slate-500 w-[30px] flex-shrink-0">
-                <div className="h-[10px]" />
-                <div className="h-[10px] flex items-center">Mon</div>
-                <div className="h-[10px]" />
-                <div className="h-[10px] flex items-center">Wed</div>
-                <div className="h-[10px]" />
-                <div className="h-[10px] flex items-center">Fri</div>
-                <div className="h-[10px]" />
-              </div>
-              <div className="grid gap-[2px]" style={{ gridTemplateColumns: `repeat(${numWeeks}, 10px)`, gridTemplateRows: `repeat(${DAYS_PER_WEEK}, 10px)`, gridAutoFlow: 'column' }}>
-                {weeks.flatMap((week, weekIndex) => week.map((day, dayIndex) => {
-                  if (!day.isCurrentYear) return <div key={`empty-${weekIndex}-${dayIndex}`} className="w-[10px] h-[10px]" />
-                  return (
-                    <div
-                      key={`day-${day.dateStr}`}
-                      className={`w-[10px] h-[10px] rounded-sm ${getIntensityClasses(day.intensity)} cursor-default transition-transform hover:scale-150`}
-                      title={`${formatDateForTooltip(day.dateStr, day.dayOfWeek)}: ${day.count} cards`}
-                    />
-                  )
-                }))}
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-2 mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-              <span>Less</span>
-              <div className="flex gap-[2px]">
-                <div className={`w-[10px] h-[10px] rounded-sm ${getIntensityClasses(0)}`} />
-                <div className={`w-[10px] h-[10px] rounded-sm ${getIntensityClasses(1)}`} />
-                <div className={`w-[10px] h-[10px] rounded-sm ${getIntensityClasses(2)}`} />
-                <div className={`w-[10px] h-[10px] rounded-sm ${getIntensityClasses(3)}`} />
-              </div>
-              <span>More</span>
-            </div>
-          </div>
-        </div>
         {isClient && (
-          <div className="flex flex-col gap-1 flex-shrink-0">
+          <div className="flex gap-1">
             {availableYears.map(year => (
               <button
                 key={year}
                 onClick={() => setSelectedYear(year)}
-                className={`px-3 py-1 text-sm rounded-md transition-colors ${year === displayYear ? 'bg-blue-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                className={`px-2 py-0.5 text-xs rounded transition-colors ${year === displayYear ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
               >
                 {year}
               </button>
             ))}
           </div>
         )}
+      </div>
+      
+      {/* Centered heatmap container */}
+      <div className="w-full flex justify-center">
+        <div className="inline-block overflow-x-auto">
+          {/* Month labels row */}
+          <div className="flex">
+            <div className="w-[30px] flex-shrink-0" />
+            <div className="relative h-[15px]" style={{ width: `${numWeeks * 13}px` }}>
+              {monthLabels.map(({ month, weekIndex }, i) => (
+                <span key={`${month}-${weekIndex}-${i}`} className="absolute text-[11px] text-slate-500 dark:text-slate-400" style={{ left: `${weekIndex * 13}px` }}>
+                  {month}
+                </span>
+              ))}
+            </div>
+          </div>
+          
+          {/* Day labels + grid */}
+          <div className="flex items-start">
+            <div className="flex flex-col gap-[2px] text-[10px] text-slate-400 dark:text-slate-500 w-[30px] flex-shrink-0">
+              <div className="h-[10px]" />
+              <div className="h-[10px] flex items-center">Mon</div>
+              <div className="h-[10px]" />
+              <div className="h-[10px] flex items-center">Wed</div>
+              <div className="h-[10px]" />
+              <div className="h-[10px] flex items-center">Fri</div>
+              <div className="h-[10px]" />
+            </div>
+            <div className="grid gap-[2px]" style={{ gridTemplateColumns: `repeat(${numWeeks}, 10px)`, gridTemplateRows: `repeat(${DAYS_PER_WEEK}, 10px)`, gridAutoFlow: 'column' }}>
+              {weeks.flatMap((week, weekIndex) => week.map((day, dayIndex) => {
+                if (!day.isCurrentYear) return <div key={`empty-${weekIndex}-${dayIndex}`} className="w-[10px] h-[10px]" />
+                return (
+                  <div
+                    key={`day-${day.dateStr}`}
+                    className={`w-[10px] h-[10px] rounded-sm ${getIntensityClasses(day.intensity)} cursor-default transition-transform hover:scale-150`}
+                    title={`${formatDateForTooltip(day.dateStr, day.dayOfWeek)}: ${day.count} cards`}
+                  />
+                )
+              }))}
+            </div>
+          </div>
+          
+          {/* Legend - aligned with grid, not full width */}
+          <div className="flex items-center justify-end gap-2 mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+            <span>Less</span>
+            <div className="flex gap-[2px]">
+              <div className={`w-[10px] h-[10px] rounded-sm ${getIntensityClasses(0)}`} />
+              <div className={`w-[10px] h-[10px] rounded-sm ${getIntensityClasses(1)}`} />
+              <div className={`w-[10px] h-[10px] rounded-sm ${getIntensityClasses(2)}`} />
+              <div className={`w-[10px] h-[10px] rounded-sm ${getIntensityClasses(3)}`} />
+            </div>
+            <span>More</span>
+          </div>
+        </div>
       </div>
     </div>
   )
