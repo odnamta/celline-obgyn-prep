@@ -15,11 +15,15 @@ interface AutoScanControlsProps {
   stats: { cardsCreated: number; pagesProcessed: number }
   skippedCount: number
   onStart: () => void
+  onStartFresh: () => void   // V7.2: Always starts from page 1
+  onResume: () => void       // V7.2: Continues from saved page
   onPause: () => void
   onStop: () => void
   onViewSkipped?: () => void
   disabled?: boolean
   canStart?: boolean  // V7.1: true only when pdfDocument && deckId && sourceId are valid
+  hasResumableState?: boolean  // V7.2: true when saved state exists
+  resumePage?: number          // V7.2: page number to resume from
 }
 
 export function AutoScanControls({
@@ -29,11 +33,15 @@ export function AutoScanControls({
   stats,
   skippedCount,
   onStart,
+  onStartFresh,
+  onResume,
   onPause,
   onStop,
   onViewSkipped,
   disabled = false,
   canStart = true,  // V7.1: Default to true for backwards compatibility
+  hasResumableState = false,  // V7.2: Default to false
+  resumePage = 1,             // V7.2: Default to page 1
 }: AutoScanControlsProps) {
   const progress = totalPages > 0 ? Math.min((currentPage / totalPages) * 100, 100) : 0
   const isComplete = currentPage > totalPages && !isScanning
@@ -59,16 +67,29 @@ export function AutoScanControls({
         {/* Control buttons */}
         <div className="flex items-center gap-2">
           {!isScanning ? (
-            <Button
-              onClick={onStart}
-              disabled={disabled || totalPages === 0 || !canStart}
-              variant="primary"
-              className="flex items-center gap-2"
-            >
-              <Play className="w-4 h-4" />
-              <span className="hidden sm:inline">Start Auto-Scan</span>
-              <span className="sm:hidden">Start</span>
-            </Button>
+            hasResumableState ? (
+              <Button
+                onClick={onResume}
+                disabled={disabled || totalPages === 0 || !canStart}
+                variant="primary"
+                className="flex items-center gap-2"
+              >
+                <Play className="w-4 h-4" />
+                <span className="hidden sm:inline">Resume Auto-Scan (Page {resumePage})</span>
+                <span className="sm:hidden">Resume</span>
+              </Button>
+            ) : (
+              <Button
+                onClick={onStartFresh}
+                disabled={disabled || totalPages === 0 || !canStart}
+                variant="primary"
+                className="flex items-center gap-2"
+              >
+                <Play className="w-4 h-4" />
+                <span className="hidden sm:inline">Start Auto-Scan (Page 1)</span>
+                <span className="sm:hidden">Start</span>
+              </Button>
+            )
           ) : (
             <>
               <Button

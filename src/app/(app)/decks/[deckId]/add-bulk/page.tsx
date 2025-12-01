@@ -448,6 +448,8 @@ export default function BulkImportPage() {
 
   // V6.3: Handle "Scan Full Page" button click
   // V6.6: Updated to support includeNextPage mode
+  // GROUND TRUTH: Auto-Scan must match this payload structure exactly.
+  // Flow: extractCleanPageText → draftBatchMCQFromText → BatchReviewPanel → bulkCreateMCQV2
   const handleScanPage = useCallback(async (pdfDocument: PDFDocumentProxy, pageNumber: number) => {
     const now = Date.now()
     if (now - lastBatchTime < RATE_LIMIT_MS) {
@@ -971,10 +973,14 @@ export default function BulkImportPage() {
                     stats={autoScan.stats}
                     skippedCount={autoScan.skippedPages.length}
                     onStart={() => autoScan.startScan()}
+                    onStartFresh={autoScan.startFresh}
+                    onResume={autoScan.resume}
                     onPause={autoScan.pauseScan}
                     onStop={autoScan.stopScan}
                     disabled={isPageScanning || isBatchGenerating}
                     canStart={autoScan.canStart}
+                    hasResumableState={autoScan.hasResumableState}
+                    resumePage={autoScan.currentPage}
                   />
                   <SkippedPagesPanel
                     skippedPages={autoScan.skippedPages}

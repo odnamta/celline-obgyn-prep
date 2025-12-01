@@ -14,6 +14,7 @@ interface DeckDetailsPageProps {
  * Deck Details Page - React Server Component
  * Displays deck info, card list, and form to add new cards.
  * Requirements: 3.1, 3.2, 6.3
+ * V7.2.5: Added support for showing V2 migrated cards
  */
 export default async function DeckDetailsPage({ params }: DeckDetailsPageProps) {
   const { deckId } = await params
@@ -36,15 +37,62 @@ export default async function DeckDetailsPage({ params }: DeckDetailsPageProps) 
     notFound()
   }
 
-  // Fetch all cards in the deck
-  const { data: cards, error: cardsError } = await supabase
-    .from('cards')
-    .select('*')
-    .eq('deck_id', deckId)
-    .order('created_at', { ascending: false })
+  // V7.2.5: Check if this legacy deck has been migrated to V2
+  // If so, fetch cards from card_templates instead of legacy cards table
+  const { data: migratedTemplate } = await supabase
+    .from('deck_templates')
+    .select('id')
+    .eq('legacy_id', deckId)
+    .single()
+  
+  let cardList: Card[] = []
+  let cardsError: { message: string } | null = null
+  
+  if (migratedTemplate) {
+    // V7.2.5: Fetch V2 cards from card_templates
+    const { data: v2Cards, error: v2Error } = await supabase
+      .from('card_templates')
+      .select('id, stem, options, correct_index, explanation, created_at')
+      .eq('deck_template_id', migratedTemplate.id)
+      .order('created_at', { ascending: false })
+    
+    if (v2Error) {
+      cardsError = { message: v2Error.message }
+    } else {
+      // Map V2 card_templates to legacy Card format for CardList compatibility
+      cardList = (v2Cards || []).map(ct => ({
+        id: ct.id,
+        deck_id: deckId,
+        card_type: 'mcq' as const,
+        front: '',
+        back: '',
+        stem: ct.stem,
+        options: ct.options as string[],
+        correct_index: ct.correct_index,
+        explanation: ct.explanation,
+        image_url: null,
+        interval: 1,
+        ease_factor: 2.5,
+        next_review: new Date().toISOString(),
+        created_at: ct.created_at,
+      })) as Card[]
+    }
+  } else {
+    // Fetch legacy cards from cards table
+    const { data: cards, error } = await supabase
+      .from('cards')
+      .select('*')
+      .eq('deck_id', deckId)
+      .order('created_at', { ascending: false })
+    
+    if (error) {
+      cardsError = { message: error.message }
+    } else {
+      cardList = (cards || []) as Card[]
+    }
+  }
 
   const deckData = deck as Deck
-  const cardList = (cards || []) as Card[]
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">

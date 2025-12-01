@@ -5,7 +5,7 @@ import { X, Loader2 } from 'lucide-react'
 import { BatchDraftCard } from './BatchDraftCard'
 import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
-import { bulkCreateMCQ } from '@/actions/batch-mcq-actions'
+import { bulkCreateMCQV2 } from '@/actions/batch-mcq-actions'
 import type { MCQBatchDraftUI } from '@/lib/batch-mcq-schema'
 
 interface BatchReviewPanelProps {
@@ -97,9 +97,16 @@ export function BatchReviewPanel({
         tagNames: draft.aiTags, // V6.1: AI tags only, session tags merged server-side
       }))
 
-      // V6.1: Pass sessionTags separately for atomic server-side merging
-      const result = await bulkCreateMCQ({ 
-        deckId, 
+      // V7.2.1: Deep logging - BatchReviewPanel caller
+      console.log('[BatchReviewPanel] Saving via bulkCreateMCQV2', {
+        deckTemplateId: deckId,
+        sessionTags: sessionTagNames,
+        cardsCount: cards.length,
+      })
+      
+      // V7.2: Use bulkCreateMCQV2 for V2 schema consistency with Auto-Scan
+      const result = await bulkCreateMCQV2({ 
+        deckTemplateId: deckId, 
         sessionTags: sessionTagNames,
         cards,
       })

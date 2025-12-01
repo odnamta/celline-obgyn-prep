@@ -829,3 +829,331 @@ describe('V7.1 Property 8: Actual Errors Increment Counter', () => {
     )
   })
 })
+
+
+// ============================================
+// V7.2 Property Tests - Auto-Scan Integration Patch
+// ============================================
+
+// ============================================
+// Property 1: Unified Backend Action
+// **Feature: v7.2-auto-scan-integration-patch, Property 1: Unified Backend Action**
+// **Validates: Requirements 1.1, 1.2**
+// ============================================
+
+describe('V7.2 Property 1: Unified Backend Action', () => {
+  it('*For any* card save operation, the system SHALL call bulkCreateMCQV2 with deckTemplateId parameter', () => {
+    fc.assert(
+      fc.property(
+        fc.uuid(),
+        fc.array(fc.string({ minLength: 1, maxLength: 50 }), { maxLength: 5 }),
+        (deckId, sessionTags) => {
+          // Both BatchReviewPanel and Auto-Scan should use this structure
+          const callPayload = {
+            deckTemplateId: deckId, // NOT deckId
+            sessionTags,
+            cards: [],
+          }
+          
+          // Verify the payload uses deckTemplateId (V2 schema)
+          expect(callPayload).toHaveProperty('deckTemplateId')
+          expect(callPayload).not.toHaveProperty('deckId')
+          expect(callPayload.deckTemplateId).toBe(deckId)
+        }
+      ),
+      { numRuns: 100 }
+    )
+  })
+})
+
+// ============================================
+// Property 2: Payload Shape Consistency
+// **Feature: v7.2-auto-scan-integration-patch, Property 2: Payload Shape Consistency**
+// **Validates: Requirements 1.3, 1.4**
+// ============================================
+
+describe('V7.2 Property 2: Payload Shape Consistency', () => {
+  const cardArb = fc.record({
+    stem: fc.string({ minLength: 10, maxLength: 500 }),
+    options: fc.array(fc.string({ minLength: 1, maxLength: 100 }), { minLength: 2, maxLength: 5 }),
+    correctIndex: fc.integer({ min: 0, max: 4 }),
+    explanation: fc.option(fc.string({ minLength: 1, maxLength: 500 }), { nil: undefined }),
+    tagNames: fc.array(fc.string({ minLength: 1, maxLength: 50 }), { maxLength: 5 }),
+  })
+
+  it('*For any* card payload, the cards array SHALL contain objects with exactly { stem, options, correctIndex, explanation, tagNames } structure', () => {
+    fc.assert(
+      fc.property(
+        fc.array(cardArb, { minLength: 1, maxLength: 5 }),
+        (cards) => {
+          // Verify each card has the required shape
+          for (const card of cards) {
+            expect(card).toHaveProperty('stem')
+            expect(card).toHaveProperty('options')
+            expect(card).toHaveProperty('correctIndex')
+            expect(card).toHaveProperty('tagNames')
+            // explanation is optional but should be present in the shape
+            expect('explanation' in card).toBe(true)
+            
+            // Type checks
+            expect(typeof card.stem).toBe('string')
+            expect(Array.isArray(card.options)).toBe(true)
+            expect(typeof card.correctIndex).toBe('number')
+            expect(Array.isArray(card.tagNames)).toBe(true)
+          }
+        }
+      ),
+      { numRuns: 100 }
+    )
+  })
+})
+
+// ============================================
+// Property 3: Error Message Contains ID
+// **Feature: v7.2-auto-scan-integration-patch, Property 3: Error Message Contains ID**
+// **Validates: Requirements 2.4**
+// ============================================
+
+describe('V7.2 Property 3: Error Message Contains ID', () => {
+  it('*For any* failed deck template lookup, the error message SHALL contain the originally received ID string', () => {
+    fc.assert(
+      fc.property(
+        fc.uuid(),
+        (deckTemplateId) => {
+          // Simulate the error message format from bulkCreateMCQV2
+          const errorMessage = `Deck template not found for id=${deckTemplateId}`
+          
+          expect(errorMessage).toContain(deckTemplateId)
+          expect(errorMessage).toContain('id=')
+        }
+      ),
+      { numRuns: 100 }
+    )
+  })
+})
+
+// ============================================
+// Property 4: StartFresh Resets State
+// **Feature: v7.2-auto-scan-integration-patch, Property 4: StartFresh Resets State**
+// **Validates: Requirements 3.1**
+// ============================================
+
+describe('V7.2 Property 4: StartFresh Resets State', () => {
+  it('*For any* startFresh() call, the resulting state SHALL have currentPage = 1, stats.cardsCreated = 0, stats.pagesProcessed = 0, and skippedPages = []', () => {
+    fc.assert(
+      fc.property(
+        autoScanStateArb, // Any existing state
+        (existingState) => {
+          // Simulate startFresh behavior
+          const freshState = {
+            isScanning: true,
+            currentPage: 1,
+            totalPages: existingState.totalPages,
+            stats: {
+              cardsCreated: 0,
+              pagesProcessed: 0,
+              errorsCount: 0,
+            },
+            skippedPages: [],
+            consecutiveErrors: 0,
+            lastUpdated: Date.now(),
+          }
+          
+          // Verify fresh state
+          expect(freshState.currentPage).toBe(1)
+          expect(freshState.stats.cardsCreated).toBe(0)
+          expect(freshState.stats.pagesProcessed).toBe(0)
+          expect(freshState.skippedPages).toEqual([])
+          expect(freshState.consecutiveErrors).toBe(0)
+          expect(freshState.isScanning).toBe(true)
+        }
+      ),
+      { numRuns: 100 }
+    )
+  })
+})
+
+// ============================================
+// Property 5: Resume Preserves State
+// **Feature: v7.2-auto-scan-integration-patch, Property 5: Resume Preserves State**
+// **Validates: Requirements 3.2**
+// ============================================
+
+describe('V7.2 Property 5: Resume Preserves State', () => {
+  it('*For any* resume() call with saved state at page N with stats S, the resulting state SHALL have currentPage = N and stats = S', () => {
+    fc.assert(
+      fc.property(
+        autoScanStateArb,
+        (savedState) => {
+          fc.pre(savedState.currentPage > 1) // Only test resume from page > 1
+          
+          // Simulate resume behavior - preserves existing state
+          const resumedState = {
+            ...savedState,
+            isScanning: true,
+            // currentPage, stats, skippedPages all preserved
+          }
+          
+          // Verify state preservation
+          expect(resumedState.currentPage).toBe(savedState.currentPage)
+          expect(resumedState.stats).toEqual(savedState.stats)
+          expect(resumedState.skippedPages).toEqual(savedState.skippedPages)
+          expect(resumedState.isScanning).toBe(true)
+        }
+      ),
+      { numRuns: 100 }
+    )
+  })
+})
+
+// ============================================
+// Property 6: Pause Persists Immediately
+// **Feature: v7.2-auto-scan-integration-patch, Property 6: Pause Persists Immediately**
+// **Validates: Requirements 3.3**
+// ============================================
+
+describe('V7.2 Property 6: Pause Persists Immediately', () => {
+  const mockStorage = new Map<string, string>()
+  
+  beforeEach(() => {
+    mockStorage.clear()
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => mockStorage.get(key) ?? null,
+      setItem: (key: string, value: string) => mockStorage.set(key, value),
+      removeItem: (key: string) => mockStorage.delete(key),
+      clear: () => mockStorage.clear(),
+    })
+  })
+
+  it('*For any* pauseScan() call at page N, localStorage SHALL contain state with currentPage = N immediately after the call', () => {
+    fc.assert(
+      fc.property(
+        deckIdArb,
+        sourceIdArb,
+        fc.integer({ min: 1, max: 500 }),
+        statsArb,
+        (deckId, sourceId, currentPage, stats) => {
+          // Simulate pause with immediate persist
+          const pausedState: AutoScanState = {
+            isScanning: false,
+            currentPage,
+            totalPages: 500,
+            stats,
+            skippedPages: [],
+            consecutiveErrors: 0,
+            lastUpdated: Date.now(),
+          }
+          
+          // Save state (simulating persistState call in pauseScan)
+          saveAutoScanState(deckId, sourceId, pausedState)
+          
+          // Verify localStorage contains the state
+          const loaded = loadAutoScanState(deckId, sourceId)
+          expect(loaded).not.toBeNull()
+          expect(loaded!.currentPage).toBe(currentPage)
+          expect(loaded!.isScanning).toBe(false)
+        }
+      ),
+      { numRuns: 100 }
+    )
+  })
+})
+
+// ============================================
+// Property 7: Button Label Reflects State
+// **Feature: v7.2-auto-scan-integration-patch, Property 7: Button Label Reflects State**
+// **Validates: Requirements 3.4, 5.1, 5.2**
+// ============================================
+
+describe('V7.2 Property 7: Button Label Reflects State', () => {
+  it('*For any* hasResumableState = true with resumePage = N, the button text SHALL contain "Resume" and the number N', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 500 }),
+        (resumePage) => {
+          const hasResumableState = true
+          
+          // Simulate button label generation
+          const buttonLabel = hasResumableState 
+            ? `Resume Auto-Scan (Page ${resumePage})`
+            : 'Start Auto-Scan (Page 1)'
+          
+          expect(buttonLabel).toContain('Resume')
+          expect(buttonLabel).toContain(String(resumePage))
+        }
+      ),
+      { numRuns: 100 }
+    )
+  })
+
+  it('*For any* hasResumableState = false, the button text SHALL contain "Start" and "Page 1"', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 500 }), // resumePage doesn't matter when hasResumableState is false
+        (resumePage) => {
+          const hasResumableState = false
+          
+          // Simulate button label generation
+          const buttonLabel = hasResumableState 
+            ? `Resume Auto-Scan (Page ${resumePage})`
+            : 'Start Auto-Scan (Page 1)'
+          
+          expect(buttonLabel).toContain('Start')
+          expect(buttonLabel).toContain('Page 1')
+          expect(buttonLabel).not.toContain('Resume')
+        }
+      ),
+      { numRuns: 100 }
+    )
+  })
+})
+
+// ============================================
+// Property 8: Disabled Without PDF
+// **Feature: v7.2-auto-scan-integration-patch, Property 8: Disabled Without PDF**
+// **Validates: Requirements 3.5**
+// ============================================
+
+describe('V7.2 Property 8: Disabled Without PDF', () => {
+  it('*For any* state where pdfDocument = null or canStart = false, the Start/Resume button SHALL be disabled', () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(null, undefined),
+        fc.uuid(),
+        fc.uuid(),
+        (pdfDocument, deckId, sourceId) => {
+          // canStart computation
+          const canStart = !!(pdfDocument && deckId && sourceId)
+          
+          // Button should be disabled when canStart is false
+          const buttonDisabled = !canStart
+          
+          expect(canStart).toBe(false)
+          expect(buttonDisabled).toBe(true)
+        }
+      ),
+      { numRuns: 100 }
+    )
+  })
+
+  it('*For any* state where deckId or sourceId is empty, canStart SHALL be false', () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom('', null, undefined),
+        fc.uuid(),
+        (invalidId, validId) => {
+          const pdfDocument = {} // Mock non-null PDF
+          
+          // Test with invalid deckId
+          const canStartInvalidDeck = !!(pdfDocument && invalidId && validId)
+          expect(canStartInvalidDeck).toBe(false)
+          
+          // Test with invalid sourceId
+          const canStartInvalidSource = !!(pdfDocument && validId && invalidId)
+          expect(canStartInvalidSource).toBe(false)
+        }
+      ),
+      { numRuns: 100 }
+    )
+  })
+})

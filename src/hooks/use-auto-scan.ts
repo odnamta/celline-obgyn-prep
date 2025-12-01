@@ -60,7 +60,9 @@ export interface UseAutoScanReturn {
   canStart: boolean  // V7.1: true only when pdfDocument && deckId && sourceId are valid
   
   // Controls
-  startScan: (startPage?: number) => void
+  startFresh: () => void       // V7.2: Always starts from page 1, clears state
+  resume: () => void           // V7.2: Continues from saved page, preserves stats
+  startScan: (startPage?: number) => void  // Kept for backwards compatibility
   pauseScan: () => void
   stopScan: () => void
   resetScan: () => void
@@ -292,6 +294,13 @@ export function useAutoScan(options: UseAutoScanOptions): UseAutoScanReturn {
         tagNames: draft.aiTags,  // V7.1: Fixed - MCQBatchDraftUI uses aiTags not tagNames
       }))
 
+      // V7.2.1: Deep logging - AutoScan caller
+      console.log('[AutoScan] Calling bulkCreateMCQV2', {
+        deckTemplateId: deckId,
+        page: pageNumber,
+        cardsCount: cards.length,
+      })
+      
       const saveResult = await bulkCreateMCQV2({
         deckTemplateId: deckId,
         sessionTags: sessionTagNames,
@@ -370,7 +379,48 @@ export function useAutoScan(options: UseAutoScanOptions): UseAutoScanReturn {
     setTimeout(runScanIteration, SCAN_DELAY_MS)
   }, [totalPages, processPage, onComplete, onSafetyStop])
 
-  // Start scanning
+  // V7.2: Start fresh - always starts from page 1, clears all state
+  const startFresh = useCallback(() => {
+    if (!pdfDocument || totalPages === 0) return
+    
+    // Clear localStorage state
+    if (deckId && sourceId) {
+      clearAutoScanState(deckId, sourceId)
+    }
+    
+    // Reset all state to initial values
+    setCurrentPage(1)
+    setStats(getInitialStats())
+    setSkippedPages([])
+    setConsecutiveErrors(0)
+    setHasResumableState(false)
+    setIsScanning(true)
+    
+    // Kick off the loop
+    setTimeout(runScanIteration, 100)
+  }, [pdfDocument, totalPages, deckId, sourceId, runScanIteration])
+
+  // V7.2: Resume - continues from saved page, preserves stats
+  const resume = useCallback(() => {
+    if (!pdfDocument || totalPages === 0) return
+    
+    // If no saved state, fall back to startFresh
+    if (!hasResumableState) {
+      startFresh()
+      return
+    }
+    
+    // Keep currentPage at saved value (already hydrated)
+    // Keep stats at saved values
+    // Keep skippedPages at saved values
+    setHasResumableState(false)
+    setIsScanning(true)
+    
+    // Kick off the loop from current page
+    setTimeout(runScanIteration, 100)
+  }, [pdfDocument, totalPages, hasResumableState, startFresh, runScanIteration])
+
+  // Start scanning (kept for backwards compatibility)
   // V7.1: Fixed to use savedState.currentPage when resuming
   const startScan = useCallback((startPage?: number) => {
     if (!pdfDocument || totalPages === 0) return
@@ -394,10 +444,12 @@ export function useAutoScan(options: UseAutoScanOptions): UseAutoScanReturn {
     setTimeout(runScanIteration, 100)
   }, [pdfDocument, totalPages, runScanIteration, hasResumableState])
 
-  // Pause scanning (preserves state)
+  // V7.2: Pause scanning - preserves state and persists immediately
   const pauseScan = useCallback(() => {
     setIsScanning(false)
-  }, [])
+    // V7.2: Persist state immediately so resume point is accurate
+    persistState()
+  }, [persistState])
 
   // Stop scanning (preserves stats for review)
   const stopScan = useCallback(() => {
@@ -451,7 +503,9 @@ export function useAutoScan(options: UseAutoScanOptions): UseAutoScanReturn {
     canStart,  // V7.1: true only when pdfDocument && deckId && sourceId are valid
     
     // Controls
-    startScan,
+    startFresh,  // V7.2: Always starts from page 1, clears state
+    resume,      // V7.2: Continues from saved page, preserves stats
+    startScan,   // Kept for backwards compatibility
     pauseScan,
     stopScan,
     resetScan,

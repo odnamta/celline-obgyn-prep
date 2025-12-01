@@ -42,6 +42,13 @@ Prefer questions that clearly come from the image.
 If NO question is visible, say so instead of inventing one.`
 
 /**
+ * V7.2: Figure-safety instruction - skip figure-dependent questions when no image provided
+ */
+const FIGURE_SAFETY_INSTRUCTION = `
+FIGURE REFERENCE RULE:
+If the text references a Figure (e.g., "Figure 19-1", "See diagram", "as shown below") but NO image is provided in this request, DO NOT create questions that require seeing that figure. Only create questions answerable from the text alone.`
+
+/**
  * System prompt for EXTRACT mode (Q&A sources) - batch version.
  * V6.2: Extracts existing MCQs verbatim from Q&A text.
  * V6.6: Added Vision priority instruction
@@ -63,6 +70,7 @@ EXTRACTION RULES:
 - Do NOT create new questions or add options that aren't clearly present in the text.
 - If the text contains questions with fewer than 5 options, that's fine (2-5 options allowed).
 - If no clear MCQs are found, return {"questions": []}.
+${FIGURE_SAFETY_INSTRUCTION}
 ${VISION_PRIORITY_INSTRUCTION}
 ${DATA_INTEGRITY_RULES}
 
@@ -105,6 +113,7 @@ GENERATION RULES:
 - Distractors must not contradict medical facts stated in the passage.
 - Write at board exam difficulty level.
 - If the text doesn't contain enough content for MCQs, return {"questions": []}.
+${FIGURE_SAFETY_INSTRUCTION}
 ${VISION_PRIORITY_INSTRUCTION}
 ${DATA_INTEGRITY_RULES}
 
@@ -527,15 +536,17 @@ export interface BulkCreateV2Input {
  * Server Action: Create multiple MCQ card_templates atomically.
  * V6.4: Creates card_templates instead of cards, auto-creates user_card_progress.
  * 
+ * NOTE: Deep logging added in V7.2.1 – used to debug deckTemplateId issues.
+ * 
  * @param input - Deck template ID, sessionTags, and array of cards with merged tags
  * @returns BulkCreateResult - Either { ok: true, createdCount, deckId } or { ok: false, error }
  */
 export async function bulkCreateMCQV2(input: BulkCreateV2Input): Promise<BulkCreateResult> {
-  // V7.1: Instrumentation for debugging Auto-Scan wiring
-  console.log('[bulkCreateMCQV2] Called with:', {
+  // V7.2.1: Deep logging - RAW INPUT before any DB calls
+  console.log('[bulkCreateMCQV2] RAW INPUT', {
     deckTemplateId: input.deckTemplateId,
-    sessionTags: input.sessionTags?.length ?? 0,
     cardsCount: input.cards?.length ?? 0,
+    sessionTagsCount: input.sessionTags?.length ?? 0,
   })
 
   if (!USE_V2_SCHEMA) {
@@ -547,7 +558,9 @@ export async function bulkCreateMCQV2(input: BulkCreateV2Input): Promise<BulkCre
     })
   }
 
-  const { deckTemplateId, sessionTags = [], cards } = input
+  let { deckTemplateId } = input
+  const { sessionTags = [], cards } = input
+  const originalDeckTemplateId = deckTemplateId // Store original for error messages
   
   // Get authenticated user
   const user = await getUser()
@@ -557,16 +570,162 @@ export async function bulkCreateMCQV2(input: BulkCreateV2Input): Promise<BulkCre
   
   const supabase = await createSupabaseServerClient()
   
-  // Verify user owns the deck_template or has it subscribed
-  const { data: deckTemplate, error: deckError } = await supabase
+  // V7.2.1: Deep logging - deck_templates lookup
+  console.log('[bulkCreateMCQV2] deck_templates lookup', {
+    requestedId: deckTemplateId,
+  })
+  
+  // V7.2: Smart ID Resolution - Step 1: Try deck_template lookup
+  let { data: deckTemplate, error: deckError } = await supabase
     .from('deck_templates')
     .select('id, author_id')
     .eq('id', deckTemplateId)
     .single()
   
+  // V7.2.1: Log deck_templates lookup result
+  console.log('[bulkCreateMCQV2] deck_templates lookup result', {
+    found: !!deckTemplate,
+    error: deckError?.message || null,
+    errorCode: deckError?.code || null,
+  })
+  
+  // V7.2: Step 2 - Fallback: Try user_decks lookup if deck_template not found
   if (deckError || !deckTemplate) {
-    // V7.1: Include received ID in error message for debugging
-    return { ok: false, error: { message: `Deck template not found for id=${deckTemplateId}`, code: 'NOT_FOUND' } }
+    console.log('[bulkCreateMCQV2] deck_template not found, trying user_decks fallback...')
+    
+    const { data: userDeck, error: userDeckError } = await supabase
+      .from('user_decks')
+      .select('id, deck_template_id')
+      .eq('id', deckTemplateId)
+      .single()
+    
+    // V7.2.1: Deep logging - Fallback result
+    console.warn('[bulkCreateMCQV2] Fallback: treating ID as user_deck_id', {
+      requestedId: originalDeckTemplateId,
+      foundUserDeck: !!userDeck,
+      deckTemplateId: userDeck?.deck_template_id || null,
+      error: userDeckError?.message || null,
+    })
+    
+    if (userDeck?.deck_template_id) {
+      console.warn('[bulkCreateMCQV2] Legacy UserDeckID passed; resolved:', {
+        originalId: originalDeckTemplateId,
+        resolvedTemplateId: userDeck.deck_template_id,
+      })
+      deckTemplateId = userDeck.deck_template_id
+      
+      // Re-fetch deck_template with resolved ID
+      const resolved = await supabase
+        .from('deck_templates')
+        .select('id, author_id')
+        .eq('id', deckTemplateId)
+        .single()
+      
+      deckTemplate = resolved.data
+      deckError = resolved.error
+      
+      // V7.2.1: Log resolved lookup result
+      console.log('[bulkCreateMCQV2] Resolved deck_template lookup result', {
+        resolvedId: deckTemplateId,
+        found: !!deckTemplate,
+        error: resolved.error?.message || null,
+      })
+    }
+  }
+  
+  // V7.2.3: Step 3 - Fallback: Try legacy decks table and auto-migrate to V2
+  if (deckError || !deckTemplate) {
+    console.log('[bulkCreateMCQV2] user_decks fallback failed, trying legacy decks table...')
+    
+    const { data: legacyDeck, error: legacyDeckError } = await supabase
+      .from('decks')
+      .select('id, title, user_id')
+      .eq('id', originalDeckTemplateId)
+      .single()
+    
+    console.log('[bulkCreateMCQV2] Legacy decks lookup result', {
+      requestedId: originalDeckTemplateId,
+      foundLegacyDeck: !!legacyDeck,
+      title: legacyDeck?.title || null,
+      error: legacyDeckError?.message || null,
+    })
+    
+    if (legacyDeck && legacyDeck.user_id === user.id) {
+      // V7.2.5: First check if this legacy deck was already migrated
+      const { data: existingMigrated } = await supabase
+        .from('deck_templates')
+        .select('id, author_id')
+        .eq('legacy_id', legacyDeck.id)
+        .single()
+      
+      if (existingMigrated) {
+        console.log('[bulkCreateMCQV2] Found existing migrated deck_template', {
+          legacyDeckId: legacyDeck.id,
+          existingTemplateId: existingMigrated.id,
+        })
+        deckTemplateId = existingMigrated.id
+        deckTemplate = existingMigrated
+        deckError = null
+      } else {
+        // Auto-migrate: Create deck_template and user_deck for this legacy deck
+        console.log('[bulkCreateMCQV2] Auto-migrating legacy deck to V2 schema...', {
+          legacyDeckId: legacyDeck.id,
+          title: legacyDeck.title,
+        })
+        
+        // Create deck_template with legacy_id for future lookups
+        // V7.2.4: Fixed column name - use 'visibility' instead of 'is_public'
+        // V7.2.5: Added legacy_id to link back to original deck
+        const { data: newTemplate, error: templateError } = await supabase
+          .from('deck_templates')
+          .insert({
+            title: legacyDeck.title,
+            author_id: user.id,
+            visibility: 'private',
+            legacy_id: legacyDeck.id,
+          })
+          .select('id, author_id')
+          .single()
+        
+        if (templateError || !newTemplate) {
+          console.error('[bulkCreateMCQV2] Failed to create deck_template during migration', {
+            error: templateError?.message,
+          })
+        } else {
+          // Create user_deck linking to the new template
+          const { error: userDeckCreateError } = await supabase
+            .from('user_decks')
+            .insert({
+              user_id: user.id,
+              deck_template_id: newTemplate.id,
+            })
+          
+          if (userDeckCreateError) {
+            console.error('[bulkCreateMCQV2] Failed to create user_deck during migration', {
+              error: userDeckCreateError.message,
+            })
+          }
+          
+          console.log('[bulkCreateMCQV2] Successfully migrated legacy deck to V2', {
+            legacyDeckId: legacyDeck.id,
+            newTemplateId: newTemplate.id,
+          })
+          
+          deckTemplateId = newTemplate.id
+          deckTemplate = newTemplate
+          deckError = null
+        }
+      }
+    }
+  }
+  
+  // V7.2: Step 4 - Final check after all fallback attempts
+  if (deckError || !deckTemplate) {
+    console.error('[bulkCreateMCQV2] FINAL FAILURE - Deck template not found', {
+      originalId: originalDeckTemplateId,
+      attemptedId: deckTemplateId,
+    })
+    return { ok: false, error: { message: `Deck template not found for id=${originalDeckTemplateId}`, code: 'NOT_FOUND' } }
   }
 
   // Only author can add cards to a deck_template
