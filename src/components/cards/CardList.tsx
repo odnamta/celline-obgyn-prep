@@ -10,6 +10,7 @@ import { DeckSelector } from './DeckSelector'
 import { FilterBar } from '@/components/tags/FilterBar'
 import { TagSelector } from '@/components/tags/TagSelector'
 import { deleteCard, duplicateCard, bulkDeleteCards, bulkMoveCards, getAllCardIdsInDeck } from '@/actions/card-actions'
+import { autoTagCards } from '@/actions/tag-actions'
 import { useToast } from '@/components/ui/Toast'
 import type { Card, Tag } from '@/types/database'
 
@@ -42,6 +43,10 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
   const [showBulkTagModal, setShowBulkTagModal] = useState(false)
   // V9.1: Select All in Deck loading state
   const [isSelectingAll, setIsSelectingAll] = useState(false)
+  // V9.2: Untagged filter toggle
+  const [showUntaggedOnly, setShowUntaggedOnly] = useState(false)
+  // V9.2: Auto-tag loading state
+  const [isAutoTagging, setIsAutoTagging] = useState(false)
 
   // V8.6: Helper to check if card has NeedsReview tag
   const hasNeedsReviewTag = (card: CardWithTags) => {
@@ -53,10 +58,22 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
     return cards.filter(hasNeedsReviewTag).length
   }, [cards])
 
+  // V9.2: Count untagged cards
+  const untaggedCount = useMemo(() => {
+    return cards.filter(card => !card.tags || card.tags.length === 0).length
+  }, [cards])
+
   // Filter cards by selected tags (AND logic - card must have ALL selected tags)
   // V8.6: Also filter by NeedsReview if toggle is on
+  // V9.2: Also filter by untagged if toggle is on
   const filteredCards = useMemo(() => {
     let result = cards
+    
+    // V9.2: Apply untagged filter first (mutually exclusive with tag filter)
+    if (showUntaggedOnly) {
+      result = result.filter(card => !card.tags || card.tags.length === 0)
+      return result
+    }
     
     // Apply tag filter
     if (filterTagIds.length > 0) {
@@ -72,7 +89,7 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
     }
     
     return result
-  }, [cards, filterTagIds, showNeedsReviewOnly])
+  }, [cards, filterTagIds, showNeedsReviewOnly, showUntaggedOnly])
 
   // Selection handlers
   const toggleSelection = (id: string) => {
@@ -112,6 +129,31 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
   // V9.1: Handle bulk tag success
   const handleBulkTagSuccess = (count: number) => {
     router.refresh()
+  }
+
+  // V9.2: Handle auto-tag with AI
+  const handleAutoTag = async () => {
+    if (selectedIds.size === 0) return
+    
+    setIsAutoTagging(true)
+    try {
+      const result = await autoTagCards([...selectedIds])
+      if (result.ok) {
+        showToast(
+          `Auto-tagged ${result.taggedCount} card${result.taggedCount !== 1 ? 's' : ''}${result.skippedCount > 0 ? ` (${result.skippedCount} skipped)` : ''}`,
+          'success'
+        )
+        clearSelection()
+        router.refresh()
+      } else {
+        showToast(result.error || 'Auto-tagging failed', 'error')
+      }
+    } catch (error) {
+      console.error('Auto-tag error:', error)
+      showToast('Auto-tagging failed. Please try again.', 'error')
+    } finally {
+      setIsAutoTagging(false)
+    }
   }
 
   // Single card handlers
@@ -227,12 +269,15 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
         </div>
       )}
 
-      {/* Active filter bar */}
+      {/* Active filter bar - V9.2: Added untagged toggle */}
       <FilterBar
         tags={allTags}
         selectedTagIds={filterTagIds}
         onTagsChange={setFilterTagIds}
         onClear={() => setFilterTagIds([])}
+        showUntaggedOnly={showUntaggedOnly}
+        onShowUntaggedOnlyChange={setShowUntaggedOnly}
+        untaggedCount={untaggedCount}
       />
 
       {/* Bulk actions bar - Author only for delete/move/tag */}
@@ -243,6 +288,8 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
           onMove={() => setShowDeckSelector(true)}
           onExport={handleExport}
           onAddTag={() => setShowBulkTagModal(true)}
+          onAutoTag={handleAutoTag}
+          isAutoTagging={isAutoTagging}
           onClearSelection={clearSelection}
         />
       )}

@@ -217,6 +217,163 @@ export async function mergeTags(
   return { ok: true, mergedCount }
 }
 
+// ============================================
+// V9.2: Enhanced Tag Merge (Multiple Sources)
+// ============================================
+
+/**
+ * V9.2: Result type for bulk merge operations
+ */
+export type BulkMergeTagsResult =
+  | { ok: true; affectedCards: number; deletedTags: number }
+  | { ok: false; error: string }
+
+/**
+ * V9.2: Merge multiple source tags into a single target tag.
+ * All card associations from source tags are transferred to target.
+ * Handles duplicates by removing source links when target already exists.
+ * 
+ * Requirements: 3.4, 3.5, 3.6, 3.7, 3.8
+ * 
+ * @param sourceTagIds - Array of tag IDs to merge away
+ * @param targetTagId - The tag ID to merge into
+ * @returns BulkMergeTagsResult with affected card and deleted tag counts
+ */
+export async function mergeMultipleTags(
+  sourceTagIds: string[],
+  targetTagId: string
+): Promise<BulkMergeTagsResult> {
+  if (!sourceTagIds.length) {
+    return { ok: false, error: 'No source tags selected' }
+  }
+
+  if (sourceTagIds.includes(targetTagId)) {
+    return { ok: false, error: 'Cannot merge a tag into itself' }
+  }
+
+  const user = await getUser()
+  if (!user) {
+    return { ok: false, error: 'Authentication required' }
+  }
+
+  const supabase = await createSupabaseServerClient()
+
+  // Verify target tag exists and belongs to user
+  const { data: targetTag, error: targetError } = await supabase
+    .from('tags')
+    .select('id, name')
+    .eq('id', targetTagId)
+    .eq('user_id', user.id)
+    .single()
+
+  if (targetError || !targetTag) {
+    return { ok: false, error: 'Target tag not found' }
+  }
+
+  // Verify all source tags exist and belong to user
+  const { data: sourceTags, error: sourceError } = await supabase
+    .from('tags')
+    .select('id, name')
+    .in('id', sourceTagIds)
+    .eq('user_id', user.id)
+
+  if (sourceError || !sourceTags || sourceTags.length !== sourceTagIds.length) {
+    return { ok: false, error: 'One or more source tags not found' }
+  }
+
+  let totalAffectedCards = 0
+  let deletedTags = 0
+
+  // Process each source tag
+  for (const sourceTagId of sourceTagIds) {
+    // Get all card_template_tags associations for this source tag
+    const { data: sourceAssociations } = await supabase
+      .from('card_template_tags')
+      .select('card_template_id')
+      .eq('tag_id', sourceTagId)
+
+    if (sourceAssociations && sourceAssociations.length > 0) {
+      for (const assoc of sourceAssociations) {
+        // Check if target already has this card
+        const { data: existing } = await supabase
+          .from('card_template_tags')
+          .select('card_template_id')
+          .eq('card_template_id', assoc.card_template_id)
+          .eq('tag_id', targetTagId)
+          .single()
+
+        if (!existing) {
+          // Transfer association to target tag
+          const { error: updateError } = await supabase
+            .from('card_template_tags')
+            .update({ tag_id: targetTagId })
+            .eq('card_template_id', assoc.card_template_id)
+            .eq('tag_id', sourceTagId)
+
+          if (!updateError) {
+            totalAffectedCards++
+          }
+        } else {
+          // Delete duplicate association (card already has target tag)
+          await supabase
+            .from('card_template_tags')
+            .delete()
+            .eq('card_template_id', assoc.card_template_id)
+            .eq('tag_id', sourceTagId)
+        }
+      }
+    }
+
+    // Also handle legacy card_tags table
+    const { data: legacyAssociations } = await supabase
+      .from('card_tags')
+      .select('card_id')
+      .eq('tag_id', sourceTagId)
+
+    if (legacyAssociations && legacyAssociations.length > 0) {
+      for (const assoc of legacyAssociations) {
+        const { data: existing } = await supabase
+          .from('card_tags')
+          .select('card_id')
+          .eq('card_id', assoc.card_id)
+          .eq('tag_id', targetTagId)
+          .single()
+
+        if (!existing) {
+          const { error: updateError } = await supabase
+            .from('card_tags')
+            .update({ tag_id: targetTagId })
+            .eq('card_id', assoc.card_id)
+            .eq('tag_id', sourceTagId)
+
+          if (!updateError) {
+            totalAffectedCards++
+          }
+        } else {
+          await supabase
+            .from('card_tags')
+            .delete()
+            .eq('card_id', assoc.card_id)
+            .eq('tag_id', sourceTagId)
+        }
+      }
+    }
+
+    // Delete the source tag
+    const { error: deleteError } = await supabase
+      .from('tags')
+      .delete()
+      .eq('id', sourceTagId)
+
+    if (!deleteError) {
+      deletedTags++
+    }
+  }
+
+  revalidatePath('/admin/tags')
+  return { ok: true, affectedCards: totalAffectedCards, deletedTags }
+}
+
 /**
  * Get all tags grouped by category.
  * V9: Returns tags organized for the Tag Manager UI.

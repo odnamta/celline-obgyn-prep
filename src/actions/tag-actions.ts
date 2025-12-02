@@ -483,3 +483,225 @@ export async function bulkAddTagToCards(
 
   return { ok: true, taggedCount: totalTagged }
 }
+
+
+// ============================================
+// V9.2: AI Retro-Tagging Actions
+// ============================================
+
+import { openai } from '@/lib/openai-client'
+import { GOLDEN_TOPIC_TAGS, getCanonicalTopicTag } from '@/lib/golden-list'
+import { batchArray } from '@/lib/batch-utils'
+
+/**
+ * V9.2: Result type for auto-tag operations
+ */
+export type AutoTagResult =
+  | { ok: true; taggedCount: number; skippedCount: number }
+  | { ok: false; error: string }
+
+/**
+ * V9.2: Zod schema for AI classification response
+ */
+const autoTagResponseSchema = z.object({
+  classifications: z.array(z.object({
+    cardId: z.string(),
+    topic: z.string(),
+    concepts: z.array(z.string()).min(1).max(2),
+  }))
+})
+
+/**
+ * V9.2: Auto-tag cards using AI classification.
+ * Sends card content to OpenAI for topic and concept classification.
+ * 
+ * Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 4.1
+ * 
+ * @param cardIds - Array of card_template IDs to auto-tag
+ * @returns AutoTagResult with counts of tagged and skipped cards
+ */
+export async function autoTagCards(cardIds: string[]): Promise<AutoTagResult> {
+  if (!cardIds.length) {
+    return { ok: false, error: 'No cards selected' }
+  }
+
+  const user = await getUser()
+  if (!user) {
+    return { ok: false, error: 'Authentication required' }
+  }
+
+  const supabase = await createSupabaseServerClient()
+
+  // Fetch card templates with their deck info for authorization
+  const { data: cardTemplates, error: fetchError } = await supabase
+    .from('card_templates')
+    .select('id, stem, deck_template_id, deck_templates!inner(author_id, subject)')
+    .in('id', cardIds)
+
+  if (fetchError || !cardTemplates) {
+    return { ok: false, error: 'Could not fetch cards' }
+  }
+
+  if (cardTemplates.length === 0) {
+    return { ok: false, error: 'No cards found' }
+  }
+
+  // Verify user is author of all cards
+  const unauthorized = cardTemplates.some((ct) => {
+    const deckData = ct.deck_templates as unknown as { author_id: string }
+    return deckData.author_id !== user.id
+  })
+
+  if (unauthorized) {
+    return { ok: false, error: 'Only the author can auto-tag these cards' }
+  }
+
+  // Get deck subject for context (use first card's deck)
+  const firstDeck = cardTemplates[0].deck_templates as unknown as { subject?: string }
+  const subject = firstDeck.subject || 'OBGYN'
+
+  // Process in batches of 20 to prevent timeouts
+  const BATCH_SIZE = 20
+  const batches = batchArray(cardTemplates, BATCH_SIZE)
+  
+  let totalTagged = 0
+  let totalSkipped = 0
+
+  for (const batch of batches) {
+    try {
+      // Build prompt with card stems
+      const cardsForPrompt = batch.map(ct => ({
+        id: ct.id,
+        stem: ct.stem,
+      }))
+
+      const systemPrompt = `You are a medical education classifier for ${subject} exam preparation.
+Classify each question into:
+1. ONE Topic from this Golden List: ${GOLDEN_TOPIC_TAGS.join(', ')}
+2. ONE or TWO specific Concepts (medical terms, conditions, or procedures mentioned)
+
+Rules:
+- Topic MUST be from the Golden List exactly as written
+- Concepts should be specific medical terms from the question
+- Extract verbatim. Do not invent missing values.
+
+Respond with JSON only, no markdown:
+{"classifications":[{"cardId":"uuid","topic":"Topic","concepts":["Concept1","Concept2"]}]}`
+
+      const userPrompt = `Classify these ${subject} questions:\n${JSON.stringify(cardsForPrompt, null, 2)}`
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.3,
+        response_format: { type: 'json_object' },
+      })
+
+      const content = response.choices[0]?.message?.content
+      if (!content) {
+        console.error('Empty AI response')
+        continue
+      }
+
+      // Parse and validate response
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(content)
+      } catch {
+        console.error('Failed to parse AI response:', content)
+        continue
+      }
+
+      const validated = autoTagResponseSchema.safeParse(parsed)
+      if (!validated.success) {
+        console.error('Invalid AI response schema:', validated.error)
+        continue
+      }
+
+      // Process classifications
+      for (const classification of validated.data.classifications) {
+        const cardId = classification.cardId
+        
+        // Validate topic is in Golden List
+        const canonicalTopic = getCanonicalTopicTag(classification.topic)
+        if (!canonicalTopic) {
+          console.warn(`Invalid topic "${classification.topic}" for card ${cardId}`)
+          totalSkipped++
+          continue
+        }
+
+        // Collect all tags to apply (topic + concepts)
+        const tagNames = [canonicalTopic, ...classification.concepts]
+        
+        // Find or create tags and apply them
+        for (const tagName of tagNames) {
+          const trimmedName = tagName.trim()
+          if (!trimmedName) continue
+
+          // Find existing tag or create new one
+          let { data: existingTag } = await supabase
+            .from('tags')
+            .select('id')
+            .eq('user_id', user.id)
+            .ilike('name', trimmedName)
+            .single()
+
+          let tagId: string
+
+          if (existingTag) {
+            tagId = existingTag.id
+          } else {
+            // Create new tag - topic category for Golden List, concept for others
+            const category = getCanonicalTopicTag(trimmedName) ? 'topic' : 'concept'
+            const color = category === 'topic' ? '#10b981' : '#6366f1'
+            
+            const { data: newTag, error: createError } = await supabase
+              .from('tags')
+              .insert({
+                user_id: user.id,
+                name: trimmedName,
+                category,
+                color,
+              })
+              .select('id')
+              .single()
+
+            if (createError || !newTag) {
+              console.error('Failed to create tag:', createError)
+              continue
+            }
+            tagId = newTag.id
+          }
+
+          // Upsert card-tag association (idempotent)
+          await supabase
+            .from('card_template_tags')
+            .upsert(
+              { card_template_id: cardId, tag_id: tagId },
+              { onConflict: 'card_template_id,tag_id', ignoreDuplicates: true }
+            )
+        }
+
+        totalTagged++
+      }
+    } catch (error) {
+      console.error('Batch auto-tag error:', error)
+      // Continue with next batch instead of failing entirely
+    }
+  }
+
+  if (totalTagged === 0 && totalSkipped > 0) {
+    return { ok: false, error: 'AI classification failed. Please try again.' }
+  }
+
+  // Revalidate affected deck pages
+  const deckIds = [...new Set(cardTemplates.map((ct) => ct.deck_template_id))]
+  for (const deckId of deckIds) {
+    revalidatePath(`/decks/${deckId}`)
+  }
+
+  return { ok: true, taggedCount: totalTagged, skippedCount: totalSkipped }
+}

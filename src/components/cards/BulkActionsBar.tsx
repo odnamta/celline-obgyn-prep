@@ -1,10 +1,11 @@
 'use client'
 
-import { Trash2, FolderInput, Download, X, Tag } from 'lucide-react'
+import { Trash2, FolderInput, Download, X, Tag, Sparkles, Loader2 } from 'lucide-react'
 
 /**
  * V9.1: Enhanced BulkActionsBar Props with onAddTag
- * Requirements: C.2, C.3, V9.1 2.1
+ * V9.2: Added onAutoTag for AI retro-tagging
+ * Requirements: C.2, C.3, V9.1 2.1, V9.2 2.1
  */
 interface BulkActionsBarProps {
   selectedCount: number
@@ -12,13 +13,16 @@ interface BulkActionsBarProps {
   onMove: () => void
   onExport: () => void
   onAddTag?: () => void  // V9.1: Optional handler for bulk tagging
+  onAutoTag?: () => void  // V9.2: Optional handler for AI auto-tagging
+  isAutoTagging?: boolean  // V9.2: Loading state for auto-tagging
   onClearSelection: () => void
 }
 
 /**
  * BulkActionsBar - Sticky bar for bulk card operations
  * V9.1: Added "Add Tag" button for bulk tagging
- * Requirements: C.2, C.3, V9.1 2.1
+ * V9.2: Added "Auto-Tag" button for AI retro-tagging
+ * Requirements: C.2, C.3, V9.1 2.1, V9.2 2.1
  */
 export function BulkActionsBar({
   selectedCount,
@@ -26,6 +30,8 @@ export function BulkActionsBar({
   onMove,
   onExport,
   onAddTag,
+  onAutoTag,
+  isAutoTagging,
   onClearSelection,
 }: BulkActionsBarProps) {
   if (selectedCount === 0) return null
@@ -36,6 +42,21 @@ export function BulkActionsBar({
         {selectedCount} card{selectedCount !== 1 ? 's' : ''} selected
       </span>
       <div className="flex flex-wrap gap-2">
+        {/* V9.2: Auto-Tag button with AI */}
+        {onAutoTag && (
+          <button
+            onClick={onAutoTag}
+            disabled={isAutoTagging}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 hover:bg-purple-100 dark:hover:bg-purple-900/50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isAutoTagging ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Sparkles className="w-4 h-4" />
+            )}
+            {isAutoTagging ? 'Auto-Tagging...' : 'Auto-Tag Selected'}
+          </button>
+        )}
         {/* V9.1: Add Tag button */}
         {onAddTag && (
           <button

@@ -1,0 +1,134 @@
+# Implementation Plan
+
+## V9.2: Data Hygiene & Retro-Tagging
+
+- [x] 1. Golden List Configuration
+  - [x] 1.1 Create Golden List module
+    - Create `src/lib/golden-list.ts`
+    - Define `GOLDEN_TOPIC_TAGS` constant array with approved topics
+    - Export `GoldenTopicTag` type for type-safe usage
+    - Include: Anatomy, Physiology, Pharmacology, Pathology, Obstetrics, Gynecology, Embryology, Genetics, Immunology, Microbiology, Biochemistry, Epidemiology, Biostatistics, Ethics
+    - _Requirements: 4.1, 4.2, 4.4_
+  - [x] 1.2 Write property test for Golden List validation
+    - **Property 5: Golden List Validation**
+    - **Validates: Requirements 4.1, 4.2**
+
+- [x] 2. Untagged Card Filter
+  - [x] 2.1 Add filter state to CardList
+    - Add `showUntaggedOnly` state to CardList component
+    - Implement client-side filtering logic: `cards.filter(c => c.tags.length === 0)`
+    - Pass filtered cards to rendering
+    - _Requirements: 1.2, 1.3_
+  - [x] 2.2 Enhance FilterBar with Untagged Toggle
+    - Add `showUntaggedOnly` and `onShowUntaggedOnlyChange` props to FilterBar
+    - Add toggle switch UI with "Show Untagged Only" label
+    - Style consistently with existing filter controls
+    - _Requirements: 1.1_
+  - [x] 2.3 Update card count indicator
+    - Ensure count reflects filtered results when toggle is active
+    - Display "X untagged cards" when filter is active
+    - _Requirements: 1.4_
+  - [x] 2.4 Write property test for untagged filter
+    - **Property 1: Untagged Filter Correctness**
+    - **Validates: Requirements 1.2, 1.3**
+  - [x] 2.5 Write property test for filter count consistency
+    - **Property 2: Filter Count Consistency**
+    - **Validates: Requirements 1.4**
+
+- [x] 3. Checkpoint - Untagged Filter Complete
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 4. AI Retro-Tagger Server Action
+  - [x] 4.1 Create batch processing utility
+    - Create `batchArray<T>(items: T[], batchSize: number): T[][]` helper
+    - Implement chunking logic for arrays
+    - Default batch size: 20
+    - _Requirements: 2.3_
+  - [x] 4.2 Write property test for batch size limit
+    - **Property 3: Auto-Tag Batch Size Limit**
+    - **Validates: Requirements 2.3**
+  - [x] 4.3 Create autoTagCards server action
+    - Add to `src/actions/tag-actions.ts`
+    - Accept `cardIds: string[]` parameter
+    - Verify user is author of all cards
+    - Fetch card stems from database
+    - _Requirements: 2.1, 2.2_
+  - [x] 4.4 Implement OpenAI classification prompt
+    - Build system prompt with Golden List
+    - Request JSON response with cardId, topic, concepts
+    - Parse and validate response with Zod schema
+    - _Requirements: 2.4, 4.1_
+  - [x] 4.5 Implement tag upsert logic
+    - Find or create tags by name
+    - Upsert into card_template_tags with ON CONFLICT DO NOTHING
+    - Track tagged and skipped counts
+    - _Requirements: 2.5, 2.6_
+  - [x] 4.6 Write property test for auto-tag idempotence
+    - **Property 4: Auto-Tag Idempotence**
+    - **Validates: Requirements 2.6**
+
+- [x] 5. AI Retro-Tagger UI
+  - [x] 5.1 Add Auto-Tag button to BulkActionsBar
+    - Add `onAutoTag` and `isAutoTagging` props
+    - Render "✨ Auto-Tag Selected" button with Sparkles icon
+    - Show loading spinner when processing
+    - Disable when no cards selected or processing
+    - _Requirements: 2.1_
+  - [x] 5.2 Integrate auto-tag in deck page
+    - Add state for auto-tagging loading
+    - Call `autoTagCards` with selected card IDs
+    - Display success/error toast on completion
+    - Refresh card list after successful tagging
+    - _Requirements: 2.7, 2.8_
+
+- [x] 6. Checkpoint - AI Retro-Tagger Complete
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 7. Tag Merger Server Action
+  - [x] 7.1 Create mergeTags server action
+    - Add to `src/actions/admin-tag-actions.ts`
+    - Accept `sourceTagIds: string[]` and `targetTagId: string`
+    - Verify user owns all tags
+    - Validate target tag exists and is not in source list
+    - _Requirements: 3.4_
+  - [x] 7.2 Implement merge logic with duplicate handling
+    - For each source tag: update card_template_tags to target
+    - Handle ON CONFLICT: delete source link if target exists
+    - Delete source tags from tags table
+    - _Requirements: 3.4, 3.5, 3.6_
+  - [x] 7.3 Write property test for merge consolidation
+    - **Property 7: Merge Tag Consolidation**
+    - **Validates: Requirements 3.4, 3.6**
+  - [x] 7.4 Write property test for merge duplicate handling
+    - **Property 8: Merge Duplicate Handling**
+    - **Validates: Requirements 3.5**
+
+- [x] 8. Tag Merger UI
+  - [x] 8.1 Enhance admin tags page with selection
+    - Add checkbox selection to tag list
+    - Track selected tag IDs in state
+    - Enable multi-select functionality
+    - _Requirements: 3.1_
+  - [x] 8.2 Add Merge Selected button
+    - Display "Merge Selected" button when >= 2 tags selected
+    - Disable when fewer than 2 selected
+    - _Requirements: 3.2_
+  - [x] 8.3 Write property test for merge button visibility
+    - **Property 6: Merge Button Visibility**
+    - **Validates: Requirements 3.2**
+  - [x] 8.4 Create TagMergeModal component
+    - Create `src/components/tags/TagMergeModal.tsx`
+    - Display source tags being merged
+    - Dropdown to select target tag (from selected tags)
+    - Confirmation button with affected card count preview
+    - Loading and error states
+    - _Requirements: 3.3_
+  - [x] 8.5 Integrate merge modal in admin page
+    - Open modal on "Merge Selected" click
+    - Call `mergeTags` on confirmation
+    - Display success/error toast
+    - Refresh tag list after successful merge
+    - _Requirements: 3.7, 3.8_
+
+- [x] 9. Final Checkpoint
+  - All tests pass (20/20 property tests)
