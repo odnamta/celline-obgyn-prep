@@ -497,6 +497,67 @@ export async function bulkMoveCards(
 
 import { identifyDuplicates } from '@/lib/deduplication'
 
+// ============================================
+// V9.1: Bulk Selection Support
+// ============================================
+
+/**
+ * V9.1: Get all card template IDs in a deck.
+ * Used by "Select All in Deck" feature for bulk operations.
+ * Requirements: 1.4
+ * 
+ * @param deckId - The deck_template ID
+ * @returns Array of card_template IDs, or empty array on error
+ */
+export async function getAllCardIdsInDeck(deckId: string): Promise<string[]> {
+  const user = await getUser()
+  if (!user) {
+    return []
+  }
+
+  const supabase = await createSupabaseServerClient()
+
+  // Verify user has access (is author or subscriber)
+  const { data: deckTemplate } = await supabase
+    .from('deck_templates')
+    .select('id, author_id')
+    .eq('id', deckId)
+    .single()
+
+  if (!deckTemplate) {
+    return []
+  }
+
+  // Check if user is author or has subscription
+  if (deckTemplate.author_id !== user.id) {
+    const { data: subscription } = await supabase
+      .from('user_decks')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('deck_template_id', deckId)
+      .eq('is_active', true)
+      .single()
+
+    if (!subscription) {
+      return []
+    }
+  }
+
+  // Fetch all card_template IDs for this deck
+  const { data: cardTemplates, error } = await supabase
+    .from('card_templates')
+    .select('id')
+    .eq('deck_template_id', deckId)
+    .order('created_at', { ascending: true })
+
+  if (error || !cardTemplates) {
+    console.error('Failed to fetch card IDs:', error)
+    return []
+  }
+
+  return cardTemplates.map(ct => ct.id)
+}
+
 export interface DeduplicationResult {
   ok: boolean
   deletedCount?: number

@@ -8,9 +8,10 @@ interface BulkImportPageProps {
 }
 
 /**
- * V8.2.2: Bulk Import Page - Server Component Wrapper
+ * V8.2.2/V9.1: Bulk Import Page - Server Component Wrapper
  * Verifies user is the deck author before rendering the client component.
  * Non-authors are redirected to the deck details page.
+ * V9.1: Passes deck subject to client for multi-specialty AI support.
  */
 export default async function BulkImportPage({ params }: BulkImportPageProps) {
   const { deckId } = await params
@@ -34,10 +35,10 @@ export default async function BulkImportPage({ params }: BulkImportPageProps) {
     redirect(`/decks/${resolved.id}/add-bulk`)
   }
 
-  // Fetch deck_template to check author
+  // V9.1: Fetch deck_template including subject for AI
   const { data: deckTemplate, error } = await supabase
     .from('deck_templates')
-    .select('id, author_id')
+    .select('id, author_id, subject')
     .eq('id', resolved.id)
     .single()
 
@@ -50,5 +51,8 @@ export default async function BulkImportPage({ params }: BulkImportPageProps) {
     redirect(`/decks/${resolved.id}`)
   }
 
-  return <BulkImportClient deckId={resolved.id} />
+  // V9.1: Pass subject to client (default to OBGYN if not set)
+  const subject = deckTemplate.subject || 'Obstetrics & Gynecology'
+
+  return <BulkImportClient deckId={resolved.id} subject={subject} />
 }

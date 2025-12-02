@@ -11,20 +11,21 @@ import type { Tag } from '@/types/database'
 interface TagSelectorProps {
   selectedTagIds: string[]
   onChange: (tagIds: string[]) => void
+  maxSelections?: number // Optional limit on number of selections
 }
 
 /**
  * TagSelector - Multi-select dropdown with inline tag creation
  * Requirements: V5 Feature Set 1 - Req 1.3
  */
-export function TagSelector({ selectedTagIds, onChange }: TagSelectorProps) {
+export function TagSelector({ selectedTagIds, onChange, maxSelections }: TagSelectorProps) {
   const { showToast } = useToast()
   const [isOpen, setIsOpen] = useState(false)
   const [tags, setTags] = useState<Tag[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newTagName, setNewTagName] = useState('')
-  const [newTagColor, setNewTagColor] = useState('blue')
+  const [newTagCategory, setNewTagCategory] = useState<'source' | 'topic' | 'concept'>('concept')
   const [isCreating, setIsCreating] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -55,7 +56,12 @@ export function TagSelector({ selectedTagIds, onChange }: TagSelectorProps) {
     if (selectedTagIds.includes(tagId)) {
       onChange(selectedTagIds.filter((id) => id !== tagId))
     } else {
-      onChange([...selectedTagIds, tagId])
+      // If maxSelections is set and we're at the limit, replace the last selection
+      if (maxSelections && selectedTagIds.length >= maxSelections) {
+        onChange([tagId])
+      } else {
+        onChange([...selectedTagIds, tagId])
+      }
     }
   }
 
@@ -63,7 +69,7 @@ export function TagSelector({ selectedTagIds, onChange }: TagSelectorProps) {
     if (!newTagName.trim()) return
     
     setIsCreating(true)
-    const result = await createTag(newTagName.trim(), newTagColor)
+    const result = await createTag(newTagName.trim(), newTagCategory)
     setIsCreating(false)
 
     if (result.ok && result.tag) {
@@ -161,18 +167,21 @@ export function TagSelector({ selectedTagIds, onChange }: TagSelectorProps) {
               className="w-full px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             
-            {/* Color picker */}
-            <div className="flex flex-wrap gap-2">
-              {TAG_COLORS.map((color) => (
+            {/* Category selector */}
+            <div className="flex gap-2">
+              {(['source', 'topic', 'concept'] as const).map((cat) => (
                 <button
-                  key={color.value}
+                  key={cat}
                   type="button"
-                  onClick={() => setNewTagColor(color.value)}
-                  className={`w-6 h-6 rounded-full ${color.bgClass} ${
-                    newTagColor === color.value ? 'ring-2 ring-blue-500 ring-offset-2' : ''
+                  onClick={() => setNewTagCategory(cat)}
+                  className={`px-3 py-1 text-xs rounded-full capitalize ${
+                    newTagCategory === cat 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
                   }`}
-                  title={color.name}
-                />
+                >
+                  {cat}
+                </button>
               ))}
             </div>
 

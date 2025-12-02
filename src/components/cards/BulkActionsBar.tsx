@@ -1,24 +1,31 @@
 'use client'
 
-import { Trash2, FolderInput, Download, X } from 'lucide-react'
+import { Trash2, FolderInput, Download, X, Tag } from 'lucide-react'
 
+/**
+ * V9.1: Enhanced BulkActionsBar Props with onAddTag
+ * Requirements: C.2, C.3, V9.1 2.1
+ */
 interface BulkActionsBarProps {
   selectedCount: number
   onDelete: () => void
   onMove: () => void
   onExport: () => void
+  onAddTag?: () => void  // V9.1: Optional handler for bulk tagging
   onClearSelection: () => void
 }
 
 /**
  * BulkActionsBar - Sticky bar for bulk card operations
- * Requirements: C.2, C.3
+ * V9.1: Added "Add Tag" button for bulk tagging
+ * Requirements: C.2, C.3, V9.1 2.1
  */
 export function BulkActionsBar({
   selectedCount,
   onDelete,
   onMove,
   onExport,
+  onAddTag,
   onClearSelection,
 }: BulkActionsBarProps) {
   if (selectedCount === 0) return null
@@ -29,6 +36,16 @@ export function BulkActionsBar({
         {selectedCount} card{selectedCount !== 1 ? 's' : ''} selected
       </span>
       <div className="flex flex-wrap gap-2">
+        {/* V9.1: Add Tag button */}
+        {onAddTag && (
+          <button
+            onClick={onAddTag}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
+          >
+            <Tag className="w-4 h-4" />
+            Add Tag
+          </button>
+        )}
         <button
           onClick={onMove}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors"

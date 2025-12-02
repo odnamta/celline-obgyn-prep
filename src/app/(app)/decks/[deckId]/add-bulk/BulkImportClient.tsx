@@ -98,11 +98,15 @@ function BulkImportErrorFallback({ onRetry }: { onRetry: () => void }) {
   )
 }
 
+/**
+ * V9.1: Enhanced props with subject for multi-specialty AI
+ */
 interface BulkImportClientProps {
   deckId: string
+  subject?: string  // V9.1: Medical specialty for AI prompts
 }
 
-export default function BulkImportClient({ deckId }: BulkImportClientProps) {
+export default function BulkImportClient({ deckId, subject = 'Obstetrics & Gynecology' }: BulkImportClientProps) {
   const { showToast } = useToast()
   
   const textAreaRef = useRef<HTMLTextAreaElement>(null)
@@ -353,11 +357,13 @@ export default function BulkImportClient({ deckId }: BulkImportClientProps) {
     scrollToForm()
 
     try {
+      // V9.1: Pass subject for multi-specialty AI support
       const result = await draftMCQFromText({
         sourceText: selectedText,
         deckId,
         deckName: linkedSource?.fileName?.replace('.pdf', ''),
         mode: aiMode,
+        subject,
         imageBase64: processedImage?.base64 || undefined,
       })
 
@@ -424,11 +430,13 @@ export default function BulkImportClient({ deckId }: BulkImportClientProps) {
     setPdfSelection(null)
 
     try {
+      // V9.1: Pass subject for multi-specialty AI support
       const result = await draftBatchMCQFromText({
         deckId,
         text: selectedText,
         defaultTags: sessionTagNames,
         mode: aiMode,
+        subject,
         imageBase64: processedImage?.base64 || undefined,
       })
 
@@ -449,7 +457,7 @@ export default function BulkImportClient({ deckId }: BulkImportClientProps) {
     } finally {
       setIsBatchGenerating(false)
     }
-  }, [pdfSelection, lastBatchTime, deckId, sessionTagNames, aiMode, processedImage, showToast])
+  }, [pdfSelection, lastBatchTime, deckId, sessionTagNames, aiMode, subject, processedImage, showToast])
 
   // V6.2: Handle batch save success - update session count and restore scroll
   const handleBatchSaveSuccess = useCallback((count: number) => {
@@ -529,12 +537,13 @@ export default function BulkImportClient({ deckId }: BulkImportClientProps) {
         return
       }
 
-      // Call batch draft with extracted text
+      // V9.1: Call batch draft with extracted text and subject
       const result = await draftBatchMCQFromText({
         deckId,
         text: combinedText,
         defaultTags: sessionTagNames,
         mode: aiMode,
+        subject,
         imageBase64: processedImage?.base64 || undefined,
       })
 
@@ -559,7 +568,7 @@ export default function BulkImportClient({ deckId }: BulkImportClientProps) {
     } finally {
       setIsPageScanning(false)
     }
-  }, [lastBatchTime, deckId, sessionTagNames, aiMode, processedImage, includeNextPage, showToast])
+  }, [lastBatchTime, deckId, sessionTagNames, aiMode, subject, processedImage, includeNextPage, showToast])
 
   // V6.6: Handle "Append Next Page" button click
   // V7.1: Fixed to use single source of truth (state only, no direct DOM writes)
@@ -704,11 +713,13 @@ export default function BulkImportClient({ deckId }: BulkImportClientProps) {
     setLastGenerateTime(now)
 
     try {
+      // V9.1: Pass subject for multi-specialty AI support
       const result = await draftMCQFromText({
         sourceText: selectedText,
         deckId,
         deckName: linkedSource?.fileName?.replace('.pdf', ''),
         mode: aiMode,
+        subject,
         imageBase64: processedImage?.base64 || undefined,
       })
 
@@ -992,7 +1003,7 @@ export default function BulkImportClient({ deckId }: BulkImportClientProps) {
                 <AutoScanResumeBanner
                   savedPage={autoScan.currentPage}
                   totalPages={autoScan.totalPages}
-                  onResume={() => autoScan.startScan(autoScan.currentPage)}
+                  onResume={() => autoScan.startScan({ startPage: autoScan.currentPage, isResuming: true })}
                   onReset={autoScan.resetScan}
                 />
               )}

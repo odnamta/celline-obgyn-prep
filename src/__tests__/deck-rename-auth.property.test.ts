@@ -141,11 +141,15 @@ describe('V8.6: Author-Only Title Edit', () => {
 
     it('titles over 100 chars fail validation', () => {
       fc.assert(
-        fc.property(fc.string({ minLength: 101, maxLength: 500 }), (title) => {
-          const result = validateTitle(title)
-          expect(result.valid).toBe(false)
-          expect(result.error).toBe('Title must be at most 100 characters')
-        }),
+        fc.property(
+          // Filter to ensure trimmed length is over 100 (validation trims first)
+          fc.string({ minLength: 101, maxLength: 500 }).filter((s) => s.trim().length > 100), 
+          (title) => {
+            const result = validateTitle(title)
+            expect(result.valid).toBe(false)
+            expect(result.error).toBe('Title must be at most 100 characters')
+          }
+        ),
         { numRuns: 50 }
       )
     })

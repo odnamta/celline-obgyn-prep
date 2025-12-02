@@ -42,11 +42,17 @@ Prefer questions that clearly come from the image.
 If NO question is visible, say so instead of inventing one.`
 
 /**
- * System prompt for EXTRACT mode (Q&A sources).
+ * V9.1: Default subject for backward compatibility
+ */
+const DEFAULT_SUBJECT = 'Obstetrics & Gynecology'
+
+/**
+ * V9.1: Build system prompt for EXTRACT mode with dynamic subject.
  * V6.2: Extracts existing MCQs verbatim from Q&A text.
  * V6.6: Added tags field and Vision priority
  */
-const EXTRACT_SYSTEM_PROMPT = `You are a medical board exam expert specializing in obstetrics and gynecology.
+function buildExtractSystemPrompt(subject: string = DEFAULT_SUBJECT): string {
+  return `You are a medical board exam expert specializing in ${subject}.
 Your task is to EXTRACT an existing multiple-choice question from the provided text.
 
 Return valid JSON with these exact fields:
@@ -64,13 +70,15 @@ EXTRACTION RULES:
 - If no clear MCQ is found, return the closest question-like content.
 ${VISION_PRIORITY_INSTRUCTION}
 ${DATA_INTEGRITY_RULES}`
+}
 
 /**
- * System prompt for GENERATE mode (Textbook sources).
+ * V9.1: Build system prompt for GENERATE mode with dynamic subject.
  * V6.2: Creates new MCQs from textbook content.
  * V6.6: Added tags field and Vision priority
  */
-const GENERATE_SYSTEM_PROMPT = `You are a medical board exam expert specializing in obstetrics and gynecology.
+function buildGenerateSystemPrompt(subject: string = DEFAULT_SUBJECT): string {
+  return `You are a medical board exam expert specializing in ${subject}.
 Your task is to CREATE ONE new high-yield board-style MCQ from the provided textbook passage.
 
 Return valid JSON with these exact fields:
@@ -90,23 +98,23 @@ GENERATION RULES:
 - Write at board exam difficulty level.
 ${VISION_PRIORITY_INSTRUCTION}
 ${DATA_INTEGRITY_RULES}`
+}
 
 /**
- * Legacy system prompt (fallback, same as generate mode).
+ * V9.1: Get the appropriate system prompt based on mode and subject.
+ * Subject defaults to 'Obstetrics & Gynecology' for backward compatibility.
  */
-const LEGACY_SYSTEM_PROMPT = GENERATE_SYSTEM_PROMPT
-
-/**
- * Get the appropriate system prompt based on mode.
- */
-function getSystemPrompt(mode: AIMode = 'extract'): string {
+function getSystemPrompt(mode: AIMode = 'extract', subject?: string): string {
+  // V9.1: Normalize subject - use default if null, empty, or whitespace only
+  const normalizedSubject = subject?.trim() || DEFAULT_SUBJECT
+  
   switch (mode) {
     case 'extract':
-      return EXTRACT_SYSTEM_PROMPT
+      return buildExtractSystemPrompt(normalizedSubject)
     case 'generate':
-      return GENERATE_SYSTEM_PROMPT
+      return buildGenerateSystemPrompt(normalizedSubject)
     default:
-      return LEGACY_SYSTEM_PROMPT
+      return buildGenerateSystemPrompt(normalizedSubject)
   }
 }
 
@@ -179,7 +187,7 @@ export async function draftMCQFromText(input: DraftMCQInput): Promise<MCQDraftRe
     return { ok: false, error: 'TEXT_TOO_SHORT' }
   }
   
-  const { sourceText, deckName, mode = 'extract', imageBase64, imageUrl } = validationResult.data
+  const { sourceText, deckName, mode = 'extract', subject, imageBase64, imageUrl } = validationResult.data
   
   // V6.6: Debug logging for image presence
   if (imageBase64 || imageUrl) {
@@ -188,6 +196,11 @@ export async function draftMCQFromText(input: DraftMCQInput): Promise<MCQDraftRe
       base64Length: imageBase64?.length || 0,
       hasUrl: !!imageUrl,
     })
+  }
+  
+  // V9.1: Log subject for debugging
+  if (subject) {
+    console.log('[draftMCQFromText] Using subject:', subject)
   }
   
   try {
@@ -199,12 +212,13 @@ export async function draftMCQFromText(input: DraftMCQInput): Promise<MCQDraftRe
     )
 
     // Call OpenAI API (FR-2.3, FR-2.4)
+    // V9.1: Pass subject to getSystemPrompt for dynamic specialty
     const response = await openai.chat.completions.create({
       model: MCQ_MODEL,
       temperature: MCQ_TEMPERATURE,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: getSystemPrompt(mode) },
+        { role: 'system', content: getSystemPrompt(mode, subject) },
         { role: 'user', content: userContent as string },
       ],
     })

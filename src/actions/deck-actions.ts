@@ -6,9 +6,10 @@ import { createDeckSchema } from '@/lib/validations'
 import type { ActionResult } from '@/types/actions'
 
 /**
- * V8.0: Server Action for creating a new deck.
+ * V8.0/V9.1: Server Action for creating a new deck.
  * Creates deck_template and auto-subscribes author via user_decks.
- * Requirements: 2.1, 9.3, V8 2.2
+ * V9.1: Added subject field for multi-specialty AI support.
+ * Requirements: 2.1, 9.3, V8 2.2, V9.1 3.1
  */
 export async function createDeckAction(
   prevState: ActionResult,
@@ -33,12 +34,15 @@ export async function createDeckAction(
   }
 
   const { title } = validationResult.data
+  // V9.1: Get subject from form data, default to OBGYN
+  const subject = (formData.get('subject') as string)?.trim() || 'Obstetrics & Gynecology'
+  
   const supabase = await createSupabaseServerClient()
 
-  // V8.0: Create deck_template instead of legacy deck
+  // V8.0/V9.1: Create deck_template with subject
   const { data: deckTemplate, error: createError } = await supabase
     .from('deck_templates')
-    .insert({ title, author_id: user.id, visibility: 'private' })
+    .insert({ title, author_id: user.id, visibility: 'private', subject })
     .select()
     .single()
 
@@ -386,4 +390,93 @@ export async function updateDeckTitle(
   revalidatePath('/dashboard')
 
   return { success: true, data: { title: trimmedTitle } }
+}
+
+
+// ============================================
+// V9.1: Deck Subject Management
+// ============================================
+
+/**
+ * V9.1: Server Action for updating a deck's subject.
+ * Only the author can change the subject.
+ * 
+ * Requirements: V9.1 3.2
+ * 
+ * @param deckId - The deck_template ID to update
+ * @param newSubject - The new subject (medical specialty)
+ * @returns ActionResult with success/error
+ */
+export async function updateDeckSubject(
+  deckId: string,
+  newSubject: string
+): Promise<ActionResult> {
+  // Validate deck ID format
+  if (!deckId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(deckId)) {
+    return { success: false, error: 'Invalid deck ID' }
+  }
+
+  // Validate subject (allow empty to reset to default)
+  const trimmedSubject = newSubject.trim() || 'Obstetrics & Gynecology'
+  if (trimmedSubject.length > 100) {
+    return { success: false, error: 'Subject must be at most 100 characters' }
+  }
+
+  const user = await getUser()
+  if (!user) {
+    return { success: false, error: 'Authentication required' }
+  }
+
+  const supabase = await createSupabaseServerClient()
+
+  // Fetch deck to verify author
+  const { data: deckTemplate, error: fetchError } = await supabase
+    .from('deck_templates')
+    .select('id, author_id')
+    .eq('id', deckId)
+    .single()
+
+  if (fetchError || !deckTemplate) {
+    return { success: false, error: 'Deck not found' }
+  }
+
+  // Check user is author
+  if (deckTemplate.author_id !== user.id) {
+    return { success: false, error: 'Only the author can change the subject' }
+  }
+
+  // Update the subject
+  const { error: updateError } = await supabase
+    .from('deck_templates')
+    .update({ subject: trimmedSubject })
+    .eq('id', deckId)
+
+  if (updateError) {
+    return { success: false, error: updateError.message }
+  }
+
+  // Revalidate paths
+  revalidatePath(`/decks/${deckId}`)
+  revalidatePath(`/decks/${deckId}/add-bulk`)
+
+  return { success: true, data: { subject: trimmedSubject } }
+}
+
+/**
+ * V9.1: Get deck subject for AI operations.
+ * Returns the subject or default if not set.
+ * 
+ * @param deckId - The deck_template ID
+ * @returns Subject string or default
+ */
+export async function getDeckSubject(deckId: string): Promise<string> {
+  const supabase = await createSupabaseServerClient()
+  
+  const { data: deckTemplate } = await supabase
+    .from('deck_templates')
+    .select('subject')
+    .eq('id', deckId)
+    .single()
+
+  return deckTemplate?.subject?.trim() || 'Obstetrics & Gynecology'
 }

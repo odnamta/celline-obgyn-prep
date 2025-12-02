@@ -1,6 +1,5 @@
 import { describe, test, expect } from 'vitest';
 import fc from 'fast-check';
-import type { Tag } from '../types/database';
 
 /**
  * **Feature: v8.5-data-integrity, Property 1: Tag fetch includes all linked tags**
@@ -10,12 +9,15 @@ import type { Tag } from '../types/database';
  * SHALL return all associated tag names.
  */
 describe('Property 1: Tag fetch includes all linked tags', () => {
+  // Color type matching the Tag interface
+  type TagColor = 'blue' | 'purple' | 'green' | 'red' | 'orange' | 'pink';
+
   // Type for the nested structure returned by Supabase join
   interface CardTemplateTagJoin {
     tags: {
       id: string;
       name: string;
-      color: string;
+      color: TagColor;
     } | null;
   }
 
@@ -29,17 +31,28 @@ describe('Property 1: Tag fetch includes all linked tags', () => {
     card_template_tags: CardTemplateTagJoin[];
   }
 
+  // Simplified tag type for testing (doesn't need full Tag interface)
+  interface ExtractedTag {
+    id: string;
+    name: string;
+    color: TagColor;
+    user_id: string;
+    created_at: string;
+    category: string;
+  }
+
   // Helper function that mirrors the tag extraction logic in deck detail page
-  function extractTagsFromCardTemplate(ct: CardTemplateWithNestedTags): Tag[] {
+  function extractTagsFromCardTemplate(ct: CardTemplateWithNestedTags): ExtractedTag[] {
     return (ct.card_template_tags || [])
       .map((ctt) => ctt.tags)
-      .filter((tag): tag is { id: string; name: string; color: string } => tag !== null)
+      .filter((tag): tag is { id: string; name: string; color: TagColor } => tag !== null)
       .map((tag) => ({
         id: tag.id,
         name: tag.name,
         color: tag.color,
         user_id: '',
         created_at: '',
+        category: 'topic', // Default category for testing
       }));
   }
 
@@ -47,7 +60,7 @@ describe('Property 1: Tag fetch includes all linked tags', () => {
   const tagArb = fc.record({
     id: fc.uuid(),
     name: fc.string({ minLength: 1, maxLength: 30 }),
-    color: fc.constantFrom('blue', 'green', 'red', 'purple', 'orange', 'pink'),
+    color: fc.constantFrom<TagColor>('blue', 'green', 'red', 'purple', 'orange', 'pink'),
   });
 
   // Generator for card_template_tags join entry
@@ -57,13 +70,19 @@ describe('Property 1: Tag fetch includes all linked tags', () => {
   );
 
   // Generator for a card template with nested tags
+  // Use integer timestamp to generate valid ISO date strings
+  const isoDateArb = fc.integer({ 
+    min: new Date('2020-01-01').getTime(), 
+    max: new Date('2030-12-31').getTime() 
+  }).map((ts) => new Date(ts).toISOString());
+  
   const cardTemplateWithTagsArb = fc.record({
     id: fc.uuid(),
     stem: fc.string({ minLength: 1, maxLength: 200 }),
     options: fc.array(fc.string({ minLength: 1, maxLength: 100 }), { minLength: 2, maxLength: 5 }),
     correct_index: fc.integer({ min: 0, max: 4 }),
     explanation: fc.option(fc.string({ minLength: 1, maxLength: 500 }), { nil: null }),
-    created_at: fc.date().map((d) => d.toISOString()),
+    created_at: isoDateArb,
     card_template_tags: fc.array(cardTemplateTagJoinArb, { minLength: 0, maxLength: 5 }),
   });
 
@@ -75,7 +94,7 @@ describe('Property 1: Tag fetch includes all linked tags', () => {
         // Get expected tags (non-null ones from the join)
         const expectedTags = cardTemplate.card_template_tags
           .map((ctt) => ctt.tags)
-          .filter((tag): tag is { id: string; name: string; color: string } => tag !== null);
+          .filter((tag): tag is { id: string; name: string; color: TagColor } => tag !== null);
 
         // Extracted tags should have same count as non-null tags
         expect(extractedTags.length).toBe(expectedTags.length);
@@ -101,8 +120,8 @@ describe('Property 1: Tag fetch includes all linked tags', () => {
           options: fc.array(fc.string({ minLength: 1, maxLength: 100 }), { minLength: 2, maxLength: 5 }),
           correct_index: fc.integer({ min: 0, max: 4 }),
           explanation: fc.option(fc.string({ minLength: 1, maxLength: 500 }), { nil: null }),
-          created_at: fc.date().map((d) => d.toISOString()),
-          card_template_tags: fc.constant([]),
+          created_at: isoDateArb,
+          card_template_tags: fc.constant([] as CardTemplateTagJoin[]),
         }),
         (cardTemplate) => {
           const extractedTags = extractTagsFromCardTemplate(cardTemplate);
@@ -167,7 +186,7 @@ describe('Property 1: Tag fetch includes all linked tags', () => {
           // Create a mix of valid tags and null tags
           const cardTemplateTags: CardTemplateTagJoin[] = [
             ...validTags.map((tag) => ({ tags: tag })),
-            ...Array(nullCount).fill({ tags: null }),
+            ...Array(nullCount).fill({ tags: null }) as CardTemplateTagJoin[],
           ];
 
           // Shuffle to mix nulls with valid tags

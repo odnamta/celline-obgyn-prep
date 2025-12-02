@@ -137,14 +137,23 @@ export interface DeckSource {
 
 
 // ============================================
-// Tagging System Types (V5)
+// Tagging System Types (V5, V9 Ontology)
 // ============================================
+
+/**
+ * V9: Tag category for 3-tier taxonomy
+ * - source: Textbook/reference origin (e.g., "Williams", "Lange")
+ * - topic: Medical chapter/domain (e.g., "Anatomy", "Endocrinology")
+ * - concept: Specific medical concept (e.g., "Preeclampsia", "GestationalDiabetes")
+ */
+export type TagCategory = 'source' | 'topic' | 'concept';
 
 export interface Tag {
   id: string;
   user_id: string;
   name: string;
   color: string;
+  category: TagCategory;
   created_at: string;
 }
 
@@ -172,6 +181,7 @@ export interface DeckTemplate {
   description: string | null;
   visibility: DeckVisibility;
   author_id: string;
+  subject?: string;  // V9.1: Medical specialty for AI prompt customization
   legacy_id: string | null;
   created_at: string;
   updated_at: string;

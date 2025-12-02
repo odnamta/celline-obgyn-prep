@@ -7,23 +7,50 @@ import { Button } from '@/components/ui/Button'
 import { resolveDeckId } from '@/lib/legacy-redirect'
 import { CleanDuplicatesButton } from '@/components/decks/CleanDuplicatesButton'
 import { EditableDeckTitle } from '@/components/decks/EditableDeckTitle'
+import { EditableDeckSubject } from '@/components/decks/EditableDeckSubject'
 import type { Card, Tag } from '@/types/database'
 
 // Type for card template with nested tags from Supabase join
+// V9: Added category field to tags
+// Note: Supabase returns tags as single object for foreign key join
 interface CardTemplateWithNestedTags {
   id: string
   stem: string
-  options: string[]
+  options: unknown
   correct_index: number
   explanation: string | null
   created_at: string
-  card_template_tags: {
+  card_template_tags: Array<{
     tags: {
       id: string
       name: string
       color: string
+      category?: string
     } | null
-  }[]
+  }> | null
+}
+
+// Type for raw Supabase response (tags can be array due to join behavior)
+interface CardTemplateRaw {
+  id: string
+  stem: string
+  options: unknown
+  correct_index: number
+  explanation: string | null
+  created_at: string
+  card_template_tags: Array<{
+    tags: {
+      id: string
+      name: string
+      color: string
+      category?: string
+    } | {
+      id: string
+      name: string
+      color: string
+      category?: string
+    }[] | null
+  }> | null
 }
 
 // Extended Card type with tags for CardList
@@ -103,7 +130,8 @@ export default async function DeckDetailsPage({ params }: DeckDetailsPageProps) 
         tags (
           id,
           name,
-          color
+          color,
+          category
         )
       )
     `)
@@ -112,15 +140,24 @@ export default async function DeckDetailsPage({ params }: DeckDetailsPageProps) 
 
   // Map card_templates to Card format for CardList compatibility
   // V8.5: Include tags array extracted from nested join
-  const cardList: CardWithTags[] = ((cardTemplates || []) as CardTemplateWithNestedTags[]).map(ct => {
+  // V9: Added category field to tag mapping
+  const cardList: CardWithTags[] = ((cardTemplates || []) as unknown as CardTemplateWithNestedTags[]).map(ct => {
     // Extract tags from nested structure, filtering out nulls
+    // Handle both single object and array responses from Supabase
     const tags: Tag[] = (ct.card_template_tags || [])
-      .map(ctt => ctt.tags)
-      .filter((tag): tag is { id: string; name: string; color: string } => tag !== null)
+      .flatMap(ctt => {
+        const tagData = ctt.tags
+        if (!tagData) return []
+        // Handle both single object and array
+        const tagArray = Array.isArray(tagData) ? tagData : [tagData]
+        return tagArray
+      })
+      .filter((tag): tag is { id: string; name: string; color: string; category?: string } => tag !== null && typeof tag === 'object')
       .map(tag => ({
         id: tag.id,
         name: tag.name,
         color: tag.color,
+        category: (tag.category || 'concept') as 'source' | 'topic' | 'concept',
         user_id: '', // Not needed for display
         created_at: '', // Not needed for display
       }))
@@ -177,9 +214,16 @@ export default async function DeckDetailsPage({ params }: DeckDetailsPageProps) 
         ) : (
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">{deckTemplate.title}</h1>
         )}
-        <p className="text-slate-600 dark:text-slate-400">
+        <p className="text-slate-600 dark:text-slate-400 mb-2">
           {cardList.length} {cardList.length === 1 ? 'card' : 'cards'} in this deck
         </p>
+        {/* V9.1: Editable subject for authors - controls AI specialty */}
+        {isAuthor && (
+          <EditableDeckSubject 
+            deckId={deckId} 
+            initialSubject={deckTemplate.subject || 'Obstetrics & Gynecology'} 
+          />
+        )}
       </div>
 
       {/* Action buttons */}

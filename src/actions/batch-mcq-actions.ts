@@ -39,6 +39,32 @@ const FIGURE_SAFETY_INSTRUCTION = `
 FIGURE REFERENCE RULE:
 If the text references a Figure (e.g., "Figure 19-1", "See diagram", "as shown below") but NO image is provided in this request, DO NOT create questions that require seeing that figure. Only create questions answerable from the text alone.`
 
+/**
+ * V9.1: Default subject for backward compatibility
+ */
+const DEFAULT_SUBJECT = 'Obstetrics & Gynecology'
+
+/**
+ * V9/V9.1: Build system prompt with Golden List topics and dynamic subject
+ */
+function buildBatchExtractPrompt(goldenTopics: string[], subject: string = DEFAULT_SUBJECT): string {
+  const topicList = goldenTopics.length > 0 
+    ? goldenTopics.join(', ')
+    : 'Anatomy, Endocrinology, Infections, Oncology, MaternalFetal, Obstetrics, Gynecology'
+  
+  return `You are a medical board exam expert specializing in ${subject}.
+Your task is to EXTRACT existing multiple-choice questions from the provided text.
+
+Return a JSON object with a "questions" array containing ALL MCQs found.
+Each MCQ must have:
+- stem: The question text (extracted verbatim, fix obvious OCR spacing only)
+- options: Array of 2-5 answer choices (extracted verbatim)
+- correctIndex: Index of correct answer (0-based, 0-4)
+- explanation: The explanation from the source, or a brief teaching point if none provided
+- topic: EXACTLY ONE official topic from this list: [${topicList}]
+- tags: Array of 1-2 specific CONCEPT tags in PascalCase (e.g., "Preeclampsia", "GestationalDiabetes") - REQUIRED`
+}
+
 const BATCH_EXTRACT_SYSTEM_PROMPT = `You are a medical board exam expert specializing in obstetrics and gynecology.
 Your task is to EXTRACT existing multiple-choice questions from the provided text.
 
@@ -83,6 +109,27 @@ Example response format:
     }
   ]
 }`
+
+/**
+ * V9/V9.1: Build generate prompt with Golden List topics and dynamic subject
+ */
+function buildBatchGeneratePrompt(goldenTopics: string[], subject: string = DEFAULT_SUBJECT): string {
+  const topicList = goldenTopics.length > 0 
+    ? goldenTopics.join(', ')
+    : 'Anatomy, Endocrinology, Infections, Oncology, MaternalFetal, Obstetrics, Gynecology'
+  
+  return `You are a medical board exam expert specializing in ${subject}.
+Your task is to CREATE multiple high-yield board-style MCQs from the provided textbook passage.
+
+Return a JSON object with a "questions" array containing ALL MCQs you can generate.
+Each MCQ must have:
+- stem: The question text (clinical vignette or direct question, at least 10 characters)
+- options: Array of 2-5 answer choices
+- correctIndex: Index of correct answer (0-based, 0-4)
+- explanation: Brief teaching explanation (optional but recommended)
+- topic: EXACTLY ONE official topic from this list: [${topicList}]
+- tags: Array of 1-2 specific CONCEPT tags in PascalCase (e.g., "Preeclampsia", "GestationalDiabetes") - REQUIRED`
+}
 
 const BATCH_GENERATE_SYSTEM_PROMPT = `You are a medical board exam expert specializing in obstetrics and gynecology.
 Your task is to CREATE multiple high-yield board-style MCQs from the provided textbook passage.
@@ -130,8 +177,23 @@ Example response format:
   ]
 }`
 
-function getBatchSystemPrompt(mode: AIMode = 'extract'): string {
-  return mode === 'generate' ? BATCH_GENERATE_SYSTEM_PROMPT : BATCH_EXTRACT_SYSTEM_PROMPT
+/**
+ * V9/V9.1: Get system prompt with optional Golden List topics and dynamic subject
+ */
+function getBatchSystemPrompt(mode: AIMode = 'extract', goldenTopics: string[] = [], subject?: string): string {
+  // V9.1: Normalize subject - use default if null, empty, or whitespace only
+  const normalizedSubject = subject?.trim() || DEFAULT_SUBJECT
+  
+  if (goldenTopics.length > 0) {
+    // V9: Use topic-aware prompts when Golden List is available
+    return mode === 'generate' 
+      ? buildBatchGeneratePrompt(goldenTopics, normalizedSubject) 
+      : buildBatchExtractPrompt(goldenTopics, normalizedSubject)
+  }
+  // V9.1: Fallback to dynamic prompts with subject (no legacy hardcoded prompts)
+  return mode === 'generate' 
+    ? buildBatchGeneratePrompt([], normalizedSubject) 
+    : buildBatchExtractPrompt([], normalizedSubject)
 }
 
 function buildBatchUserPrompt(text: string, defaultTags?: string[], mode: AIMode = 'extract'): string {
@@ -165,6 +227,7 @@ function buildMessageContent(
 
 /**
  * Server Action: Generate multiple MCQ drafts from source text using OpenAI.
+ * V9: Fetches Golden List topics for AI classification.
  */
 export async function draftBatchMCQFromText(input: DraftBatchInput): Promise<DraftBatchResult> {
   if (!process.env.OPENAI_API_KEY) {
@@ -177,7 +240,31 @@ export async function draftBatchMCQFromText(input: DraftBatchInput): Promise<Dra
     return { ok: false, error: { message: firstError?.message || 'Invalid input', code: 'VALIDATION_ERROR' } }
   }
   
-  const { text, defaultTags, mode = 'extract', imageBase64, imageUrl } = validationResult.data
+  const { text, defaultTags, mode = 'extract', subject, imageBase64, imageUrl } = validationResult.data
+  
+  // V9.1: Log subject for debugging
+  if (subject) {
+    console.log('[draftBatchMCQFromText] V9.1: Using subject:', subject)
+  }
+  
+  // V9: Fetch Golden List topics for AI classification
+  let goldenTopics: string[] = []
+  try {
+    const user = await getUser()
+    if (user) {
+      const supabase = await createSupabaseServerClient()
+      const { data: topics } = await supabase
+        .from('tags')
+        .select('name')
+        .eq('user_id', user.id)
+        .eq('category', 'topic')
+        .order('name')
+      goldenTopics = topics?.map(t => t.name) || []
+      console.log(`[draftBatchMCQFromText] V9: Loaded ${goldenTopics.length} Golden List topics`)
+    }
+  } catch (e) {
+    console.warn('[draftBatchMCQFromText] V9: Failed to load Golden List, using defaults')
+  }
   
   try {
     const userContent = buildMessageContent(
@@ -187,13 +274,15 @@ export async function draftBatchMCQFromText(input: DraftBatchInput): Promise<Dra
     )
 
     // V8.6: Added max_tokens to prevent truncation on dense pages
+    // V9: Pass Golden List topics to system prompt
+    // V9.1: Pass subject for dynamic specialty
     const response = await openai.chat.completions.create({
       model: MCQ_MODEL,
       temperature: MCQ_TEMPERATURE,
       max_tokens: MCQ_MAX_TOKENS,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: getBatchSystemPrompt(mode) },
+        { role: 'system', content: getBatchSystemPrompt(mode, goldenTopics, subject) },
         { role: 'user', content: userContent as string },
       ],
     })
@@ -324,7 +413,16 @@ export async function bulkCreateMCQV2(input: BulkCreateV2Input): Promise<BulkCre
     
     console.log(`[bulkCreateMCQV2] Total unique tags to resolve: ${allTagNames.size}`, Array.from(allTagNames))
     
+    // V9: Fetch Golden List topics to determine category for new tags
+    const { data: goldenTopics } = await supabase
+      .from('tags')
+      .select('name')
+      .eq('user_id', user.id)
+      .eq('category', 'topic')
+    const goldenTopicNames = new Set((goldenTopics || []).map(t => t.name.toLowerCase()))
+    
     // Step 2: Resolve tag names to IDs
+    // V9: Assign correct category based on Golden List
     const tagNameToId = new Map<string, string>()
     for (const tagName of allTagNames) {
       const { data: existingTag } = await supabase
@@ -339,9 +437,14 @@ export async function bulkCreateMCQV2(input: BulkCreateV2Input): Promise<BulkCre
         continue
       }
       
+      // V9: Determine category - if matches Golden List topic, use 'topic', else 'concept'
+      const isGoldenTopic = goldenTopicNames.has(tagName.toLowerCase())
+      const category = isGoldenTopic ? 'topic' : 'concept'
+      const color = isGoldenTopic ? 'purple' : 'green'
+      
       const { data: newTag, error: createTagError } = await supabase
         .from('tags')
-        .insert({ user_id: user.id, name: tagName, color: 'purple' })
+        .insert({ user_id: user.id, name: tagName, color, category })
         .select('id, name')
         .single()
       

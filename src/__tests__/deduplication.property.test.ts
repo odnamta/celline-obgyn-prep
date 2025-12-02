@@ -110,7 +110,8 @@ describe('Property 5: Deduplication Correctness', () => {
     it('keeps oldest card per duplicate stem', () => {
       fc.assert(
         fc.property(
-          fc.string({ minLength: 1 }),  // stem
+          // Filter out whitespace-only stems since they normalize to empty and are skipped
+          fc.string({ minLength: 1 }).filter((s) => s.trim().length > 0),  // stem
           fc.integer({ min: 2, max: 10 }), // number of duplicates
           (stem, count) => {
             // Create cards with same stem but different dates

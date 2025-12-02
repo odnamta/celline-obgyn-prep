@@ -144,7 +144,12 @@ describe('Tag Merge Property Tests', () => {
     it('returns false for unique tags', () => {
       fc.assert(
         fc.property(
-          fc.uniqueArray(tagArb, { minLength: 0, maxLength: 10 }),
+          // Use case-insensitive comparison for uniqueness to match hasTagDuplicates behavior
+          fc.uniqueArray(tagArb, { 
+            minLength: 0, 
+            maxLength: 10,
+            comparator: (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase()
+          }),
           (uniqueTags) => {
             return hasTagDuplicates(uniqueTags) === false
           }

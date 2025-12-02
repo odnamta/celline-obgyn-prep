@@ -2,13 +2,35 @@
  * Tag Color Presets
  * Tailwind-based color classes for tag badges
  * Requirements: V5 Feature Set 1 - Tagging System
+ * V9: Added category-based color enforcement
  */
+
+import type { TagCategory } from '@/types/database'
 
 export interface TagColor {
   name: string
   value: string
   bgClass: string
   textClass: string
+}
+
+/**
+ * V9: Category to color mapping (enforced)
+ * - source → blue (textbook origin)
+ * - topic → purple (medical domain)
+ * - concept → green (specific concept)
+ */
+export const CATEGORY_COLORS: Record<TagCategory, string> = {
+  source: 'blue',
+  topic: 'purple',
+  concept: 'green',
+}
+
+/**
+ * V9: Get the enforced color value for a category
+ */
+export function getCategoryColor(category: TagCategory): string {
+  return CATEGORY_COLORS[category]
 }
 
 export const TAG_COLORS: TagColor[] = [
@@ -75,4 +97,13 @@ export function getTagColorClasses(colorValue: string): { bgClass: string; textC
     bgClass: 'bg-slate-100 dark:bg-slate-700',
     textClass: 'text-slate-700 dark:text-slate-300',
   }
+}
+
+/**
+ * V9: Get color classes for a tag category
+ * Uses the enforced category-to-color mapping
+ */
+export function getCategoryColorClasses(category: TagCategory): { bgClass: string; textClass: string } {
+  const colorValue = getCategoryColor(category)
+  return getTagColorClasses(colorValue)
 }

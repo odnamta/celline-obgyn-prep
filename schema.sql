@@ -671,3 +671,29 @@ CREATE POLICY "Users can manage own user_card_progress" ON user_card_progress
 -- ============================================
 -- Run SELECT migrate_v1_to_v2() to migrate existing data
 -- The function is idempotent (safe to run multiple times)
+
+
+-- ============================================
+-- V9: Medical Ontology (3-Tier Taxonomy)
+-- ============================================
+
+-- Tag category enum for 3-tier taxonomy
+-- - source: Textbook/reference origin (e.g., "Williams", "Lange")
+-- - topic: Medical chapter/domain (e.g., "Anatomy", "Endocrinology")
+-- - concept: Specific medical concept (e.g., "Preeclampsia", "GestationalDiabetes")
+
+-- Migration: Add category enum and column
+-- DO $$ BEGIN
+--   CREATE TYPE tag_category AS ENUM ('source', 'topic', 'concept');
+-- EXCEPTION
+--   WHEN duplicate_object THEN null;
+-- END $$;
+-- 
+-- ALTER TABLE tags ADD COLUMN IF NOT EXISTS category tag_category NOT NULL DEFAULT 'concept';
+-- UPDATE tags SET category = 'concept' WHERE category IS NULL;
+-- CREATE INDEX IF NOT EXISTS idx_tags_category ON tags(category);
+
+-- Category-to-Color Mapping (enforced by application):
+-- source → blue
+-- topic → purple
+-- concept → green

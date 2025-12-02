@@ -2,12 +2,14 @@
 
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import { Loader2 } from 'lucide-react'
 import { CardListItem } from './CardListItem'
 import { BulkActionsBar } from './BulkActionsBar'
+import { BulkTagModal } from './BulkTagModal'
 import { DeckSelector } from './DeckSelector'
 import { FilterBar } from '@/components/tags/FilterBar'
 import { TagSelector } from '@/components/tags/TagSelector'
-import { deleteCard, duplicateCard, bulkDeleteCards, bulkMoveCards } from '@/actions/card-actions'
+import { deleteCard, duplicateCard, bulkDeleteCards, bulkMoveCards, getAllCardIdsInDeck } from '@/actions/card-actions'
 import { useToast } from '@/components/ui/Toast'
 import type { Card, Tag } from '@/types/database'
 
@@ -36,6 +38,10 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
   const [filterTagIds, setFilterTagIds] = useState<string[]>([])
   // V8.6: NeedsReview filter toggle
   const [showNeedsReviewOnly, setShowNeedsReviewOnly] = useState(false)
+  // V9.1: Bulk tag modal state
+  const [showBulkTagModal, setShowBulkTagModal] = useState(false)
+  // V9.1: Select All in Deck loading state
+  const [isSelectingAll, setIsSelectingAll] = useState(false)
 
   // V8.6: Helper to check if card has NeedsReview tag
   const hasNeedsReviewTag = (card: CardWithTags) => {
@@ -82,8 +88,30 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
     setSelectedIds(new Set(filteredCards.map((c) => c.id)))
   }
 
+  // V9.1: Select All in Deck - fetches all card IDs from database
+  const selectAllInDeck = async () => {
+    setIsSelectingAll(true)
+    try {
+      const allIds = await getAllCardIdsInDeck(deckId)
+      setSelectedIds(new Set(allIds))
+      if (allIds.length > 0) {
+        showToast(`Selected all ${allIds.length} cards in deck`, 'success')
+      }
+    } catch (error) {
+      console.error('Failed to select all cards:', error)
+      showToast('Failed to select all cards', 'error')
+    } finally {
+      setIsSelectingAll(false)
+    }
+  }
+
   const clearSelection = () => {
     setSelectedIds(new Set())
+  }
+
+  // V9.1: Handle bulk tag success
+  const handleBulkTagSuccess = (count: number) => {
+    router.refresh()
   }
 
   // Single card handlers
@@ -207,18 +235,19 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
         onClear={() => setFilterTagIds([])}
       />
 
-      {/* Bulk actions bar - Author only for delete/move */}
+      {/* Bulk actions bar - Author only for delete/move/tag */}
       {isAuthor && (
         <BulkActionsBar
           selectedCount={selectedIds.size}
           onDelete={handleBulkDelete}
           onMove={() => setShowDeckSelector(true)}
           onExport={handleExport}
+          onAddTag={() => setShowBulkTagModal(true)}
           onClearSelection={clearSelection}
         />
       )}
 
-      {/* Select all toggle */}
+      {/* Select all toggle - V9.1: Added Select All in Deck */}
       {filteredCards.length > 0 && (
         <div className="flex items-center gap-2 mb-3">
           <button
@@ -227,6 +256,23 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
           >
             {selectedIds.size === filteredCards.length ? 'Deselect all' : 'Select all'}
           </button>
+          {/* V9.1: Select All in Deck button for bulk operations */}
+          {isAuthor && cards.length > filteredCards.length && (
+            <button
+              onClick={selectAllInDeck}
+              disabled={isSelectingAll}
+              className="text-sm text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50 flex items-center gap-1"
+            >
+              {isSelectingAll ? (
+                <>
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                'Select all in deck'
+              )}
+            </button>
+          )}
           {selectedIds.size > 0 && selectedIds.size < filteredCards.length && (
             <span className="text-sm text-slate-500">({selectedIds.size} of {filteredCards.length})</span>
           )}
@@ -276,6 +322,14 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
           onCancel={() => setShowDeckSelector(false)}
         />
       )}
+
+      {/* V9.1: Bulk tag modal */}
+      <BulkTagModal
+        isOpen={showBulkTagModal}
+        onClose={() => setShowBulkTagModal(false)}
+        selectedCardIds={[...selectedIds]}
+        onSuccess={handleBulkTagSuccess}
+      />
     </>
   )
 }

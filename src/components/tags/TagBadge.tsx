@@ -1,7 +1,7 @@
 'use client'
 
 import { X } from 'lucide-react'
-import { getTagColorClasses } from '@/lib/tag-colors'
+import { getTagColorClasses, getCategoryColorClasses } from '@/lib/tag-colors'
 import type { Tag } from '@/types/database'
 
 interface TagBadgeProps {
@@ -12,10 +12,14 @@ interface TagBadgeProps {
 
 /**
  * TagBadge - Single tag display with optional remove button
- * Requirements: V5 Feature Set 1 - Req 1.7
+ * V9: Uses category-based colors when category is available
+ * Requirements: V5 Feature Set 1 - Req 1.7, V9-6.2
  */
 export function TagBadge({ tag, onRemove, size = 'sm' }: TagBadgeProps) {
-  const { bgClass, textClass } = getTagColorClasses(tag.color)
+  // V9: Use category-based colors if category exists, otherwise fall back to color field
+  const { bgClass, textClass } = tag.category 
+    ? getCategoryColorClasses(tag.category)
+    : getTagColorClasses(tag.color)
   
   const sizeClasses = size === 'sm' 
     ? 'px-2 py-0.5 text-xs' 
