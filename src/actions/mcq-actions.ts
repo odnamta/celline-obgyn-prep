@@ -9,9 +9,9 @@ import { calculateStreak, updateLongestStreak, incrementTotalReviews } from '@/l
 import type { ActionResult } from '@/types/actions'
 
 /**
- * Server Action for creating a new MCQ card.
- * Validates input with Zod and creates card with card_type='mcq'.
- * Requirements: 1.1, 3.3, 3.4
+ * V8.0: Server Action for creating a new MCQ card.
+ * Creates card_template and user_card_progress in V2 schema.
+ * Requirements: 1.1, 3.3, 3.4, V8 2.2
  */
 export async function createMCQAction(
   _prevState: ActionResult,
@@ -69,62 +69,68 @@ export async function createMCQAction(
     return { success: false, error: 'Authentication required' }
   }
 
-  const { deckId, stem, options: validOptions, correctIndex, explanation, imageUrl } = validationResult.data
+  const { deckId, stem, options: validOptions, correctIndex, explanation } = validationResult.data
   const supabase = await createSupabaseServerClient()
 
-  // Verify user owns the deck (RLS will also enforce this)
-  const { data: deck, error: deckError } = await supabase
-    .from('decks')
-    .select('id')
+  // V8.0: Verify user owns the deck_template (not legacy deck)
+  const { data: deckTemplate, error: deckError } = await supabase
+    .from('deck_templates')
+    .select('id, author_id')
     .eq('id', deckId)
-    .eq('user_id', user.id)
     .single()
 
-  if (deckError || !deck) {
-    return { success: false, error: 'Deck not found or access denied' }
+  if (deckError || !deckTemplate) {
+    return { success: false, error: 'Deck not found in V2 schema. Please run migration.' }
   }
 
-  // Create new MCQ card with default SM-2 values
-  const defaults = getCardDefaults()
-  const { data, error } = await supabase
-    .from('cards')
+  if (deckTemplate.author_id !== user.id) {
+    return { success: false, error: 'Access denied' }
+  }
+
+  // V8.0: Create card_template
+  const { data: cardTemplate, error: insertError } = await supabase
+    .from('card_templates')
     .insert({
-      deck_id: deckId,
-      card_type: 'mcq',
-      // Flashcard fields (empty for MCQ)
-      front: '',
-      back: '',
-      // MCQ fields
+      deck_template_id: deckId,
       stem,
       options: validOptions,
       correct_index: correctIndex,
       explanation: explanation || null,
-      image_url: imageUrl || null,
-      // SM-2 defaults
-      interval: defaults.interval,
-      ease_factor: defaults.ease_factor,
-      next_review: defaults.next_review.toISOString(),
     })
     .select()
     .single()
 
-  if (error) {
-    return { success: false, error: error.message }
+  if (insertError || !cardTemplate) {
+    return { success: false, error: insertError?.message || 'Failed to create MCQ' }
   }
 
-  // Assign tags to the new card (if any)
-  if (tagIds.length > 0 && data) {
-    const cardTags = tagIds.map((tagId) => ({
-      card_id: data.id,
+  // V8.0: Create user_card_progress with default SM-2 values
+  const defaults = getCardDefaults()
+  await supabase
+    .from('user_card_progress')
+    .insert({
+      user_id: user.id,
+      card_template_id: cardTemplate.id,
+      interval: defaults.interval,
+      ease_factor: defaults.ease_factor,
+      next_review: defaults.next_review.toISOString(),
+      repetitions: 0,
+      suspended: false,
+    })
+
+  // Assign tags to the new card_template (if any)
+  if (tagIds.length > 0) {
+    const cardTemplateTags = tagIds.map((tagId) => ({
+      card_template_id: cardTemplate.id,
       tag_id: tagId,
     }))
-    await supabase.from('card_tags').insert(cardTags)
+    await supabase.from('card_template_tags').insert(cardTemplateTags)
   }
 
   // Revalidate deck details page to show new card
   revalidatePath(`/decks/${deckId}`)
 
-  return { success: true, data }
+  return { success: true, data: cardTemplate }
 }
 
 
@@ -140,9 +146,9 @@ export interface AnswerMCQResult {
 }
 
 /**
- * Server Action for answering an MCQ during study.
- * Determines correctness, maps to SRS rating, updates card and stats.
- * Requirements: 2.1, 2.4, 2.5, 2.6
+ * V8.0: Server Action for answering an MCQ during study.
+ * Updates user_card_progress instead of legacy cards table.
+ * Requirements: 2.1, 2.4, 2.5, 2.6, V8 2.3
  */
 export async function answerMCQAction(
   cardId: string,
@@ -156,48 +162,68 @@ export async function answerMCQAction(
 
   const supabase = await createSupabaseServerClient()
 
-  // Fetch the MCQ card with deck info to verify ownership
-  const { data: card, error: cardError } = await supabase
-    .from('cards')
+  // V8.0: Fetch card_template with deck_template for ownership check
+  const { data: cardTemplate, error: cardError } = await supabase
+    .from('card_templates')
     .select(`
       *,
-      decks!inner(user_id)
+      deck_templates!inner(author_id)
     `)
     .eq('id', cardId)
-    .eq('card_type', 'mcq')
     .single()
 
-  if (cardError || !card) {
-    return { success: false, error: 'MCQ card not found or access denied' }
+  if (cardError || !cardTemplate) {
+    return { success: false, error: 'MCQ card not found in V2 schema' }
   }
 
   // Verify correct_index exists
-  if (card.correct_index === null) {
+  if (cardTemplate.correct_index === null) {
     return { success: false, error: 'Invalid MCQ card: missing correct_index' }
   }
 
   // Determine correctness (Requirement 2.4, 2.5)
-  const isCorrect = selectedIndex === card.correct_index
+  const isCorrect = selectedIndex === cardTemplate.correct_index
 
   // Map to SRS rating: correct → 3 (Good), incorrect → 1 (Again)
   const rating: 1 | 3 = isCorrect ? 3 : 1
 
+  // V8.0: Get current progress from user_card_progress
+  const { data: currentProgress } = await supabase
+    .from('user_card_progress')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('card_template_id', cardId)
+    .single()
+
   // Calculate new SM-2 values
   const sm2Result = calculateNextReview({
-    interval: card.interval,
-    easeFactor: card.ease_factor,
+    interval: currentProgress?.interval ?? 0,
+    easeFactor: currentProgress?.ease_factor ?? 2.5,
     rating,
   })
 
-  // Update the card with new SM-2 values
+  // V8.0: Upsert user_card_progress
   const { error: updateError } = await supabase
-    .from('cards')
-    .update({
+    .from('user_card_progress')
+    .upsert({
+      user_id: user.id,
+      card_template_id: cardId,
       interval: sm2Result.interval,
       ease_factor: sm2Result.easeFactor,
       next_review: sm2Result.nextReview.toISOString(),
+      last_answered_at: new Date().toISOString(),
+      repetitions: (currentProgress?.repetitions ?? 0) + 1,
+      suspended: false,
+    }, {
+      onConflict: 'user_id,card_template_id',
     })
-    .eq('id', cardId)
+
+  // V8.2: Debug logging for SRS updates
+  console.log(`[SRS] MCQ ${cardId} answered ${isCorrect ? 'correct' : 'incorrect'} (rating ${rating}):`, {
+    oldInterval: currentProgress?.interval ?? 0,
+    newInterval: sm2Result.interval,
+    nextReview: sm2Result.nextReview.toISOString(),
+  })
 
   if (updateError) {
     return { success: false, error: updateError.message }
@@ -215,7 +241,6 @@ export async function answerMCQAction(
     .single()
 
   if (statsError && statsError.code !== 'PGRST116') {
-    // PGRST116 = no rows returned, which is expected for new users
     return { success: false, error: statsError.message }
   }
 
@@ -238,7 +263,7 @@ export async function answerMCQAction(
 
   // Upsert user_stats
   if (existingStats) {
-    const { error: updateStatsError } = await supabase
+    await supabase
       .from('user_stats')
       .update({
         last_study_date: todayDateStr,
@@ -248,12 +273,8 @@ export async function answerMCQAction(
         updated_at: new Date().toISOString(),
       })
       .eq('user_id', user.id)
-
-    if (updateStatsError) {
-      return { success: false, error: updateStatsError.message }
-    }
   } else {
-    const { error: insertStatsError } = await supabase
+    await supabase
       .from('user_stats')
       .insert({
         user_id: user.id,
@@ -262,26 +283,18 @@ export async function answerMCQAction(
         longest_streak: newLongestStreak,
         total_reviews: newTotalReviews,
       })
-
-    if (insertStatsError) {
-      return { success: false, error: insertStatsError.message }
-    }
   }
 
   // Upsert study_logs - increment cards_reviewed for today
-  const { data: existingLog, error: logFetchError } = await supabase
+  const { data: existingLog } = await supabase
     .from('study_logs')
     .select('*')
     .eq('user_id', user.id)
     .eq('study_date', todayDateStr)
     .single()
 
-  if (logFetchError && logFetchError.code !== 'PGRST116') {
-    return { success: false, error: logFetchError.message }
-  }
-
   if (existingLog) {
-    const { error: updateLogError } = await supabase
+    await supabase
       .from('study_logs')
       .update({
         cards_reviewed: existingLog.cards_reviewed + 1,
@@ -289,31 +302,23 @@ export async function answerMCQAction(
       })
       .eq('user_id', user.id)
       .eq('study_date', todayDateStr)
-
-    if (updateLogError) {
-      return { success: false, error: updateLogError.message }
-    }
   } else {
-    const { error: insertLogError } = await supabase
+    await supabase
       .from('study_logs')
       .insert({
         user_id: user.id,
         study_date: todayDateStr,
         cards_reviewed: 1,
       })
-
-    if (insertLogError) {
-      return { success: false, error: insertLogError.message }
-    }
   }
 
   // Revalidate study page
-  revalidatePath(`/study/${card.deck_id}`)
+  revalidatePath(`/study/${cardTemplate.deck_template_id}`)
 
   return {
     success: true,
     isCorrect,
-    correctIndex: card.correct_index,
-    explanation: card.explanation,
+    correctIndex: cardTemplate.correct_index,
+    explanation: cardTemplate.explanation,
   }
 }

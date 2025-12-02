@@ -16,7 +16,8 @@ import type { Card, MCQCard } from '@/types/database'
 
 // V6.3: Auto-advance localStorage key
 const AUTO_ADVANCE_KEY = 'study-auto-advance'
-const AUTO_ADVANCE_DELAY = 1500 // 1.5 seconds
+// V8.2: Increased from 1.5s to 2s for better feedback visibility
+const AUTO_ADVANCE_DELAY = 2000 // 2 seconds
 
 export interface GlobalStudySessionProps {
   initialCards: Card[]
@@ -61,6 +62,9 @@ export function GlobalStudySession({
   // MCQ-specific state
   const [isAnswered, setIsAnswered] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
+  
+  // V8.2: Feedback display state - disables buttons during auto-advance countdown
+  const [isShowingFeedback, setIsShowingFeedback] = useState(false)
 
   // V6.3: Auto-advance state
   const [autoAdvance, setAutoAdvance] = useState(false)
@@ -135,6 +139,8 @@ export function GlobalStudySession({
       setIsRevealed(false)
       setIsAnswered(false)
       setSelectedIndex(null)
+      // V8.2: Reset feedback state when moving to next card
+      setIsShowingFeedback(false)
     } else {
       setIsComplete(true)
     }
@@ -174,6 +180,11 @@ export function GlobalStudySession({
 
     setSelectedIndex(selectedIdx)
     setIsAnswered(true)
+    
+    // V8.2: Set feedback state to disable buttons during countdown
+    if (autoAdvance) {
+      setIsShowingFeedback(true)
+    }
 
     const isCorrect = selectedIdx === currentCard.correct_index
 
@@ -194,9 +205,10 @@ export function GlobalStudySession({
       setError(result.error || 'Failed to rate card')
     }
 
-    // V6.3: Auto-advance after delay if enabled
+    // V8.2: Auto-advance after 2s delay if enabled (increased from 1.5s)
     if (autoAdvance) {
       autoAdvanceTimerRef.current = setTimeout(() => {
+        setIsShowingFeedback(false)
         moveToNext()
       }, AUTO_ADVANCE_DELAY)
     }
@@ -284,16 +296,23 @@ export function GlobalStudySession({
             isAnswered={isAnswered}
             selectedIndex={selectedIndex}
             correctIndex={isAnswered ? currentCard.correct_index : null}
+            disabled={isShowingFeedback}
           />
-          {/* Continue button after MCQ answer */}
+          {/* V8.2: Continue button or auto-advance indicator */}
           {isAnswered && (
             <div className="mt-6 flex justify-center">
-              <button
-                onClick={handleMCQContinue}
-                className="min-h-[44px] px-8 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Continue
-              </button>
+              {isShowingFeedback && autoAdvance ? (
+                <span className="text-sm text-slate-500 dark:text-slate-400">
+                  Next card in 2s...
+                </span>
+              ) : (
+                <button
+                  onClick={handleMCQContinue}
+                  className="min-h-[44px] px-8 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Continue
+                </button>
+              )}
             </div>
           )}
         </>

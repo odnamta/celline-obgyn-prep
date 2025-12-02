@@ -32,3 +32,10 @@ export const MIN_SOURCE_TEXT_LENGTH = 50
  * Users must wait this long between AI draft requests.
  */
 export const RATE_LIMIT_MS = 3000
+
+/**
+ * V8.6: Maximum tokens for MCQ batch extraction.
+ * Increased to prevent truncation on dense pages with many questions.
+ * Can be overridden with MCQ_MAX_TOKENS env var.
+ */
+export const MCQ_MAX_TOKENS = parseInt(process.env.MCQ_MAX_TOKENS ?? '4096')

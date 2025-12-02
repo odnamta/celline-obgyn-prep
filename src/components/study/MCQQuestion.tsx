@@ -12,6 +12,8 @@ export interface MCQQuestionProps {
   isAnswered: boolean
   selectedIndex: number | null
   correctIndex: number | null
+  /** V8.2: External disable control for feedback phase */
+  disabled?: boolean
 }
 
 /**
@@ -27,11 +29,13 @@ export function MCQQuestion({
   isAnswered,
   selectedIndex,
   correctIndex,
+  disabled = false,
 }: MCQQuestionProps) {
   const [isImageModalOpen, setIsImageModalOpen] = useState(false)
 
   const handleOptionClick = (index: number) => {
-    if (isAnswered) return
+    // V8.2: Check both isAnswered and disabled prop
+    if (isAnswered || disabled) return
     onAnswer(index)
   }
 
@@ -94,7 +98,7 @@ export function MCQQuestion({
             <button
               key={index}
               onClick={() => handleOptionClick(index)}
-              disabled={isAnswered}
+              disabled={isAnswered || disabled}
               className={getOptionStyles(index)}
               aria-label={`Option ${getOptionLabel(index)}: ${option}`}
             >

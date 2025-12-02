@@ -43,13 +43,13 @@ export function calculateNextReview(input: SM2Input): SM2Output {
   let newEaseFactor: number;
   
   switch (rating) {
-    case 1: // Again - Reset interval, next review in 1 minute
+    case 1: // Again - Reset interval, next review in 10 minutes
       newInterval = 0;
       newEaseFactor = Math.max(1.3, easeFactor - 0.2);
       return {
         interval: newInterval,
         easeFactor: newEaseFactor,
-        nextReview: new Date(now.getTime() + 60 * 1000), // 1 minute from now
+        nextReview: new Date(now.getTime() + 10 * 60 * 1000), // 10 minutes from now
       };
       
     case 2: // Hard - Multiply interval by 1.2, decrease ease factor

@@ -7,9 +7,9 @@ import { getCardDefaults } from '@/lib/card-defaults'
 import type { ActionResult } from '@/types/actions'
 
 /**
- * Server Action for creating a new card.
- * Validates input with Zod and creates card with default SM-2 values.
- * Requirements: 3.1, 3.2, 9.3
+ * V8.0: Server Action for creating a new card (flashcard).
+ * Creates card_template and user_card_progress in V2 schema.
+ * Requirements: 3.1, 3.2, 9.3, V8 2.2
  */
 export async function createCardAction(
   _prevState: ActionResult,
@@ -54,54 +54,68 @@ export async function createCardAction(
     return { success: false, error: 'Authentication required' }
   }
 
-  const { deckId, front, back, imageUrl } = validationResult.data
+  const { deckId, front, back } = validationResult.data
   const supabase = await createSupabaseServerClient()
 
-  // Verify user owns the deck (RLS will also enforce this)
-  const { data: deck, error: deckError } = await supabase
-    .from('decks')
-    .select('id')
+  // V8.0: Verify user owns the deck_template (not legacy deck)
+  const { data: deckTemplate, error: deckError } = await supabase
+    .from('deck_templates')
+    .select('id, author_id')
     .eq('id', deckId)
-    .eq('user_id', user.id)
     .single()
 
-  if (deckError || !deck) {
-    return { success: false, error: 'Deck not found or access denied' }
+  if (deckError || !deckTemplate) {
+    return { success: false, error: 'Deck not found in V2 schema. Please run migration.' }
   }
 
-  // Create new card with default SM-2 values (Requirement 3.1)
-  const defaults = getCardDefaults()
-  const { data, error } = await supabase
-    .from('cards')
+  if (deckTemplate.author_id !== user.id) {
+    return { success: false, error: 'Access denied' }
+  }
+
+  // V8.0: Create card_template (flashcards stored as MCQ with front/back as stem/explanation)
+  const { data: cardTemplate, error: insertError } = await supabase
+    .from('card_templates')
     .insert({
-      deck_id: deckId,
-      front,
-      back,
-      image_url: imageUrl || null,
-      interval: defaults.interval,
-      ease_factor: defaults.ease_factor,
-      next_review: defaults.next_review.toISOString(),
+      deck_template_id: deckId,
+      stem: front,
+      options: ['True', 'False'], // Flashcards use simple options
+      correct_index: 0,
+      explanation: back,
     })
     .select()
     .single()
 
-  if (error) {
-    return { success: false, error: error.message }
+  if (insertError || !cardTemplate) {
+    return { success: false, error: insertError?.message || 'Failed to create card' }
   }
 
-  // Assign tags to the new card (if any)
-  if (tagIds.length > 0 && data) {
-    const cardTags = tagIds.map((tagId) => ({
-      card_id: data.id,
+  // V8.0: Create user_card_progress with default SM-2 values
+  const defaults = getCardDefaults()
+  await supabase
+    .from('user_card_progress')
+    .insert({
+      user_id: user.id,
+      card_template_id: cardTemplate.id,
+      interval: defaults.interval,
+      ease_factor: defaults.ease_factor,
+      next_review: defaults.next_review.toISOString(),
+      repetitions: 0,
+      suspended: false,
+    })
+
+  // Assign tags to the new card_template (if any)
+  if (tagIds.length > 0) {
+    const cardTemplateTags = tagIds.map((tagId) => ({
+      card_template_id: cardTemplate.id,
       tag_id: tagId,
     }))
-    await supabase.from('card_tags').insert(cardTags)
+    await supabase.from('card_template_tags').insert(cardTemplateTags)
   }
 
   // Revalidate deck details page to show new card
   revalidatePath(`/decks/${deckId}`)
 
-  return { success: true, data }
+  return { success: true, data: cardTemplate }
 }
 
 
@@ -138,9 +152,9 @@ interface UpdateMCQInput {
 export type UpdateCardInput = UpdateFlashcardInput | UpdateMCQInput
 
 /**
- * Server Action for updating an existing card.
- * Handles both flashcard and MCQ types.
- * Requirements: FR-2, FR-4
+ * V8.0: Server Action for updating an existing card.
+ * Updates card_templates table only (no legacy fallback).
+ * Requirements: FR-2, FR-4, V8 2.3, V8 4.1
  */
 export async function updateCard(input: UpdateCardInput): Promise<CardActionResult> {
   // Get authenticated user
@@ -151,20 +165,21 @@ export async function updateCard(input: UpdateCardInput): Promise<CardActionResu
 
   const supabase = await createSupabaseServerClient()
 
-  // Fetch card and verify ownership via deck
-  const { data: card, error: cardError } = await supabase
-    .from('cards')
-    .select('id, deck_id, decks!inner(user_id)')
+  // V8.0: Fetch card_template and verify ownership via deck_template
+  const { data: cardTemplate, error: cardError } = await supabase
+    .from('card_templates')
+    .select('id, deck_template_id, deck_templates!inner(author_id)')
     .eq('id', input.cardId)
     .single()
 
-  if (cardError || !card) {
-    return { ok: false, error: 'Card not found' }
+  if (cardError || !cardTemplate) {
+    // V8.0: No fallback to legacy cards table
+    return { ok: false, error: 'Card not found in V2 schema' }
   }
 
-  // Check ownership
-  const deckData = card.decks as unknown as { user_id: string }
-  if (deckData.user_id !== user.id) {
+  // Check ownership via deck_template
+  const deckData = cardTemplate.deck_templates as unknown as { author_id: string }
+  if (deckData.author_id !== user.id) {
     return { ok: false, error: 'Access denied' }
   }
 
@@ -177,9 +192,8 @@ export async function updateCard(input: UpdateCardInput): Promise<CardActionResu
       return { ok: false, error: 'Front and back are required' }
     }
     updatePayload = {
-      front: input.front.trim(),
-      back: input.back.trim(),
-      image_url: input.imageUrl?.trim() || null,
+      stem: input.front.trim(),
+      explanation: input.back.trim(),
     }
   } else {
     // Validate MCQ fields
@@ -200,9 +214,9 @@ export async function updateCard(input: UpdateCardInput): Promise<CardActionResu
     }
   }
 
-  // Update the card
+  // V8.0: Update card_template only
   const { error: updateError } = await supabase
-    .from('cards')
+    .from('card_templates')
     .update(updatePayload)
     .eq('id', input.cardId)
 
@@ -211,14 +225,15 @@ export async function updateCard(input: UpdateCardInput): Promise<CardActionResu
   }
 
   // Revalidate deck page
-  revalidatePath(`/decks/${card.deck_id}`)
+  revalidatePath(`/decks/${cardTemplate.deck_template_id}`)
 
   return { ok: true }
 }
 
 /**
- * Server Action for deleting a card.
- * Requirements: FR-3, FR-4
+ * V8.0: Server Action for deleting a card.
+ * Deletes from card_templates only (no legacy fallback).
+ * Requirements: FR-3, FR-4, V8 2.4, V8 4.1
  */
 export async function deleteCard(cardId: string): Promise<CardActionResult> {
   // Get authenticated user
@@ -229,26 +244,33 @@ export async function deleteCard(cardId: string): Promise<CardActionResult> {
 
   const supabase = await createSupabaseServerClient()
 
-  // Fetch card and verify ownership via deck
-  const { data: card, error: cardError } = await supabase
-    .from('cards')
-    .select('id, deck_id, decks!inner(user_id)')
+  // V8.0: Fetch card_template and verify ownership via deck_template
+  const { data: cardTemplate, error: cardError } = await supabase
+    .from('card_templates')
+    .select('id, deck_template_id, deck_templates!inner(author_id)')
     .eq('id', cardId)
     .single()
 
-  if (cardError || !card) {
-    return { ok: false, error: 'Card not found' }
+  if (cardError || !cardTemplate) {
+    // V8.0: No fallback to legacy cards table
+    return { ok: false, error: 'Card not found in V2 schema' }
   }
 
-  // Check ownership
-  const deckData = card.decks as unknown as { user_id: string }
-  if (deckData.user_id !== user.id) {
+  // Check ownership via deck_template
+  const deckData = cardTemplate.deck_templates as unknown as { author_id: string }
+  if (deckData.author_id !== user.id) {
     return { ok: false, error: 'Access denied' }
   }
 
-  // Delete the card
+  // V8.0: Delete user_card_progress first (for all users who have progress on this card)
+  await supabase
+    .from('user_card_progress')
+    .delete()
+    .eq('card_template_id', cardId)
+
+  // V8.0: Delete card_template (cascade will handle card_template_tags)
   const { error: deleteError } = await supabase
-    .from('cards')
+    .from('card_templates')
     .delete()
     .eq('id', cardId)
 
@@ -257,16 +279,16 @@ export async function deleteCard(cardId: string): Promise<CardActionResult> {
   }
 
   // Revalidate deck page
-  revalidatePath(`/decks/${card.deck_id}`)
+  revalidatePath(`/decks/${cardTemplate.deck_template_id}`)
 
   return { ok: true }
 }
 
 
 /**
- * Server Action for duplicating a card.
- * Creates a new card with all data copied and "(copy)" appended to stem/front.
- * Requirements: B.2, B.3, B.4
+ * V8.0: Server Action for duplicating a card.
+ * Creates new card_template and user_card_progress.
+ * Requirements: B.2, B.3, B.4, V8 2.2
  */
 export async function duplicateCard(cardId: string): Promise<CardActionResult> {
   // Get authenticated user
@@ -277,66 +299,65 @@ export async function duplicateCard(cardId: string): Promise<CardActionResult> {
 
   const supabase = await createSupabaseServerClient()
 
-  // Fetch original card with ownership check
-  const { data: card, error: cardError } = await supabase
-    .from('cards')
-    .select('*, decks!inner(user_id)')
+  // V8.0: Fetch original card_template with ownership check
+  const { data: cardTemplate, error: cardError } = await supabase
+    .from('card_templates')
+    .select('*, deck_templates!inner(author_id)')
     .eq('id', cardId)
     .single()
 
-  if (cardError || !card) {
-    return { ok: false, error: 'Card not found' }
+  if (cardError || !cardTemplate) {
+    return { ok: false, error: 'Card not found in V2 schema' }
   }
 
-  // Check ownership
-  const deckData = card.decks as unknown as { user_id: string }
-  if (deckData.user_id !== user.id) {
+  // Check ownership via deck_template
+  const deckData = cardTemplate.deck_templates as unknown as { author_id: string }
+  if (deckData.author_id !== user.id) {
     return { ok: false, error: 'Access denied' }
   }
 
-  // Build new card data with "(copy)" suffix
+  // V8.0: Create new card_template with "(copy)" suffix
+  const { data: newCardTemplate, error: insertError } = await supabase
+    .from('card_templates')
+    .insert({
+      deck_template_id: cardTemplate.deck_template_id,
+      stem: (cardTemplate.stem || '') + ' (copy)',
+      options: cardTemplate.options,
+      correct_index: cardTemplate.correct_index,
+      explanation: cardTemplate.explanation,
+    })
+    .select()
+    .single()
+
+  if (insertError || !newCardTemplate) {
+    return { ok: false, error: insertError?.message || 'Failed to duplicate card' }
+  }
+
+  // V8.0: Create user_card_progress for the duplicate
   const defaults = getCardDefaults()
-  const newCardData: Record<string, unknown> = {
-    deck_id: card.deck_id,
-    card_type: card.card_type,
-    interval: defaults.interval,
-    ease_factor: defaults.ease_factor,
-    next_review: defaults.next_review.toISOString(),
-  }
-
-  if (card.card_type === 'mcq') {
-    newCardData.stem = (card.stem || '') + ' (copy)'
-    newCardData.options = card.options
-    newCardData.correct_index = card.correct_index
-    newCardData.explanation = card.explanation
-    // MCQ cards need front/back to satisfy NOT NULL constraint (empty strings like createMCQAction)
-    newCardData.front = card.front || ''
-    newCardData.back = card.back || ''
-  } else {
-    newCardData.front = (card.front || '') + ' (copy)'
-    newCardData.back = card.back
-    newCardData.image_url = card.image_url
-  }
-
-  // Insert new card (Supabase generates new UUID)
-  const { error: insertError } = await supabase
-    .from('cards')
-    .insert(newCardData)
-
-  if (insertError) {
-    return { ok: false, error: insertError.message }
-  }
+  await supabase
+    .from('user_card_progress')
+    .insert({
+      user_id: user.id,
+      card_template_id: newCardTemplate.id,
+      interval: defaults.interval,
+      ease_factor: defaults.ease_factor,
+      next_review: defaults.next_review.toISOString(),
+      repetitions: 0,
+      suspended: false,
+    })
 
   // Revalidate deck page
-  revalidatePath(`/decks/${card.deck_id}`)
+  revalidatePath(`/decks/${cardTemplate.deck_template_id}`)
 
   return { ok: true }
 }
 
 
 /**
- * Server Action for bulk deleting cards.
- * Requirements: C.4, C.5
+ * V8.0: Server Action for bulk deleting cards.
+ * Deletes from card_templates only.
+ * Requirements: C.4, C.5, V8 2.4
  */
 export async function bulkDeleteCards(cardIds: string[]): Promise<CardActionResult & { count?: number }> {
   if (!cardIds.length) {
@@ -350,29 +371,35 @@ export async function bulkDeleteCards(cardIds: string[]): Promise<CardActionResu
 
   const supabase = await createSupabaseServerClient()
 
-  // Verify ownership of all cards via deck join
-  const { data: cards, error: fetchError } = await supabase
-    .from('cards')
-    .select('id, deck_id, decks!inner(user_id)')
+  // V8.0: Verify ownership of all card_templates via deck_template join
+  const { data: cardTemplates, error: fetchError } = await supabase
+    .from('card_templates')
+    .select('id, deck_template_id, deck_templates!inner(author_id)')
     .in('id', cardIds)
 
-  if (fetchError || !cards) {
+  if (fetchError || !cardTemplates) {
     return { ok: false, error: 'Could not verify card ownership' }
   }
 
   // Check all cards belong to user
-  const unauthorized = cards.some((card) => {
-    const deckData = card.decks as unknown as { user_id: string }
-    return deckData.user_id !== user.id
+  const unauthorized = cardTemplates.some((ct) => {
+    const deckData = ct.deck_templates as unknown as { author_id: string }
+    return deckData.author_id !== user.id
   })
 
   if (unauthorized) {
     return { ok: false, error: 'Access denied to one or more cards' }
   }
 
-  // Delete all cards
+  // V8.0: Delete user_card_progress for all cards
+  await supabase
+    .from('user_card_progress')
+    .delete()
+    .in('card_template_id', cardIds)
+
+  // V8.0: Delete all card_templates
   const { error: deleteError } = await supabase
-    .from('cards')
+    .from('card_templates')
     .delete()
     .in('id', cardIds)
 
@@ -381,7 +408,7 @@ export async function bulkDeleteCards(cardIds: string[]): Promise<CardActionResu
   }
 
   // Revalidate affected deck pages
-  const deckIds = [...new Set(cards.map((c) => c.deck_id))]
+  const deckIds = [...new Set(cardTemplates.map((ct) => ct.deck_template_id))]
   for (const deckId of deckIds) {
     revalidatePath(`/decks/${deckId}`)
   }
@@ -390,8 +417,9 @@ export async function bulkDeleteCards(cardIds: string[]): Promise<CardActionResu
 }
 
 /**
- * Server Action for bulk moving cards to another deck.
- * Requirements: C.6, C.7
+ * V8.0: Server Action for bulk moving cards to another deck.
+ * Updates deck_template_id in card_templates.
+ * Requirements: C.6, C.7, V8 2.3
  */
 export async function bulkMoveCards(
   cardIds: string[],
@@ -408,41 +436,44 @@ export async function bulkMoveCards(
 
   const supabase = await createSupabaseServerClient()
 
-  // Verify ownership of target deck
+  // V8.0: Verify ownership of target deck_template
   const { data: targetDeck, error: targetError } = await supabase
-    .from('decks')
-    .select('id')
+    .from('deck_templates')
+    .select('id, author_id')
     .eq('id', targetDeckId)
-    .eq('user_id', user.id)
     .single()
 
   if (targetError || !targetDeck) {
-    return { ok: false, error: 'Target deck not found or access denied' }
+    return { ok: false, error: 'Target deck not found in V2 schema' }
   }
 
-  // Verify ownership of all source cards
-  const { data: cards, error: fetchError } = await supabase
-    .from('cards')
-    .select('id, deck_id, decks!inner(user_id)')
+  if (targetDeck.author_id !== user.id) {
+    return { ok: false, error: 'Access denied to target deck' }
+  }
+
+  // V8.0: Verify ownership of all source card_templates
+  const { data: cardTemplates, error: fetchError } = await supabase
+    .from('card_templates')
+    .select('id, deck_template_id, deck_templates!inner(author_id)')
     .in('id', cardIds)
 
-  if (fetchError || !cards) {
+  if (fetchError || !cardTemplates) {
     return { ok: false, error: 'Could not verify card ownership' }
   }
 
-  const unauthorized = cards.some((card) => {
-    const deckData = card.decks as unknown as { user_id: string }
-    return deckData.user_id !== user.id
+  const unauthorized = cardTemplates.some((ct) => {
+    const deckData = ct.deck_templates as unknown as { author_id: string }
+    return deckData.author_id !== user.id
   })
 
   if (unauthorized) {
     return { ok: false, error: 'Access denied to one or more cards' }
   }
 
-  // Move all cards to target deck
+  // V8.0: Move all card_templates to target deck_template
   const { error: updateError } = await supabase
-    .from('cards')
-    .update({ deck_id: targetDeckId })
+    .from('card_templates')
+    .update({ deck_template_id: targetDeckId })
     .in('id', cardIds)
 
   if (updateError) {
@@ -450,11 +481,96 @@ export async function bulkMoveCards(
   }
 
   // Revalidate source and target deck pages
-  const sourceDeckIds = [...new Set(cards.map((c) => c.deck_id))]
+  const sourceDeckIds = [...new Set(cardTemplates.map((ct) => ct.deck_template_id))]
   for (const deckId of sourceDeckIds) {
     revalidatePath(`/decks/${deckId}`)
   }
   revalidatePath(`/decks/${targetDeckId}`)
 
   return { ok: true, count: cardIds.length }
+}
+
+
+// ============================================
+// V8.3: Deduplication Types
+// ============================================
+
+import { identifyDuplicates } from '@/lib/deduplication'
+
+export interface DeduplicationResult {
+  ok: boolean
+  deletedCount?: number
+  error?: string
+}
+
+/**
+ * V8.3: Server Action for removing duplicate MCQ cards from a deck.
+ * Finds cards with identical normalized stems and keeps the oldest one.
+ * Requirements: 3.1, 3.2, 3.3, 3.5
+ */
+export async function removeDuplicateCards(deckId: string): Promise<DeduplicationResult> {
+  // Get authenticated user
+  const user = await getUser()
+  if (!user) {
+    return { ok: false, error: 'Authentication required' }
+  }
+
+  const supabase = await createSupabaseServerClient()
+
+  // Verify user owns the deck_template
+  const { data: deckTemplate, error: deckError } = await supabase
+    .from('deck_templates')
+    .select('id, author_id')
+    .eq('id', deckId)
+    .single()
+
+  if (deckError || !deckTemplate) {
+    return { ok: false, error: 'Deck not found' }
+  }
+
+  if (deckTemplate.author_id !== user.id) {
+    return { ok: false, error: 'Access denied' }
+  }
+
+  // Fetch all cards in the deck (V2 schema: all card_templates are MCQ-style)
+  const { data: cards, error: fetchError } = await supabase
+    .from('card_templates')
+    .select('id, stem, created_at')
+    .eq('deck_template_id', deckId)
+    .order('created_at', { ascending: true })
+
+  if (fetchError) {
+    return { ok: false, error: fetchError.message }
+  }
+
+  if (!cards || cards.length === 0) {
+    return { ok: true, deletedCount: 0 }
+  }
+
+  // Identify duplicates using pure function
+  const toDelete = identifyDuplicates(cards)
+
+  if (toDelete.length === 0) {
+    return { ok: true, deletedCount: 0 }
+  }
+
+  // Delete duplicate card_templates (CASCADE handles user_card_progress and card_template_tags)
+  try {
+    const { error: deleteError } = await supabase
+      .from('card_templates')
+      .delete()
+      .in('id', toDelete)
+
+    if (deleteError) {
+      return { ok: false, error: `Failed to delete duplicates: ${deleteError.message}` }
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error during deletion'
+    return { ok: false, error: message }
+  }
+
+  // Revalidate deck page
+  revalidatePath(`/decks/${deckId}`)
+
+  return { ok: true, deletedCount: toDelete.length }
 }

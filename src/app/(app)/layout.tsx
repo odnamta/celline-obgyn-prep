@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { getUser } from '@/lib/supabase/server'
 import { logoutAction } from '@/actions/auth-actions'
@@ -51,7 +52,9 @@ export default async function AppLayout({
           </div>
         </header>
         <main className="flex-1">
-          {children}
+          <Suspense fallback={null}>
+            {children}
+          </Suspense>
         </main>
       </div>
     </ToastProvider>

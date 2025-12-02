@@ -24,6 +24,22 @@ interface AutoScanControlsProps {
   canStart?: boolean  // V7.1: true only when pdfDocument && deckId && sourceId are valid
   hasResumableState?: boolean  // V7.2: true when saved state exists
   resumePage?: number          // V7.2: page number to resume from
+  // V8.3: Page range props for precision scanning
+  startPage?: number
+  endPage?: number
+  onStartPageChange?: (page: number) => void
+  onEndPageChange?: (page: number) => void
+}
+
+/**
+ * V8.3: Validate page range
+ * Returns error message if invalid, null if valid
+ */
+export function validatePageRange(startPage: number, endPage: number, totalPages: number): string | null {
+  if (startPage < 1) return 'Start page must be at least 1'
+  if (endPage > totalPages) return `End page cannot exceed ${totalPages}`
+  if (startPage > endPage) return 'Start page cannot be greater than end page'
+  return null
 }
 
 export function AutoScanControls({
@@ -42,9 +58,21 @@ export function AutoScanControls({
   canStart = true,  // V7.1: Default to true for backwards compatibility
   hasResumableState = false,  // V7.2: Default to false
   resumePage = 1,             // V7.2: Default to page 1
+  // V8.3: Page range props
+  startPage = 1,
+  endPage = 1,
+  onStartPageChange,
+  onEndPageChange,
 }: AutoScanControlsProps) {
-  const progress = totalPages > 0 ? Math.min((currentPage / totalPages) * 100, 100) : 0
-  const isComplete = currentPage > totalPages && !isScanning
+  // V8.3: Calculate progress based on range
+  const rangeSize = endPage - startPage + 1
+  const pagesScanned = Math.max(0, currentPage - startPage)
+  const progress = rangeSize > 0 ? Math.min((pagesScanned / rangeSize) * 100, 100) : 0
+  const isComplete = currentPage > endPage && !isScanning
+  
+  // V8.3: Validate page range
+  const rangeError = validatePageRange(startPage, endPage, totalPages)
+  const isRangeValid = rangeError === null
 
   return (
     <div className="sticky bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 p-3 shadow-lg z-10">
@@ -62,6 +90,42 @@ export function AutoScanControls({
         />
       </div>
 
+      {/* V8.3: Page range inputs */}
+      {!isScanning && onStartPageChange && onEndPageChange && (
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-slate-600 dark:text-slate-400">From:</label>
+            <input
+              type="number"
+              min={1}
+              max={totalPages}
+              value={startPage}
+              onChange={(e) => onStartPageChange(Math.max(1, parseInt(e.target.value) || 1))}
+              className="w-16 px-2 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
+              disabled={disabled}
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-slate-600 dark:text-slate-400">To:</label>
+            <input
+              type="number"
+              min={1}
+              max={totalPages}
+              value={endPage}
+              onChange={(e) => onEndPageChange(Math.min(totalPages, parseInt(e.target.value) || totalPages))}
+              className="w-16 px-2 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
+              disabled={disabled}
+            />
+          </div>
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            ({endPage - startPage + 1} pages)
+          </span>
+          {rangeError && (
+            <span className="text-xs text-red-600 dark:text-red-400">{rangeError}</span>
+          )}
+        </div>
+      )}
+
       {/* Controls row - stack on mobile */}
       <div className="flex flex-col sm:flex-row items-center gap-3">
         {/* Control buttons */}
@@ -70,7 +134,7 @@ export function AutoScanControls({
             hasResumableState ? (
               <Button
                 onClick={onResume}
-                disabled={disabled || totalPages === 0 || !canStart}
+                disabled={disabled || totalPages === 0 || !canStart || !isRangeValid}
                 variant="primary"
                 className="flex items-center gap-2"
               >
@@ -80,13 +144,13 @@ export function AutoScanControls({
               </Button>
             ) : (
               <Button
-                onClick={onStartFresh}
-                disabled={disabled || totalPages === 0 || !canStart}
+                onClick={onStart}
+                disabled={disabled || totalPages === 0 || !canStart || !isRangeValid}
                 variant="primary"
                 className="flex items-center gap-2"
               >
                 <Play className="w-4 h-4" />
-                <span className="hidden sm:inline">Start Auto-Scan (Page 1)</span>
+                <span className="hidden sm:inline">Start Auto-Scan (Pages {startPage}-{endPage})</span>
                 <span className="sm:hidden">Start</span>
               </Button>
             )
@@ -116,19 +180,19 @@ export function AutoScanControls({
         <div className="flex-1 text-center sm:text-left">
           {isScanning ? (
             <p className="text-sm text-slate-600 dark:text-slate-400">
-              <span className="font-medium">Scanning page {currentPage}</span> of {totalPages}...
+              <span className="font-medium">Scanning page {currentPage}</span> of {endPage}...
             </p>
           ) : isComplete ? (
             <p className="text-sm text-green-600 dark:text-green-400 font-medium">
               Scan complete!
             </p>
-          ) : currentPage > 1 ? (
+          ) : currentPage > startPage ? (
             <p className="text-sm text-slate-600 dark:text-slate-400">
-              Paused at page {currentPage} of {totalPages}
+              Paused at page {currentPage} of {endPage}
             </p>
           ) : (
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Ready to scan {totalPages} pages
+              Ready to scan pages {startPage}-{endPage}
             </p>
           )}
         </div>

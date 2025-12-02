@@ -18,15 +18,13 @@ import {
  */
 
 // Arbitrary for valid MCQ batch item
+// V8.5: Tags are now required (1-3 non-empty tags)
 const validMCQBatchItemArb = fc.record({
   stem: fc.string({ minLength: 10, maxLength: 500 }),
   options: fc.array(fc.string({ minLength: 1, maxLength: 200 }), { minLength: 2, maxLength: 5 }),
   correctIndex: fc.integer({ min: 0, max: 4 }),
   explanation: fc.option(fc.string({ minLength: 1, maxLength: 1000 }), { nil: undefined }),
-  tags: fc.option(
-    fc.array(fc.string({ minLength: 1, maxLength: 30 }), { minLength: 1, maxLength: 3 }),
-    { nil: undefined }
-  ),
+  tags: fc.array(fc.string({ minLength: 1, maxLength: 30 }), { minLength: 1, maxLength: 3 }),
 })
 
 // Arbitrary for valid draft batch input
@@ -53,17 +51,18 @@ const validBulkCreateInputArb = fc.record({
 
 describe('Batch MCQ Actions Property Tests', () => {
   /**
-   * **Feature: v6-fast-ingestion, Property 3: Batch output size is bounded 0-5**
-   * **Validates: Requirements R1.2**
+   * **Feature: v6-fast-ingestion, Property 3: Batch output accepts any size (V8.6 update)**
+   * **Validates: Requirements R1.2, V8.6 Requirements 1.1, 1.2**
    * 
+   * V8.6: Removed artificial cap - batch arrays can now have any number of items.
    * For any valid text input to draftBatchMCQFromText, the returned drafts
-   * array length should be between 0 and 5 inclusive.
+   * array can be any size (no artificial limit).
    */
-  describe('Property 3: Batch output size is bounded 0-5', () => {
-    it('mcqBatchDraftSchema accepts arrays of 0-5 items', () => {
+  describe('Property 3: Batch output accepts any size (V8.6)', () => {
+    it('mcqBatchDraftSchema accepts arrays of any size', () => {
       fc.assert(
         fc.property(
-          fc.array(validMCQBatchItemArb, { minLength: 0, maxLength: 5 }),
+          fc.array(validMCQBatchItemArb, { minLength: 0, maxLength: 50 }),
           (items) => {
             const result = mcqBatchDraftSchema.safeParse(items)
             return result.success === true
@@ -73,13 +72,14 @@ describe('Batch MCQ Actions Property Tests', () => {
       )
     })
 
-    it('mcqBatchDraftSchema rejects arrays with more than 5 items', () => {
+    it('mcqBatchDraftSchema accepts arrays with more than 5 items (V8.6)', () => {
       fc.assert(
         fc.property(
-          fc.array(validMCQBatchItemArb, { minLength: 6, maxLength: 10 }),
+          fc.array(validMCQBatchItemArb, { minLength: 6, maxLength: 20 }),
           (items) => {
             const result = mcqBatchDraftSchema.safeParse(items)
-            return result.success === false
+            // V8.6: Arrays with > 5 items should now pass (no .max(5))
+            return result.success === true
           }
         ),
         { numRuns: 50 }
@@ -93,41 +93,35 @@ describe('Batch MCQ Actions Property Tests', () => {
   })
 
   /**
-   * **Feature: v6-fast-ingestion, Property 5: Batch output capped at 5**
-   * **Validates: Requirements R1.2**
+   * **Feature: v8.6-no-question-left-behind, Property 5: No artificial cap (V8.6 update)**
+   * **Validates: Requirements V8.6 1.1, 1.2, 1.4**
    * 
-   * For any AI response containing more than 5 MCQs, the processed output
-   * should contain exactly 5 items (the first 5).
+   * V8.6: Removed artificial cap - all items are processed without truncation.
+   * For any AI response, all valid MCQs should be preserved.
    */
-  describe('Property 5: Batch output capped at 5', () => {
-    it('slicing to 5 items produces valid schema', () => {
+  describe('Property 5: No artificial cap (V8.6)', () => {
+    it('all items are preserved without truncation', () => {
       fc.assert(
         fc.property(
-          fc.array(validMCQBatchItemArb, { minLength: 6, maxLength: 10 }),
+          fc.array(validMCQBatchItemArb, { minLength: 1, maxLength: 30 }),
           (items) => {
-            // Simulate the capping logic from the server action
-            const capped = items.slice(0, 5)
-            const result = mcqBatchDraftSchema.safeParse(capped)
-            return result.success === true && capped.length === 5
+            // V8.6: No capping - all items should pass through
+            const result = mcqBatchDraftSchema.safeParse(items)
+            return result.success === true && result.data.length === items.length
           }
         ),
         { numRuns: 50 }
       )
     })
 
-    it('capping preserves first 5 items in order', () => {
+    it('large arrays (20+ items) are fully preserved', () => {
       fc.assert(
         fc.property(
-          fc.array(validMCQBatchItemArb, { minLength: 6, maxLength: 10 }),
+          fc.array(validMCQBatchItemArb, { minLength: 20, maxLength: 30 }),
           (items) => {
-            const capped = items.slice(0, 5)
-            // First 5 items should match
-            for (let i = 0; i < 5; i++) {
-              if (capped[i].stem !== items[i].stem) {
-                return false
-              }
-            }
-            return true
+            const result = mcqBatchDraftSchema.safeParse(items)
+            // V8.6: All 20+ items should be preserved
+            return result.success === true && result.data.length === items.length
           }
         ),
         { numRuns: 50 }

@@ -32,6 +32,8 @@ interface PDFViewerProps {
   isAppending?: boolean
   /** V7.0: Callback when PDF document is loaded (exposes pdfDocument for auto-scan) */
   onDocumentReady?: (pdfDocument: PDFDocumentProxy) => void
+  /** V8.3: Callback when page number changes (for syncing scan range) */
+  onPageChange?: (pageNumber: number) => void
 }
 
 /**
@@ -54,6 +56,7 @@ export function PDFViewer({
   onAppendNextPage,
   isAppending = false,
   onDocumentReady,
+  onPageChange,  // V8.3
 }: PDFViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState<number | undefined>(undefined)
@@ -125,6 +128,7 @@ export function PDFViewer({
       const newPage = pageNumber - 1
       setPageNumber(newPage)
       savePdfPage(fileId, newPage)
+      onPageChange?.(newPage)  // V8.3
     }
   }
 
@@ -133,6 +137,7 @@ export function PDFViewer({
       const newPage = pageNumber + 1
       setPageNumber(newPage)
       savePdfPage(fileId, newPage)
+      onPageChange?.(newPage)  // V8.3
     }
   }
 

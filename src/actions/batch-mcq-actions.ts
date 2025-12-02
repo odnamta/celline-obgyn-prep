@@ -2,17 +2,14 @@
 
 import { revalidatePath } from 'next/cache'
 import { openai } from '@/lib/openai-client'
-import { MCQ_MODEL, MCQ_TEMPERATURE } from '@/lib/ai-config'
+import { MCQ_MODEL, MCQ_TEMPERATURE, MCQ_MAX_TOKENS } from '@/lib/ai-config'
 import { createSupabaseServerClient, getUser } from '@/lib/supabase/server'
 import { getCardDefaults } from '@/lib/card-defaults'
-import type { CardTemplate } from '@/types/database'
 import {
   draftBatchInputSchema,
   mcqBatchItemSchema,
-  bulkCreateInputSchema,
   type DraftBatchInput,
   type DraftBatchResult,
-  type BulkCreateInput,
   type BulkCreateResult,
   type MCQBatchItem,
   type AIMode,
@@ -33,36 +30,32 @@ CRITICAL DATA INTEGRITY RULES:
    - Do NOT "improve" or rephrase clinical data.
    - Preserve exact wording for medical terminology and values.`
 
-/**
- * V6.6: Vision priority instruction - when image is provided
- */
 const VISION_PRIORITY_INSTRUCTION = `
 IF an image is provided, treat it as primary. The text may just be background.
 Prefer questions that clearly come from the image.
 If NO question is visible, say so instead of inventing one.`
 
-/**
- * V7.2: Figure-safety instruction - skip figure-dependent questions when no image provided
- */
 const FIGURE_SAFETY_INSTRUCTION = `
 FIGURE REFERENCE RULE:
 If the text references a Figure (e.g., "Figure 19-1", "See diagram", "as shown below") but NO image is provided in this request, DO NOT create questions that require seeing that figure. Only create questions answerable from the text alone.`
 
-/**
- * System prompt for EXTRACT mode (Q&A sources) - batch version.
- * V6.2: Extracts existing MCQs verbatim from Q&A text.
- * V6.6: Added Vision priority instruction
- */
 const BATCH_EXTRACT_SYSTEM_PROMPT = `You are a medical board exam expert specializing in obstetrics and gynecology.
 Your task is to EXTRACT existing multiple-choice questions from the provided text.
 
-Return a JSON object with a "questions" array containing up to 5 MCQs.
+Return a JSON object with a "questions" array containing ALL MCQs found.
 Each MCQ must have:
 - stem: The question text (extracted verbatim, fix obvious OCR spacing only)
 - options: Array of 2-5 answer choices (extracted verbatim)
 - correctIndex: Index of correct answer (0-based, 0-4)
 - explanation: The explanation from the source, or a brief teaching point if none provided
-- tags: Array of 1-3 MEDICAL CONCEPT tags only (e.g., "Preeclampsia", "PelvicAnatomy")
+- tags: Array of 1-3 MEDICAL CONCEPT tags only (e.g., "Preeclampsia", "PelvicAnatomy") - REQUIRED
+
+FORENSIC MODE - THOROUGHNESS REQUIREMENTS:
+- Scan the ENTIRE text thoroughly for ALL multiple-choice questions
+- Extract EVERY question. If there are 20 questions, return 20 objects. NO ARTIFICIAL LIMIT.
+- Do NOT skip any questions - extract ALL MCQs you find
+- Generate at least 1 medical concept tag per question (REQUIRED - questions without tags will be rejected)
+- Preserve the original ordering of questions as they appear in the source text
 
 EXTRACTION RULES:
 - Identify any existing multiple-choice questions already present in the selected text.
@@ -70,6 +63,10 @@ EXTRACTION RULES:
 - Do NOT create new questions or add options that aren't clearly present in the text.
 - If the text contains questions with fewer than 5 options, that's fine (2-5 options allowed).
 - If no clear MCQs are found, return {"questions": []}.
+
+COMPLEX FORMAT FLAGGING (V8.6):
+- If a question has a complex format (matching questions, linked/sequential questions, tables, diagrams, or multi-part questions), add "NeedsReview" to the tags array.
+- This helps users identify cards that may need manual verification.
 ${FIGURE_SAFETY_INSTRUCTION}
 ${VISION_PRIORITY_INSTRUCTION}
 ${DATA_INTEGRITY_RULES}
@@ -87,32 +84,35 @@ Example response format:
   ]
 }`
 
-/**
- * System prompt for GENERATE mode (Textbook sources) - batch version.
- * V6.2: Creates new MCQs from textbook content.
- */
 const BATCH_GENERATE_SYSTEM_PROMPT = `You are a medical board exam expert specializing in obstetrics and gynecology.
 Your task is to CREATE multiple high-yield board-style MCQs from the provided textbook passage.
 
-Return a JSON object with a "questions" array containing up to 5 MCQs.
+Return a JSON object with a "questions" array containing ALL MCQs you can generate.
 Each MCQ must have:
 - stem: The question text (clinical vignette or direct question, at least 10 characters)
 - options: Array of 2-5 answer choices
 - correctIndex: Index of correct answer (0-based, 0-4)
 - explanation: Brief teaching explanation (optional but recommended)
-- tags: Array of 1-3 MEDICAL CONCEPT tags only (e.g., "Preeclampsia", "PelvicAnatomy")
-  - Format: Use PascalCase without spaces (e.g., GestationalDiabetes, PregnancyInducedHypertension)
-  - Do NOT generate structural tags (e.g., Chapter1, Lange, Section2) - these are handled separately
+- tags: Array of 1-3 MEDICAL CONCEPT tags only (e.g., "Preeclampsia", "PelvicAnatomy") - REQUIRED
+
+FORENSIC MODE - THOROUGHNESS REQUIREMENTS:
+- Scan the ENTIRE text thoroughly for ALL testable concepts
+- Generate ALL distinct MCQs covering different key concepts from the passage. NO ARTIFICIAL LIMIT.
+- If there are 20 testable concepts, return 20 objects.
+- Generate at least 1 medical concept tag per question (REQUIRED - questions without tags will be rejected)
+- Ensure questions are ordered logically based on the flow of the source material
 
 GENERATION RULES:
 - Read the textbook-like passage carefully.
 - Create up to 5 distinct high-yield board-style MCQs that test key concepts from this passage.
 - All clinical facts, thresholds, and units used in questions and answer options MUST come from the passage.
 - Never invent new numbers or units not present in the source.
-- Invent plausible distractors (wrong answers), but they must be conceptually related to the passage.
-- Distractors must not contradict medical facts stated in the passage.
 - Write at board exam difficulty level.
 - If the text doesn't contain enough content for MCQs, return {"questions": []}.
+
+COMPLEX FORMAT FLAGGING (V8.6):
+- If a question has a complex format (matching questions, linked/sequential questions, tables, diagrams, or multi-part questions), add "NeedsReview" to the tags array.
+- This helps users identify cards that may need manual verification.
 ${FIGURE_SAFETY_INSTRUCTION}
 ${VISION_PRIORITY_INSTRUCTION}
 ${DATA_INTEGRITY_RULES}
@@ -130,119 +130,67 @@ Example response format:
   ]
 }`
 
-/**
- * Get the appropriate system prompt based on mode.
- */
 function getBatchSystemPrompt(mode: AIMode = 'extract'): string {
-  switch (mode) {
-    case 'extract':
-      return BATCH_EXTRACT_SYSTEM_PROMPT
-    case 'generate':
-      return BATCH_GENERATE_SYSTEM_PROMPT
-    default:
-      return BATCH_EXTRACT_SYSTEM_PROMPT
-  }
+  return mode === 'generate' ? BATCH_GENERATE_SYSTEM_PROMPT : BATCH_EXTRACT_SYSTEM_PROMPT
 }
 
-/**
- * Build user prompt with source text and optional context.
- */
 function buildBatchUserPrompt(text: string, defaultTags?: string[], mode: AIMode = 'extract'): string {
   let prompt = `Source text:\n${text}`
-  
   if (defaultTags && defaultTags.length > 0) {
     prompt += `\n\nContext tags (for reference): ${defaultTags.join(', ')}`
   }
-  
-  if (mode === 'extract') {
-    prompt += '\n\nExtract up to 5 existing MCQs from this content. Return JSON with "questions" array.'
-  } else {
-    prompt += '\n\nGenerate up to 5 distinct MCQs from this content. Return JSON with "questions" array.'
-  }
-  
+  // V8.6: Removed artificial cap - extract/generate ALL MCQs
+  prompt += mode === 'extract' 
+    ? '\n\nExtract ALL existing MCQs from this content. Return JSON with "questions" array.'
+    : '\n\nGenerate ALL distinct MCQs from this content. Return JSON with "questions" array.'
   return prompt
 }
 
-/**
- * Build OpenAI message content with optional image.
- * V6.2: Vision MVP support
- */
 function buildMessageContent(
   text: string,
   imageBase64?: string,
   imageUrl?: string
 ): string | Array<{ type: string; text?: string; image_url?: { url: string } }> {
-  // If no image, return plain text
-  if (!imageBase64 && !imageUrl) {
-    return text
-  }
-
-  // Build multimodal content
+  if (!imageBase64 && !imageUrl) return text
   const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
     { type: 'text', text },
   ]
-
   if (imageUrl) {
     content.push({ type: 'image_url', image_url: { url: imageUrl } })
   } else if (imageBase64) {
     content.push({ type: 'image_url', image_url: { url: imageBase64 } })
   }
-
   return content
 }
 
 /**
  * Server Action: Generate multiple MCQ drafts from source text using OpenAI.
- * 
- * @param input - Source text, deck ID, optional default tags, mode, and image
- * @returns DraftBatchResult - Either { ok: true, drafts } or { ok: false, error }
- * 
- * Requirements: R1.1, R1.2, NFR-2, V6.2 Brain Toggle, V6.2 Vision MVP
  */
 export async function draftBatchMCQFromText(input: DraftBatchInput): Promise<DraftBatchResult> {
-  // Check if OpenAI API key is configured
   if (!process.env.OPENAI_API_KEY) {
-    console.warn('draftBatchMCQFromText: missing OPENAI_API_KEY')
     return { ok: false, error: { message: 'AI is not configured', code: 'NOT_CONFIGURED' } }
   }
 
-  // Validate input with Zod schema (R1.2, NFR-2)
   const validationResult = draftBatchInputSchema.safeParse(input)
-  
   if (!validationResult.success) {
     const firstError = validationResult.error.issues[0]
-    return { 
-      ok: false, 
-      error: { 
-        message: firstError?.message || 'Invalid input', 
-        code: 'VALIDATION_ERROR' 
-      } 
-    }
+    return { ok: false, error: { message: firstError?.message || 'Invalid input', code: 'VALIDATION_ERROR' } }
   }
   
   const { text, defaultTags, mode = 'extract', imageBase64, imageUrl } = validationResult.data
   
-  // V6.6: Debug logging for image presence
-  if (imageBase64 || imageUrl) {
-    console.log('[draftBatchMCQFromText] Image provided:', {
-      hasBase64: !!imageBase64,
-      base64Length: imageBase64?.length || 0,
-      hasUrl: !!imageUrl,
-    })
-  }
-  
   try {
-    // Build message content (with optional image for Vision MVP)
     const userContent = buildMessageContent(
       buildBatchUserPrompt(text, defaultTags, mode),
       imageBase64,
       imageUrl
     )
 
-    // Call OpenAI API with JSON mode (R1.2)
+    // V8.6: Added max_tokens to prevent truncation on dense pages
     const response = await openai.chat.completions.create({
       model: MCQ_MODEL,
       temperature: MCQ_TEMPERATURE,
+      max_tokens: MCQ_MAX_TOKENS,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: getBatchSystemPrompt(mode) },
@@ -250,275 +198,58 @@ export async function draftBatchMCQFromText(input: DraftBatchInput): Promise<Dra
       ],
     })
     
-    // Extract content from response
     const content = response.choices[0]?.message?.content
-    
     if (!content) {
-      console.error('OpenAI returned empty content')
       return { ok: false, error: { message: 'AI returned empty response', code: 'OPENAI_ERROR' } }
     }
     
-    // Parse JSON response
     let parsed: unknown
     try {
       parsed = JSON.parse(content)
     } catch {
-      console.error('Failed to parse OpenAI response as JSON:', content)
       return { ok: false, error: { message: 'Invalid AI response format', code: 'PARSE_ERROR' } }
     }
     
-    // Extract questions array from response
     const questionsArray = (parsed as { questions?: unknown })?.questions
-    
     if (!Array.isArray(questionsArray)) {
-      // If no questions array, return empty (not an error per R1.2)
       return { ok: true, drafts: [] }
     }
     
-    // Validate each item and cap at 5 (Property 5)
     const validDrafts: MCQBatchItem[] = []
-    for (const item of questionsArray.slice(0, 5)) {
+    // V8.6: Process ALL items without artificial cap
+    const itemsToValidate = questionsArray
+    let filteredCount = 0
+    
+    for (const item of itemsToValidate) {
       const itemResult = mcqBatchItemSchema.safeParse(item)
       if (itemResult.success) {
         validDrafts.push(itemResult.data)
+      } else {
+        filteredCount++
+        // V8.5: Log validation failures for debugging
+        console.log(`[draftBatchMCQFromText] Filtered question with invalid data:`, itemResult.error.issues.map(i => i.message).join(', '))
       }
-      // Skip invalid items silently
     }
     
-    // Return validated drafts (Property 3: bounded 0-5)
-    return { ok: true, drafts: validDrafts }
+    // V8.5: Log summary of filtered questions
+    if (filteredCount > 0) {
+      console.log(`[draftBatchMCQFromText] Filtered ${filteredCount} questions with invalid tags or data`)
+    }
     
+    return { ok: true, drafts: validDrafts }
   } catch (error) {
-    // Handle API errors (network, auth, rate limits, etc.)
     console.error('OpenAI API error:', error)
     return { ok: false, error: { message: 'AI service unavailable', code: 'OPENAI_ERROR' } }
   }
 }
 
 
-/**
- * Server Action: Create multiple MCQ cards atomically.
- * 
- * @param input - Deck ID, sessionTags, and array of cards with merged tags
- * @returns BulkCreateResult - Either { ok: true, createdCount, deckId } or { ok: false, error }
- * 
- * Requirements: R1.4, R1.5, NFR-2, V6.1 Atomic Tag Merging
- */
-export async function bulkCreateMCQ(input: BulkCreateInput): Promise<BulkCreateResult> {
-  // Validate input with Zod schema
-  const validationResult = bulkCreateInputSchema.safeParse(input)
-  
-  if (!validationResult.success) {
-    const firstError = validationResult.error.issues[0]
-    return { 
-      ok: false, 
-      error: { 
-        message: firstError?.message || 'Invalid input', 
-        code: 'VALIDATION_ERROR' 
-      } 
-    }
-  }
-  
-  const { deckId, sessionTags = [], cards } = validationResult.data
-  
-  // Get authenticated user
-  const user = await getUser()
-  if (!user) {
-    return { ok: false, error: { message: 'Authentication required', code: 'UNAUTHORIZED' } }
-  }
-  
-  const supabase = await createSupabaseServerClient()
-  
-  // Verify user owns the deck (R1.4)
-  const { data: deck, error: deckError } = await supabase
-    .from('decks')
-    .select('id')
-    .eq('id', deckId)
-    .eq('user_id', user.id)
-    .single()
-  
-  if (deckError || !deck) {
-    return { ok: false, error: { message: 'Deck not found or access denied', code: 'UNAUTHORIZED' } }
-  }
-  
-  try {
-    // Step 1: Collect all unique tag names (session + per-card AI tags)
-    // V6.1: Merge session tags with per-card tags using case-insensitive deduplication
-    const allTagNames = new Set<string>()
-    
-    // Add session tags first (they take precedence)
-    for (const tagName of sessionTags) {
-      const trimmed = tagName.trim()
-      if (trimmed) {
-        allTagNames.add(trimmed)
-      }
-    }
-    
-    // Add per-card AI tags
-    for (const card of cards) {
-      for (const tagName of card.tagNames) {
-        const trimmed = tagName.trim()
-        if (trimmed) {
-          // Case-insensitive check: only add if not already present
-          const lowerTrimmed = trimmed.toLowerCase()
-          const alreadyExists = Array.from(allTagNames).some(
-            existing => existing.toLowerCase() === lowerTrimmed
-          )
-          if (!alreadyExists) {
-            allTagNames.add(trimmed)
-          }
-        }
-      }
-    }
-    
-    // Step 2: Resolve tag names to IDs using atomic upsert
-    // V6.1: Use case-insensitive matching with atomic operations
-    const tagNameToId = new Map<string, string>()
-    
-    for (const tagName of allTagNames) {
-      // First, try to find existing tag (case-insensitive)
-      const { data: existingTag } = await supabase
-        .from('tags')
-        .select('id, name')
-        .eq('user_id', user.id)
-        .ilike('name', tagName)
-        .single()
-      
-      if (existingTag) {
-        tagNameToId.set(tagName.toLowerCase(), existingTag.id)
-        continue
-      }
-      
-      // Tag doesn't exist, create it atomically
-      // The unique index on (user_id, LOWER(name)) prevents race condition duplicates
-      const { data: newTag, error: createTagError } = await supabase
-        .from('tags')
-        .insert({
-          user_id: user.id,
-          name: tagName,
-          color: 'purple', // V6.1: Purple for AI-generated concept tags
-        })
-        .select('id, name')
-        .single()
-      
-      if (createTagError) {
-        // Handle race condition: another request created the tag
-        if (createTagError.code === '23505') { // Unique violation
-          const { data: raceTag } = await supabase
-            .from('tags')
-            .select('id, name')
-            .eq('user_id', user.id)
-            .ilike('name', tagName)
-            .single()
-          
-          if (raceTag) {
-            tagNameToId.set(tagName.toLowerCase(), raceTag.id)
-          }
-        } else {
-          console.error('Failed to create tag:', tagName, createTagError)
-        }
-      } else if (newTag) {
-        tagNameToId.set(newTag.name.toLowerCase(), newTag.id)
-      }
-    }
-    
-    // Step 3: Prepare card rows with SM-2 defaults
-    const defaults = getCardDefaults()
-    const cardRows = cards.map((card) => ({
-      deck_id: deckId,
-      card_type: 'mcq' as const,
-      front: '',
-      back: '',
-      stem: card.stem,
-      options: card.options,
-      correct_index: card.correctIndex,
-      explanation: card.explanation || null,
-      image_url: null,
-      interval: defaults.interval,
-      ease_factor: defaults.ease_factor,
-      next_review: defaults.next_review.toISOString(),
-    }))
-    
-    // Step 4: Insert all cards atomically (Property 11)
-    const { data: insertedCards, error: insertError } = await supabase
-      .from('cards')
-      .insert(cardRows)
-      .select('id')
-    
-    if (insertError || !insertedCards) {
-      console.error('Failed to insert cards:', insertError)
-      return { ok: false, error: { message: 'Failed to create cards', code: 'DB_ERROR' } }
-    }
-    
-    // Step 5: Insert card_tags join rows
-    // V6.1: Each card gets session tags + its own AI tags (deduplicated)
-    const cardTagRows: { card_id: string; tag_id: string }[] = []
-    const seenCardTagPairs = new Set<string>()
-    
-    for (let i = 0; i < insertedCards.length; i++) {
-      const cardId = insertedCards[i].id
-      
-      // Add session tags first
-      for (const tagName of sessionTags) {
-        const normalized = tagName.trim().toLowerCase()
-        const tagId = tagNameToId.get(normalized)
-        if (tagId) {
-          const pairKey = `${cardId}:${tagId}`
-          if (!seenCardTagPairs.has(pairKey)) {
-            seenCardTagPairs.add(pairKey)
-            cardTagRows.push({ card_id: cardId, tag_id: tagId })
-          }
-        }
-      }
-      
-      // Add per-card AI tags
-      for (const tagName of cards[i].tagNames) {
-        const normalized = tagName.trim().toLowerCase()
-        const tagId = tagNameToId.get(normalized)
-        if (tagId) {
-          const pairKey = `${cardId}:${tagId}`
-          if (!seenCardTagPairs.has(pairKey)) {
-            seenCardTagPairs.add(pairKey)
-            cardTagRows.push({ card_id: cardId, tag_id: tagId })
-          }
-        }
-      }
-    }
-    
-    if (cardTagRows.length > 0) {
-      const { error: tagInsertError } = await supabase
-        .from('card_tags')
-        .insert(cardTagRows)
-      
-      if (tagInsertError) {
-        console.error('Failed to insert card_tags:', tagInsertError)
-        // Note: Cards are already created, but tags failed
-        // In a real transaction this would rollback, but Supabase doesn't support that easily
-        // For now, we still return success since cards were created
-      }
-    }
-    
-    // Revalidate deck page
-    revalidatePath(`/decks/${deckId}`)
-    
-    return { ok: true, createdCount: insertedCards.length, deckId }
-    
-  } catch (error) {
-    console.error('Bulk create error:', error)
-    return { ok: false, error: { message: 'Failed to create cards', code: 'DB_ERROR' } }
-  }
-}
-
-
 // ============================================
-// V6.4: Shared Library V2 Functions
+// V8.0: Bulk Create - V2 Schema Only (No Fallback)
 // ============================================
 
-// Feature flag for V2 schema
-const USE_V2_SCHEMA = true
-
 /**
- * V6.4 Input type for bulk create with deck_template_id
+ * V8.0 Input type for bulk create with deck_template_id
  */
 export interface BulkCreateV2Input {
   deckTemplateId: string
@@ -533,36 +264,15 @@ export interface BulkCreateV2Input {
 }
 
 /**
- * Server Action: Create multiple MCQ card_templates atomically.
- * V6.4: Creates card_templates instead of cards, auto-creates user_card_progress.
+ * V8.0: Server Action to create multiple MCQ card_templates atomically.
+ * NO LEGACY FALLBACK - deck_template must exist in V2 schema.
  * 
- * NOTE: Deep logging added in V7.2.1 – used to debug deckTemplateId issues.
- * 
- * @param input - Deck template ID, sessionTags, and array of cards with merged tags
- * @returns BulkCreateResult - Either { ok: true, createdCount, deckId } or { ok: false, error }
+ * @param input - Deck template ID, sessionTags, and array of cards
+ * @returns BulkCreateResult
  */
 export async function bulkCreateMCQV2(input: BulkCreateV2Input): Promise<BulkCreateResult> {
-  // V7.2.1: Deep logging - RAW INPUT before any DB calls
-  console.log('[bulkCreateMCQV2] RAW INPUT', {
-    deckTemplateId: input.deckTemplateId,
-    cardsCount: input.cards?.length ?? 0,
-    sessionTagsCount: input.sessionTags?.length ?? 0,
-  })
-
-  if (!USE_V2_SCHEMA) {
-    // Fall back to V1 with deckId
-    return bulkCreateMCQ({
-      deckId: input.deckTemplateId,
-      sessionTags: input.sessionTags || [],
-      cards: input.cards,
-    })
-  }
-
-  let { deckTemplateId } = input
-  const { sessionTags = [], cards } = input
-  const originalDeckTemplateId = deckTemplateId // Store original for error messages
+  const { deckTemplateId, sessionTags = [], cards } = input
   
-  // Get authenticated user
   const user = await getUser()
   if (!user) {
     return { ok: false, error: { message: 'Authentication required', code: 'UNAUTHORIZED' } }
@@ -570,198 +280,52 @@ export async function bulkCreateMCQV2(input: BulkCreateV2Input): Promise<BulkCre
   
   const supabase = await createSupabaseServerClient()
   
-  // V7.2.1: Deep logging - deck_templates lookup
-  console.log('[bulkCreateMCQV2] deck_templates lookup', {
-    requestedId: deckTemplateId,
-  })
-  
-  // V7.2: Smart ID Resolution - Step 1: Try deck_template lookup
-  let { data: deckTemplate, error: deckError } = await supabase
+  // V8.0: Direct deck_template lookup - NO FALLBACK
+  const { data: deckTemplate, error: deckError } = await supabase
     .from('deck_templates')
     .select('id, author_id')
     .eq('id', deckTemplateId)
     .single()
   
-  // V7.2.1: Log deck_templates lookup result
-  console.log('[bulkCreateMCQV2] deck_templates lookup result', {
-    found: !!deckTemplate,
-    error: deckError?.message || null,
-    errorCode: deckError?.code || null,
-  })
-  
-  // V7.2: Step 2 - Fallback: Try user_decks lookup if deck_template not found
   if (deckError || !deckTemplate) {
-    console.log('[bulkCreateMCQV2] deck_template not found, trying user_decks fallback...')
-    
-    const { data: userDeck, error: userDeckError } = await supabase
-      .from('user_decks')
-      .select('id, deck_template_id')
-      .eq('id', deckTemplateId)
-      .single()
-    
-    // V7.2.1: Deep logging - Fallback result
-    console.warn('[bulkCreateMCQV2] Fallback: treating ID as user_deck_id', {
-      requestedId: originalDeckTemplateId,
-      foundUserDeck: !!userDeck,
-      deckTemplateId: userDeck?.deck_template_id || null,
-      error: userDeckError?.message || null,
-    })
-    
-    if (userDeck?.deck_template_id) {
-      console.warn('[bulkCreateMCQV2] Legacy UserDeckID passed; resolved:', {
-        originalId: originalDeckTemplateId,
-        resolvedTemplateId: userDeck.deck_template_id,
-      })
-      deckTemplateId = userDeck.deck_template_id
-      
-      // Re-fetch deck_template with resolved ID
-      const resolved = await supabase
-        .from('deck_templates')
-        .select('id, author_id')
-        .eq('id', deckTemplateId)
-        .single()
-      
-      deckTemplate = resolved.data
-      deckError = resolved.error
-      
-      // V7.2.1: Log resolved lookup result
-      console.log('[bulkCreateMCQV2] Resolved deck_template lookup result', {
-        resolvedId: deckTemplateId,
-        found: !!deckTemplate,
-        error: resolved.error?.message || null,
-      })
-    }
-  }
-  
-  // V7.2.3: Step 3 - Fallback: Try legacy decks table and auto-migrate to V2
-  if (deckError || !deckTemplate) {
-    console.log('[bulkCreateMCQV2] user_decks fallback failed, trying legacy decks table...')
-    
-    const { data: legacyDeck, error: legacyDeckError } = await supabase
-      .from('decks')
-      .select('id, title, user_id')
-      .eq('id', originalDeckTemplateId)
-      .single()
-    
-    console.log('[bulkCreateMCQV2] Legacy decks lookup result', {
-      requestedId: originalDeckTemplateId,
-      foundLegacyDeck: !!legacyDeck,
-      title: legacyDeck?.title || null,
-      error: legacyDeckError?.message || null,
-    })
-    
-    if (legacyDeck && legacyDeck.user_id === user.id) {
-      // V7.2.5: First check if this legacy deck was already migrated
-      const { data: existingMigrated } = await supabase
-        .from('deck_templates')
-        .select('id, author_id')
-        .eq('legacy_id', legacyDeck.id)
-        .single()
-      
-      if (existingMigrated) {
-        console.log('[bulkCreateMCQV2] Found existing migrated deck_template', {
-          legacyDeckId: legacyDeck.id,
-          existingTemplateId: existingMigrated.id,
-        })
-        deckTemplateId = existingMigrated.id
-        deckTemplate = existingMigrated
-        deckError = null
-      } else {
-        // Auto-migrate: Create deck_template and user_deck for this legacy deck
-        console.log('[bulkCreateMCQV2] Auto-migrating legacy deck to V2 schema...', {
-          legacyDeckId: legacyDeck.id,
-          title: legacyDeck.title,
-        })
-        
-        // Create deck_template with legacy_id for future lookups
-        // V7.2.4: Fixed column name - use 'visibility' instead of 'is_public'
-        // V7.2.5: Added legacy_id to link back to original deck
-        const { data: newTemplate, error: templateError } = await supabase
-          .from('deck_templates')
-          .insert({
-            title: legacyDeck.title,
-            author_id: user.id,
-            visibility: 'private',
-            legacy_id: legacyDeck.id,
-          })
-          .select('id, author_id')
-          .single()
-        
-        if (templateError || !newTemplate) {
-          console.error('[bulkCreateMCQV2] Failed to create deck_template during migration', {
-            error: templateError?.message,
-          })
-        } else {
-          // Create user_deck linking to the new template
-          const { error: userDeckCreateError } = await supabase
-            .from('user_decks')
-            .insert({
-              user_id: user.id,
-              deck_template_id: newTemplate.id,
-            })
-          
-          if (userDeckCreateError) {
-            console.error('[bulkCreateMCQV2] Failed to create user_deck during migration', {
-              error: userDeckCreateError.message,
-            })
-          }
-          
-          console.log('[bulkCreateMCQV2] Successfully migrated legacy deck to V2', {
-            legacyDeckId: legacyDeck.id,
-            newTemplateId: newTemplate.id,
-          })
-          
-          deckTemplateId = newTemplate.id
-          deckTemplate = newTemplate
-          deckError = null
-        }
-      }
-    }
-  }
-  
-  // V7.2: Step 4 - Final check after all fallback attempts
-  if (deckError || !deckTemplate) {
-    console.error('[bulkCreateMCQV2] FINAL FAILURE - Deck template not found', {
-      originalId: originalDeckTemplateId,
-      attemptedId: deckTemplateId,
-    })
-    return { ok: false, error: { message: `Deck template not found for id=${originalDeckTemplateId}`, code: 'NOT_FOUND' } }
+    // V8.0: No legacy fallback - return error immediately
+    return { ok: false, error: { message: `Deck not found in V2 schema: ${deckTemplateId}`, code: 'NOT_FOUND' } }
   }
 
-  // Only author can add cards to a deck_template
   if (deckTemplate.author_id !== user.id) {
     return { ok: false, error: { message: 'Only the author can add cards', code: 'UNAUTHORIZED' } }
   }
   
   try {
-    // Step 1: Collect all unique tag names (session + per-card AI tags)
+    // Step 1: Collect all unique tag names
+    // V8.4: Added defensive checks and logging for tag persistence
     const allTagNames = new Set<string>()
-    
     for (const tagName of sessionTags) {
       const trimmed = tagName.trim()
-      if (trimmed) {
-        allTagNames.add(trimmed)
-      }
+      if (trimmed) allTagNames.add(trimmed)
     }
-    
-    for (const card of cards) {
-      for (const tagName of card.tagNames) {
+    for (let cardIdx = 0; cardIdx < cards.length; cardIdx++) {
+      const card = cards[cardIdx]
+      // V8.4: Defensive check - ensure tagNames exists and is an array
+      const cardTags = Array.isArray(card.tagNames) ? card.tagNames : []
+      console.log(`[bulkCreateMCQV2] Card ${cardIdx}: ${cardTags.length} AI tags received`)
+      
+      for (const tagName of cardTags) {
         const trimmed = tagName.trim()
         if (trimmed) {
           const lowerTrimmed = trimmed.toLowerCase()
           const alreadyExists = Array.from(allTagNames).some(
             existing => existing.toLowerCase() === lowerTrimmed
           )
-          if (!alreadyExists) {
-            allTagNames.add(trimmed)
-          }
+          if (!alreadyExists) allTagNames.add(trimmed)
         }
       }
     }
     
+    console.log(`[bulkCreateMCQV2] Total unique tags to resolve: ${allTagNames.size}`, Array.from(allTagNames))
+    
     // Step 2: Resolve tag names to IDs
     const tagNameToId = new Map<string, string>()
-    
     for (const tagName of allTagNames) {
       const { data: existingTag } = await supabase
         .from('tags')
@@ -777,33 +341,24 @@ export async function bulkCreateMCQV2(input: BulkCreateV2Input): Promise<BulkCre
       
       const { data: newTag, error: createTagError } = await supabase
         .from('tags')
-        .insert({
-          user_id: user.id,
-          name: tagName,
-          color: 'purple',
-        })
+        .insert({ user_id: user.id, name: tagName, color: 'purple' })
         .select('id, name')
         .single()
       
-      if (createTagError) {
-        if (createTagError.code === '23505') {
-          const { data: raceTag } = await supabase
-            .from('tags')
-            .select('id, name')
-            .eq('user_id', user.id)
-            .ilike('name', tagName)
-            .single()
-          
-          if (raceTag) {
-            tagNameToId.set(tagName.toLowerCase(), raceTag.id)
-          }
-        }
+      if (createTagError?.code === '23505') {
+        const { data: raceTag } = await supabase
+          .from('tags')
+          .select('id, name')
+          .eq('user_id', user.id)
+          .ilike('name', tagName)
+          .single()
+        if (raceTag) tagNameToId.set(tagName.toLowerCase(), raceTag.id)
       } else if (newTag) {
         tagNameToId.set(newTag.name.toLowerCase(), newTag.id)
       }
     }
     
-    // Step 3: Prepare card_template rows
+    // Step 3: Insert card_templates
     const cardTemplateRows = cards.map((card) => ({
       deck_template_id: deckTemplateId,
       stem: card.stem,
@@ -813,60 +368,70 @@ export async function bulkCreateMCQV2(input: BulkCreateV2Input): Promise<BulkCre
       source_meta: null,
     }))
     
-    // Step 4: Insert all card_templates
     const { data: insertedTemplates, error: insertError } = await supabase
       .from('card_templates')
       .insert(cardTemplateRows)
       .select('id')
     
     if (insertError || !insertedTemplates) {
-      console.error('Failed to insert card_templates:', insertError)
       return { ok: false, error: { message: 'Failed to create cards', code: 'DB_ERROR' } }
     }
     
-    // Step 5: Insert card_template_tags join rows
+    // Step 4: Insert card_template_tags
+    // V8.4: Added logging and defensive checks for tag linking
     const cardTagRows: { card_template_id: string; tag_id: string }[] = []
-    const seenCardTagPairs = new Set<string>()
+    const seenPairs = new Set<string>()
+    
+    console.log(`[bulkCreateMCQV2] Resolved ${tagNameToId.size} unique tags to IDs`)
     
     for (let i = 0; i < insertedTemplates.length; i++) {
       const cardTemplateId = insertedTemplates[i].id
+      let cardTagCount = 0
       
+      // Link session tags
       for (const tagName of sessionTags) {
-        const normalized = tagName.trim().toLowerCase()
-        const tagId = tagNameToId.get(normalized)
+        const tagId = tagNameToId.get(tagName.trim().toLowerCase())
         if (tagId) {
-          const pairKey = `${cardTemplateId}:${tagId}`
-          if (!seenCardTagPairs.has(pairKey)) {
-            seenCardTagPairs.add(pairKey)
+          const key = `${cardTemplateId}:${tagId}`
+          if (!seenPairs.has(key)) {
+            seenPairs.add(key)
             cardTagRows.push({ card_template_id: cardTemplateId, tag_id: tagId })
+            cardTagCount++
           }
         }
       }
       
-      for (const tagName of cards[i].tagNames) {
-        const normalized = tagName.trim().toLowerCase()
-        const tagId = tagNameToId.get(normalized)
+      // V8.4: Defensive check - ensure tagNames exists and is an array
+      const cardTags = Array.isArray(cards[i].tagNames) ? cards[i].tagNames : []
+      
+      // Link AI-generated tags
+      for (const tagName of cardTags) {
+        const tagId = tagNameToId.get(tagName.trim().toLowerCase())
         if (tagId) {
-          const pairKey = `${cardTemplateId}:${tagId}`
-          if (!seenCardTagPairs.has(pairKey)) {
-            seenCardTagPairs.add(pairKey)
+          const key = `${cardTemplateId}:${tagId}`
+          if (!seenPairs.has(key)) {
+            seenPairs.add(key)
             cardTagRows.push({ card_template_id: cardTemplateId, tag_id: tagId })
+            cardTagCount++
           }
+        } else {
+          console.warn(`[bulkCreateMCQV2] Tag "${tagName}" not found in tagNameToId map`)
         }
       }
+      
+      console.log(`[bulkCreateMCQV2] Card ${i} (${cardTemplateId}): linking ${cardTagCount} tags`)
     }
+    
+    console.log(`[bulkCreateMCQV2] Inserting ${cardTagRows.length} card-tag links`)
     
     if (cardTagRows.length > 0) {
-      const { error: tagInsertError } = await supabase
-        .from('card_template_tags')
-        .insert(cardTagRows)
-      
-      if (tagInsertError) {
-        console.error('Failed to insert card_template_tags:', tagInsertError)
+      const { error: tagLinkError } = await supabase.from('card_template_tags').insert(cardTagRows)
+      if (tagLinkError) {
+        console.error('[bulkCreateMCQV2] Failed to insert card_template_tags:', tagLinkError)
       }
     }
     
-    // Step 6: Auto-create user_card_progress for author
+    // Step 5: Create user_card_progress for author
     const defaults = getCardDefaults()
     const progressRows = insertedTemplates.map((ct) => ({
       user_id: user.id,
@@ -878,22 +443,36 @@ export async function bulkCreateMCQV2(input: BulkCreateV2Input): Promise<BulkCre
       suspended: false,
     }))
     
-    const { error: progressError } = await supabase
-      .from('user_card_progress')
-      .insert(progressRows)
+    await supabase.from('user_card_progress').insert(progressRows)
     
-    if (progressError) {
-      console.error('Failed to create user_card_progress:', progressError)
-      // Don't fail - cards were created, progress can be created lazily
-    }
-    
-    // Revalidate deck page
     revalidatePath(`/decks/${deckTemplateId}`)
     
     return { ok: true, createdCount: insertedTemplates.length, deckId: deckTemplateId }
-    
   } catch (error) {
     console.error('Bulk create V2 error:', error)
     return { ok: false, error: { message: 'Failed to create cards', code: 'DB_ERROR' } }
   }
+}
+
+/**
+ * V8.0: Legacy bulkCreateMCQ redirects to V2
+ * @deprecated Use bulkCreateMCQV2 directly
+ */
+export async function bulkCreateMCQ(input: {
+  deckId: string
+  sessionTags?: string[]
+  cards: Array<{
+    stem: string
+    options: string[]
+    correctIndex: number
+    explanation?: string
+    tagNames: string[]
+  }>
+}): Promise<BulkCreateResult> {
+  // V8.0: Redirect to V2 - deckId is now treated as deckTemplateId
+  return bulkCreateMCQV2({
+    deckTemplateId: input.deckId,
+    sessionTags: input.sessionTags,
+    cards: input.cards,
+  })
 }

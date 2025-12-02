@@ -14,15 +14,13 @@ import {
  */
 
 // Arbitrary for valid MCQ batch item
+// V8.5: Tags are now required (1-3 non-empty tags)
 const validMCQBatchItemArb = fc.record({
   stem: fc.string({ minLength: 10, maxLength: 500 }),
   options: fc.array(fc.string({ minLength: 1, maxLength: 200 }), { minLength: 2, maxLength: 5 }),
   correctIndex: fc.integer({ min: 0, max: 4 }),
   explanation: fc.option(fc.string({ minLength: 1, maxLength: 1000 }), { nil: undefined }),
-  tags: fc.option(
-    fc.array(fc.string({ minLength: 1, maxLength: 30 }), { minLength: 1, maxLength: 3 }),
-    { nil: undefined }
-  ),
+  tags: fc.array(fc.string({ minLength: 1, maxLength: 30 }), { minLength: 1, maxLength: 3 }),
 })
 
 // Arbitrary for invalid stem (too short)
@@ -100,27 +98,17 @@ describe('Batch MCQ Schema Property Tests', () => {
       )
     })
 
-    it('batch array is capped at 5 items', () => {
+    /**
+     * V8.6: Removed artificial cap - batch arrays can now have any number of items
+     * This test verifies the schema accepts arrays of any size
+     */
+    it('accepts batch arrays of any size (V8.6: no artificial cap)', () => {
       fc.assert(
         fc.property(
-          fc.array(validMCQBatchItemArb, { minLength: 6, maxLength: 10 }),
+          fc.array(validMCQBatchItemArb, { minLength: 0, maxLength: 50 }),
           (items) => {
             const result = mcqBatchDraftSchema.safeParse(items)
-            // Arrays with > 5 items should fail
-            return result.success === false
-          }
-        ),
-        { numRuns: 50 }
-      )
-    })
-
-    it('accepts batch arrays with 0-5 items', () => {
-      fc.assert(
-        fc.property(
-          fc.array(validMCQBatchItemArb, { minLength: 0, maxLength: 5 }),
-          (items) => {
-            const result = mcqBatchDraftSchema.safeParse(items)
-            // Arrays with 0-5 items should pass
+            // Arrays of any size should pass (no .max(5) constraint)
             return result.success === true
           }
         ),

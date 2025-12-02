@@ -9,23 +9,19 @@ import type { NextCardResult } from '@/types/actions'
 import type { Card } from '@/types/database'
 
 /**
- * Server Action for rating a card during study.
- * Integrates SM-2 algorithm for card updates, updates user stats (streak, total reviews),
- * upserts study logs, and returns next due card.
- * Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 2.1, 5.4, 9.4
+ * V8.0: Server Action for rating a card during study.
+ * Updates user_card_progress instead of legacy cards table.
+ * Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 2.1, 5.4, 9.4, V8 2.3
  */
 export async function rateCardAction(
   cardId: string,
   rating: 1 | 2 | 3 | 4
 ): Promise<NextCardResult> {
-  // Server-side Zod validation
   const validationResult = ratingSchema.safeParse({ cardId, rating })
-  
   if (!validationResult.success) {
     return { success: false, error: 'Invalid rating data' }
   }
 
-  // Get authenticated user
   const user = await getUser()
   if (!user) {
     return { success: false, error: 'Authentication required' }
@@ -33,36 +29,57 @@ export async function rateCardAction(
 
   const supabase = await createSupabaseServerClient()
 
-  // Fetch the card with deck info to verify ownership
-  const { data: card, error: cardError } = await supabase
-    .from('cards')
+  // V8.0: Fetch card_template with deck_template for ownership check
+  const { data: cardTemplate, error: cardError } = await supabase
+    .from('card_templates')
     .select(`
       *,
-      decks!inner(user_id)
+      deck_templates!inner(author_id)
     `)
     .eq('id', cardId)
     .single()
 
-  if (cardError || !card) {
-    return { success: false, error: 'Card not found or access denied' }
+  if (cardError || !cardTemplate) {
+    return { success: false, error: 'Card not found in V2 schema' }
   }
+
+  // V8.0: Get current progress from user_card_progress
+  const { data: currentProgress } = await supabase
+    .from('user_card_progress')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('card_template_id', cardId)
+    .single()
 
   // Calculate new SM-2 values
   const sm2Result = calculateNextReview({
-    interval: card.interval,
-    easeFactor: card.ease_factor,
+    interval: currentProgress?.interval ?? 0,
+    easeFactor: currentProgress?.ease_factor ?? 2.5,
     rating,
   })
 
-  // Update the card with new SM-2 values
+  // V8.0: Upsert user_card_progress
   const { error: updateError } = await supabase
-    .from('cards')
-    .update({
+    .from('user_card_progress')
+    .upsert({
+      user_id: user.id,
+      card_template_id: cardId,
       interval: sm2Result.interval,
       ease_factor: sm2Result.easeFactor,
       next_review: sm2Result.nextReview.toISOString(),
+      last_answered_at: new Date().toISOString(),
+      repetitions: (currentProgress?.repetitions ?? 0) + 1,
+      suspended: false,
+    }, {
+      onConflict: 'user_id,card_template_id',
     })
-    .eq('id', cardId)
+
+  // V8.2: Debug logging for SRS updates
+  console.log(`[SRS] Card ${cardId} rated ${rating}:`, {
+    oldInterval: currentProgress?.interval ?? 0,
+    newInterval: sm2Result.interval,
+    nextReview: sm2Result.nextReview.toISOString(),
+  })
 
   if (updateError) {
     return { success: false, error: updateError.message }
@@ -70,21 +87,14 @@ export async function rateCardAction(
 
   // === Gamification: Update user_stats and study_logs ===
   const today = new Date()
-  const todayDateStr = today.toISOString().split('T')[0] // YYYY-MM-DD format
+  const todayDateStr = today.toISOString().split('T')[0]
 
-  // Fetch or create user_stats record
-  const { data: existingStats, error: statsError } = await supabase
+  const { data: existingStats } = await supabase
     .from('user_stats')
     .select('*')
     .eq('user_id', user.id)
     .single()
 
-  if (statsError && statsError.code !== 'PGRST116') {
-    // PGRST116 = no rows returned, which is expected for new users
-    return { success: false, error: statsError.message }
-  }
-
-  // Calculate streak updates
   const lastStudyDate = existingStats?.last_study_date 
     ? new Date(existingStats.last_study_date) 
     : null
@@ -101,10 +111,8 @@ export async function rateCardAction(
   const newLongestStreak = updateLongestStreak(streakResult.newStreak, longestStreak)
   const newTotalReviews = incrementTotalReviews(totalReviews)
 
-  // Upsert user_stats
   if (existingStats) {
-    // Update existing record
-    const { error: updateStatsError } = await supabase
+    await supabase
       .from('user_stats')
       .update({
         last_study_date: todayDateStr,
@@ -114,13 +122,8 @@ export async function rateCardAction(
         updated_at: new Date().toISOString(),
       })
       .eq('user_id', user.id)
-
-    if (updateStatsError) {
-      return { success: false, error: updateStatsError.message }
-    }
   } else {
-    // Insert new record for first-time user
-    const { error: insertStatsError } = await supabase
+    await supabase
       .from('user_stats')
       .insert({
         user_id: user.id,
@@ -129,27 +132,18 @@ export async function rateCardAction(
         longest_streak: newLongestStreak,
         total_reviews: newTotalReviews,
       })
-
-    if (insertStatsError) {
-      return { success: false, error: insertStatsError.message }
-    }
   }
 
-  // Upsert study_logs - increment cards_reviewed for today
-  const { data: existingLog, error: logFetchError } = await supabase
+  // Upsert study_logs
+  const { data: existingLog } = await supabase
     .from('study_logs')
     .select('*')
     .eq('user_id', user.id)
     .eq('study_date', todayDateStr)
     .single()
 
-  if (logFetchError && logFetchError.code !== 'PGRST116') {
-    return { success: false, error: logFetchError.message }
-  }
-
   if (existingLog) {
-    // Update existing log - increment cards_reviewed
-    const { error: updateLogError } = await supabase
+    await supabase
       .from('study_logs')
       .update({
         cards_reviewed: existingLog.cards_reviewed + 1,
@@ -157,56 +151,72 @@ export async function rateCardAction(
       })
       .eq('user_id', user.id)
       .eq('study_date', todayDateStr)
-
-    if (updateLogError) {
-      return { success: false, error: updateLogError.message }
-    }
   } else {
-    // Insert new log for today
-    const { error: insertLogError } = await supabase
+    await supabase
       .from('study_logs')
       .insert({
         user_id: user.id,
         study_date: todayDateStr,
         cards_reviewed: 1,
       })
-
-    if (insertLogError) {
-      return { success: false, error: insertLogError.message }
-    }
   }
 
-  // Fetch next due card from the same deck
+  // V8.0: Fetch next due card from user_card_progress joined with card_templates
   const now = new Date().toISOString()
-  const { data: dueCards, error: dueError } = await supabase
-    .from('cards')
-    .select('*')
-    .eq('deck_id', card.deck_id)
+  const { data: dueProgress } = await supabase
+    .from('user_card_progress')
+    .select(`
+      *,
+      card_templates!inner(*)
+    `)
+    .eq('user_id', user.id)
     .lte('next_review', now)
-    .neq('id', cardId) // Exclude the card we just rated
+    .eq('suspended', false)
+    .neq('card_template_id', cardId)
     .order('next_review', { ascending: true })
     .limit(1)
 
-  if (dueError) {
-    return { success: false, error: dueError.message }
-  }
-
-  // Get remaining count of due cards
-  const { count, error: countError } = await supabase
-    .from('cards')
+  // Get remaining count
+  const { count } = await supabase
+    .from('user_card_progress')
     .select('*', { count: 'exact', head: true })
-    .eq('deck_id', card.deck_id)
+    .eq('user_id', user.id)
     .lte('next_review', now)
-    .neq('id', cardId)
+    .eq('suspended', false)
+    .neq('card_template_id', cardId)
 
-  if (countError) {
-    return { success: false, error: countError.message }
+  revalidatePath(`/study/${cardTemplate.deck_template_id}`)
+
+  // Convert to Card format for compatibility
+  let nextCard: Card | null = null
+  if (dueProgress && dueProgress.length > 0) {
+    const p = dueProgress[0]
+    const ct = p.card_templates as unknown as {
+      id: string
+      deck_template_id: string
+      stem: string
+      options: string[]
+      correct_index: number
+      explanation: string | null
+      created_at: string
+    }
+    nextCard = {
+      id: ct.id,
+      deck_id: ct.deck_template_id,
+      card_type: 'mcq',
+      front: ct.stem,
+      back: ct.explanation || '',
+      stem: ct.stem,
+      options: ct.options,
+      correct_index: ct.correct_index,
+      explanation: ct.explanation,
+      image_url: null,
+      interval: p.interval,
+      ease_factor: p.ease_factor,
+      next_review: p.next_review,
+      created_at: ct.created_at,
+    }
   }
-
-  // Revalidate study page
-  revalidatePath(`/study/${card.deck_id}`)
-
-  const nextCard = dueCards && dueCards.length > 0 ? (dueCards[0] as Card) : null
 
   return {
     success: true,
@@ -216,8 +226,9 @@ export async function rateCardAction(
 }
 
 /**
- * Fetches due cards for a deck.
- * Requirements: 5.1
+ * V8.0: Fetches due cards for a deck_template.
+ * Queries user_card_progress joined with card_templates.
+ * Requirements: 5.1, V8 2.5
  */
 export async function getDueCardsForDeck(deckId: string): Promise<{
   cards: Card[]
@@ -230,30 +241,67 @@ export async function getDueCardsForDeck(deckId: string): Promise<{
 
   const supabase = await createSupabaseServerClient()
 
-  // Verify user owns the deck
-  const { data: deck, error: deckError } = await supabase
-    .from('decks')
-    .select('id')
+  // V8.0: Verify user has access to deck_template
+  const { data: deckTemplate, error: deckError } = await supabase
+    .from('deck_templates')
+    .select('id, author_id')
     .eq('id', deckId)
-    .eq('user_id', user.id)
     .single()
 
-  if (deckError || !deck) {
-    return { cards: [], error: 'Deck not found or access denied' }
+  if (deckError || !deckTemplate) {
+    return { cards: [], error: 'Deck not found in V2 schema' }
   }
 
-  // Fetch due cards (next_review <= now)
+  // V8.0: Fetch due cards from user_card_progress joined with card_templates
   const now = new Date().toISOString()
-  const { data: cards, error: cardsError } = await supabase
-    .from('cards')
-    .select('*')
-    .eq('deck_id', deckId)
+  const { data: dueProgress, error: progressError } = await supabase
+    .from('user_card_progress')
+    .select(`
+      *,
+      card_templates!inner(*)
+    `)
+    .eq('user_id', user.id)
     .lte('next_review', now)
+    .eq('suspended', false)
     .order('next_review', { ascending: true })
 
-  if (cardsError) {
-    return { cards: [], error: cardsError.message }
+  if (progressError) {
+    return { cards: [], error: progressError.message }
   }
 
-  return { cards: (cards || []) as Card[] }
+  // Filter to cards in this deck and convert to Card format
+  const cards: Card[] = (dueProgress || [])
+    .filter(p => {
+      const ct = p.card_templates as unknown as { deck_template_id: string }
+      return ct.deck_template_id === deckId
+    })
+    .map(p => {
+      const ct = p.card_templates as unknown as {
+        id: string
+        deck_template_id: string
+        stem: string
+        options: string[]
+        correct_index: number
+        explanation: string | null
+        created_at: string
+      }
+      return {
+        id: ct.id,
+        deck_id: ct.deck_template_id,
+        card_type: 'mcq' as const,
+        front: ct.stem,
+        back: ct.explanation || '',
+        stem: ct.stem,
+        options: ct.options,
+        correct_index: ct.correct_index,
+        explanation: ct.explanation,
+        image_url: null,
+        interval: p.interval,
+        ease_factor: p.ease_factor,
+        next_review: p.next_review,
+        created_at: ct.created_at,
+      }
+    })
+
+  return { cards }
 }

@@ -449,12 +449,16 @@ describe('Property 7: Due Count Accuracy', () => {
     deck_template_id: uuidArb,
   })
 
+  // Use integer-based date generation to avoid NaN issues
+  const validDateArb = fc.integer({ min: minTimestamp, max: maxTimestamp })
+    .map((ts) => new Date(ts))
+
   test('due count matches cards with next_review <= now', () => {
     fc.assert(
       fc.property(
         uuidArb,
         fc.array(progressRecordArb, { maxLength: 50 }),
-        fc.date({ min: new Date('2020-01-01'), max: new Date('2030-12-31') }),
+        validDateArb,
         (deckId, progressRecords, now) => {
           // Assign some records to our deck
           const recordsForDeck = progressRecords.map((r, i) =>

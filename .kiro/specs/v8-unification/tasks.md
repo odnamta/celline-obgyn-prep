@@ -1,182 +1,182 @@
 # Implementation Plan
 
-- [ ] 1. Create Complete Migration SQL Function
-  - [ ] 1.1 Create migration script file `scripts/migrate-v8-unification.sql`
+- [x] 1. Create Complete Migration SQL Function
+  - [x] 1.1 Create migration script file `scripts/migrate-v8-unification.sql`
     - Create `migrate_v1_to_v2_complete()` function
     - Use `INSERT ... ON CONFLICT DO NOTHING` for idempotency
     - Return JSON with migration counts
     - _Requirements: 1.1, 1.4, 3.3_
-  - [ ] 1.2 Implement Step 1: Migrate decks → deck_templates
+  - [x] 1.2 Implement Step 1: Migrate decks → deck_templates
     - Select all `decks` rows without matching `deck_templates.legacy_id`
     - Insert with `legacy_id = decks.id`, `author_id = decks.user_id`, `visibility = 'private'`
     - _Requirements: 1.5_
-  - [ ] 1.3 Implement Step 2: Migrate cards → card_templates
+  - [x] 1.3 Implement Step 2: Migrate cards → card_templates
     - Select all `cards` rows without matching `card_templates.legacy_id`
     - Resolve `deck_template_id` via `deck_templates.legacy_id = cards.deck_id`
     - Copy stem, options, correct_index, explanation
     - _Requirements: 1.1_
-  - [ ] 1.4 Write property test for migration completeness
+  - [x] 1.4 Write property test for migration completeness
     - **Property 1: Migration Completeness**
     - **Validates: Requirements 1.1**
-  - [ ] 1.5 Implement Step 3: Migrate card_tags → card_template_tags
+  - [x] 1.5 Implement Step 3: Migrate card_tags → card_template_tags
     - For each `card_tags` row, resolve `card_template_id` via `card_templates.legacy_id`
     - Insert into `card_template_tags`
     - _Requirements: 1.3_
-  - [ ] 1.6 Write property test for tag migration integrity
+  - [x] 1.6 Write property test for tag migration integrity
     - **Property 3: Tag Migration Integrity**
     - **Validates: Requirements 1.3**
-  - [ ] 1.7 Implement Step 4: Create user_card_progress from cards SRS state
+  - [x] 1.7 Implement Step 4: Create user_card_progress from cards SRS state
     - For each migrated card, create `user_card_progress` row
     - Copy interval, ease_factor, next_review from legacy card
     - Resolve user_id from `decks.user_id`
     - _Requirements: 1.2_
-  - [ ] 1.8 Write property test for SRS state preservation
+  - [x] 1.8 Write property test for SRS state preservation
     - **Property 2: SRS State Preservation**
     - **Validates: Requirements 1.2**
-  - [ ] 1.9 Implement Step 5: Create user_decks subscriptions
+  - [x] 1.9 Implement Step 5: Create user_decks subscriptions
     - For each deck_template, create user_decks row for the author
     - _Requirements: 1.5_
-  - [ ] 1.10 Write property test for migration idempotence
+  - [x] 1.10 Write property test for migration idempotence
     - **Property 4: Migration Idempotence**
     - **Validates: Requirements 1.4**
 
-- [ ] 2. Checkpoint - Verify migration SQL
+- [x] 2. Checkpoint - Verify migration SQL
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 3. Update Card Actions to V2 Only
-  - [ ] 3.1 Update `createCardAction` in `src/actions/card-actions.ts`
+- [x] 3. Update Card Actions to V2 Only
+  - [x] 3.1 Update `createCardAction` in `src/actions/card-actions.ts`
     - Change from inserting into `cards` to inserting into `card_templates`
     - Auto-create `user_card_progress` row
     - Remove legacy deck lookup, use deck_template lookup
     - _Requirements: 2.2_
-  - [ ] 3.2 Update `updateCard` in `src/actions/card-actions.ts`
+  - [x] 3.2 Update `updateCard` in `src/actions/card-actions.ts`
     - Change from updating `cards` to updating `card_templates`
     - Remove legacy card lookup fallback
     - Return error if card not found in card_templates
     - _Requirements: 2.3, 4.1_
-  - [ ] 3.3 Update `deleteCard` in `src/actions/card-actions.ts`
+  - [x] 3.3 Update `deleteCard` in `src/actions/card-actions.ts`
     - Change from deleting from `cards` to deleting from `card_templates`
     - Also delete associated `user_card_progress` rows
     - Return error if card not found in card_templates
     - _Requirements: 2.4, 4.1_
-  - [ ] 3.4 Update `duplicateCard` in `src/actions/card-actions.ts`
+  - [x] 3.4 Update `duplicateCard` in `src/actions/card-actions.ts`
     - Change to duplicate in `card_templates`
     - Create new `user_card_progress` for the duplicate
     - _Requirements: 2.2_
-  - [ ] 3.5 Update `bulkDeleteCards` in `src/actions/card-actions.ts`
+  - [x] 3.5 Update `bulkDeleteCards` in `src/actions/card-actions.ts`
     - Change to delete from `card_templates`
     - _Requirements: 2.4_
-  - [ ] 3.6 Update `bulkMoveCards` in `src/actions/card-actions.ts`
+  - [x] 3.6 Update `bulkMoveCards` in `src/actions/card-actions.ts`
     - Change to update `deck_template_id` in `card_templates`
     - _Requirements: 2.3_
-  - [ ] 3.7 Write property test for card creation V2 only
+  - [x] 3.7 Write property test for card creation V2 only
     - **Property 5: Card Creation V2 Only**
     - **Validates: Requirements 2.2**
 
-- [ ] 4. Update MCQ Actions to V2 Only
-  - [ ] 4.1 Update `createMCQAction` in `src/actions/mcq-actions.ts`
+- [x] 4. Update MCQ Actions to V2 Only
+  - [x] 4.1 Update `createMCQAction` in `src/actions/mcq-actions.ts`
     - Change from inserting into `cards` to inserting into `card_templates`
     - Auto-create `user_card_progress` row
     - _Requirements: 2.2_
-  - [ ] 4.2 Update `answerMCQ` in `src/actions/mcq-actions.ts`
+  - [x] 4.2 Update `answerMCQ` in `src/actions/mcq-actions.ts`
     - Change to update `user_card_progress` instead of `cards`
     - Lookup card via `card_templates`
     - _Requirements: 2.3_
-  - [ ] 4.3 Remove `bulkCreateMCQ` V1 function or redirect to V2
+  - [x] 4.3 Remove `bulkCreateMCQ` V1 function or redirect to V2
     - Either delete the function or make it call `bulkCreateMCQV2`
     - Remove all legacy `cards` table inserts
     - _Requirements: 4.2_
-  - [ ] 4.4 Clean up `bulkCreateMCQV2` - remove fallback logic
+  - [x] 4.4 Clean up `bulkCreateMCQV2` - remove fallback logic
     - Remove Step 2 fallback (user_decks lookup)
     - Remove Step 3 fallback (legacy decks table auto-migrate)
     - Return error if deck_template not found
     - _Requirements: 4.1_
-  - [ ] 4.5 Write property test for legacy ID rejection
+  - [x] 4.5 Write property test for legacy ID rejection
     - **Property 9: Legacy ID Rejection**
     - **Validates: Requirements 4.1**
 
-- [ ] 5. Update Study Actions to V2 Only
-  - [ ] 5.1 Update `submitAnswer` in `src/actions/study-actions.ts`
+- [x] 5. Update Study Actions to V2 Only
+  - [x] 5.1 Update `submitAnswer` in `src/actions/study-actions.ts`
     - Change to update `user_card_progress` instead of `cards`
     - Lookup card via `card_templates`
     - _Requirements: 2.3_
-  - [ ] 5.2 Update `getDueCardsForDeck` in `src/actions/study-actions.ts`
+  - [x] 5.2 Update `getDueCardsForDeck` in `src/actions/study-actions.ts`
     - Query `user_card_progress` joined with `card_templates`
     - Remove legacy `cards` table query
     - _Requirements: 2.5_
-  - [ ] 5.3 Remove `getGlobalDueCards` V1 function or redirect to V2
+  - [x] 5.3 Remove `getGlobalDueCards` V1 function or redirect to V2
     - Either delete or make it call `getGlobalDueCardsV2`
     - _Requirements: 4.3_
-  - [ ] 5.4 Remove `getGlobalStats` V1 function or redirect to V2
+  - [x] 5.4 Remove `getGlobalStats` V1 function or redirect to V2
     - Either delete or make it call `getGlobalStatsV2`
     - _Requirements: 4.3_
-  - [ ] 5.5 Remove `USE_V2_SCHEMA` flag checks in `global-study-actions.ts`
+  - [x] 5.5 Remove `USE_V2_SCHEMA` flag checks in `global-study-actions.ts`
     - Delete the flag constant
     - Remove all `if (!USE_V2_SCHEMA)` branches
     - _Requirements: 2.6_
-  - [ ] 5.6 Write property test for due cards V2 source
+  - [x] 5.6 Write property test for due cards V2 source
     - **Property 6: Due Cards V2 Source**
     - **Validates: Requirements 2.5**
 
-- [ ] 6. Checkpoint - Verify server actions
+- [x] 6. Checkpoint - Verify server actions
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 7. Update Deck Actions to V2 Only
-  - [ ] 7.1 Update `createDeckAction` in `src/actions/deck-actions.ts`
+- [x] 7. Update Deck Actions to V2 Only
+  - [x] 7.1 Update `createDeckAction` in `src/actions/deck-actions.ts`
     - Change to create `deck_template` instead of `deck`
     - Auto-create `user_decks` subscription for author
     - _Requirements: 2.2_
-  - [ ] 7.2 Update `deleteDeckAction` in `src/actions/deck-actions.ts`
+  - [x] 7.2 Update `deleteDeckAction` in `src/actions/deck-actions.ts`
     - Change to delete from `deck_templates`
     - Cascade will handle card_templates and user_card_progress
     - _Requirements: 2.4_
-  - [ ] 7.3 Update `getUserDecks` in `src/actions/deck-actions.ts`
+  - [x] 7.3 Update `getUserDecks` in `src/actions/deck-actions.ts`
     - Query `user_decks` joined with `deck_templates`
     - Remove legacy `decks` table query
     - _Requirements: 2.1_
-  - [ ] 7.4 Remove `USE_V2_SCHEMA` flag checks in `batch-mcq-actions.ts`
+  - [x] 7.4 Remove `USE_V2_SCHEMA` flag checks in `batch-mcq-actions.ts`
     - Delete the flag constant
     - Remove all `if (!USE_V2_SCHEMA)` branches
     - _Requirements: 2.6_
-  - [ ] 7.5 Remove `USE_V2_SCHEMA` flag checks in `custom-study-actions.ts`
+  - [x] 7.5 Remove `USE_V2_SCHEMA` flag checks in `custom-study-actions.ts`
     - Delete the flag constant
     - Remove all `if (!USE_V2_SCHEMA)` branches
     - _Requirements: 2.6_
 
-- [ ] 8. Update Page Components to V2 Only
-  - [ ] 8.1 Update `src/app/(app)/decks/[deckId]/page.tsx`
+- [x] 8. Update Page Components to V2 Only
+  - [x] 8.1 Update `src/app/(app)/decks/[deckId]/page.tsx`
     - Remove hybrid logic checking `legacy_id`
     - Query only `deck_templates` and `card_templates`
     - Use deck_template_id for routing
     - _Requirements: 2.1_
-  - [ ] 8.2 Update `src/app/(app)/study/[deckId]/page.tsx`
+  - [x] 8.2 Update `src/app/(app)/study/[deckId]/page.tsx`
     - Query `user_card_progress` joined with `card_templates`
     - Remove legacy `cards` table query
     - _Requirements: 2.5_
-  - [ ] 8.3 Update `src/app/(app)/study/mcq/[deckId]/page.tsx`
+  - [x] 8.3 Update `src/app/(app)/study/mcq/[deckId]/page.tsx`
     - Query `user_card_progress` joined with `card_templates`
     - Remove legacy `cards` table query
     - _Requirements: 2.5_
-  - [ ] 8.4 Update `src/app/(app)/decks/[deckId]/cards/[cardId]/edit/page.tsx`
+  - [x] 8.4 Update `src/app/(app)/decks/[deckId]/cards/[cardId]/edit/page.tsx`
     - Query `card_templates` instead of `cards`
     - _Requirements: 2.3_
 
-- [ ] 9. Add Migration Verification
-  - [ ] 9.1 Create `src/lib/migration-check.ts`
+- [x] 9. Add Migration Verification
+  - [x] 9.1 Create `src/lib/migration-check.ts`
     - Implement `checkMigrationStatus()` function
     - Query count of legacy `cards` table
     - Return warning if count > 0
     - _Requirements: 3.1, 3.2_
-  - [ ] 9.2 Add migration check to application startup
+  - [x] 9.2 Add migration check to application startup
     - Call `checkMigrationStatus()` on server startup
     - Log warning if legacy cards exist
     - _Requirements: 3.1, 3.2_
-  - [ ] 9.3 Write property test for migration report accuracy
+  - [x] 9.3 Write property test for migration report accuracy
     - **Property 7: Migration Report Accuracy**
     - **Validates: Requirements 3.3**
-  - [ ] 9.4 Write property test for content integrity
+  - [x] 9.4 Write property test for content integrity
     - **Property 8: Content Integrity**
     - **Validates: Requirements 3.4**
 
-- [ ] 10. Final Checkpoint - Verify complete migration
+- [x] 10. Final Checkpoint - Verify complete migration
   - Ensure all tests pass, ask the user if questions arise.

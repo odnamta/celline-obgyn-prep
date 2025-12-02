@@ -1,0 +1,97 @@
+# Implementation Plan
+
+- [x] 1. Bulk Import Crash Protection
+  - [x] 1.1 Harden loadAutoScanState to catch corrupted JSON
+    - Update `loadAutoScanState` in `src/hooks/use-auto-scan.ts`
+    - Wrap JSON.parse in try/catch
+    - Clear corrupted entry and return null on parse failure
+    - Add shape validation before returning parsed state
+    - _Requirements: 1.2_
+  - [x] 1.2 Write property test for localStorage corruption recovery
+    - **Property 1: localStorage Corruption Recovery**
+    - **Validates: Requirements 1.2**
+    - Generate arbitrary strings including invalid JSON
+    - Verify function never throws and returns null for invalid input
+  - [x] 1.3 Wrap BulkImportPage content with ErrorBoundary
+    - Import ErrorBoundary in `src/app/(app)/decks/[deckId]/add-bulk/page.tsx`
+    - Create BulkImportErrorFallback component with retry button
+    - Wrap main page content with ErrorBoundary
+    - Ensure upload button remains accessible in fallback UI
+    - _Requirements: 1.3, 1.4_
+  - [x] 1.4 Verify PDFViewer null safety
+    - Confirm existing null guard in `src/components/pdf/PDFViewer.tsx`
+    - Ensure placeholder UI is displayed when fileUrl is null/undefined
+    - _Requirements: 1.1_
+
+- [x] 2. Checkpoint - Ensure crash protection tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 3. Precision Page Range Scanning
+  - [x] 3.1 Add page range state to BulkImportPage
+    - Add `scanStartPage` and `scanEndPage` state variables
+    - Initialize scanStartPage to current PDF page
+    - Initialize scanEndPage to total pages
+    - Update scanStartPage when user navigates PDF pages (unless manually edited)
+    - _Requirements: 2.1, 2.2, 2.3_
+  - [x] 3.2 Update AutoScanControls with range inputs
+    - Add `startPage`, `endPage`, `onStartPageChange`, `onEndPageChange` props
+    - Add two number input fields for Start Page and End Page
+    - Add validation: startPage >= 1, endPage <= totalPages, startPage <= endPage
+    - Disable Start button when validation fails
+    - Display validation error message when range is invalid
+    - _Requirements: 2.1, 2.2, 2.6_
+  - [x] 3.3 Write property test for invalid range validation
+    - **Property 4: Invalid Range Validation**
+    - **Validates: Requirements 2.6**
+    - Generate invalid ranges (start > end, start < 1, end > totalPages)
+    - Verify validation function returns false for all invalid cases
+  - [x] 3.4 Update useAutoScan to accept page range
+    - Add ScanRange interface: `{ startPage: number; endPage: number }`
+    - Update `startScan` to accept optional ScanRange parameter
+    - Store endPage in state/ref for loop termination check
+    - Modify scan loop to check `currentPage <= endPage` instead of `currentPage <= totalPages`
+    - Auto-stop when currentPage exceeds endPage
+    - _Requirements: 2.4, 2.5_
+  - [x] 3.5 Write property test for range-bounded scanning
+    - **Property 3: Range-Bounded Scanning**
+    - **Validates: Requirements 2.4, 2.5**
+    - Generate valid ranges within [1, totalPages]
+    - Simulate scan loop logic
+    - Verify exactly pages startPage through endPage are processed
+  - [x] 3.6 Wire up range inputs in BulkImportPage
+    - Pass scanStartPage and scanEndPage to AutoScanControls
+    - Pass handlers to update state on input change
+    - Pass range to autoScan.startScan when starting scan
+    - _Requirements: 2.1, 2.2, 2.3, 2.4_
+
+- [x] 4. Checkpoint - Ensure range scanning tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 5. Intra-Deck Deduplication
+  - [x] 5.1 Create removeDuplicateCards server action
+    - Add to `src/actions/card-actions.ts`
+    - Authenticate user and verify deck ownership
+    - Query all card_templates for the deck
+    - Normalize stems: `stem.toLowerCase().trim()`
+    - Group cards by normalized stem
+    - For groups with count > 1, identify oldest card (min created_at)
+    - Delete newer duplicates using transaction
+    - Return `{ ok: true, deletedCount }` or `{ ok: false, error }`
+    - _Requirements: 3.1, 3.2, 3.3, 3.5_
+  - [x] 5.2 Write property test for deduplication correctness
+    - **Property 5: Deduplication Correctness**
+    - **Validates: Requirements 3.1, 3.2**
+    - Generate arrays of cards with some duplicate stems
+    - Apply pure deduplication logic function
+    - Verify only oldest per stem survives
+    - Verify deletedCount equals total removed
+  - [x] 5.3 Add "Clean Duplicates" button to Deck Details page
+    - Add button to actions dropdown in `src/app/(app)/decks/[deckId]/page.tsx`
+    - Call removeDuplicateCards on click
+    - Show loading state during operation
+    - Display toast with count of removed cards
+    - Handle error case with error toast
+    - _Requirements: 3.4_
+
+- [x] 6. Final Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.

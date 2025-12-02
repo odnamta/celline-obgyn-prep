@@ -33,19 +33,19 @@ export const mcqBatchItemSchema = z.object({
     .max(4, 'Correct index must be 0-4'),
   explanation: z.string().optional(),
   tags: z
-    .array(z.string().max(30, 'Tag must be at most 30 characters'))
+    .array(z.string().min(1, 'Tag cannot be empty').max(30, 'Tag must be at most 30 characters'))
     .min(1, 'Must have at least 1 tag')
-    .max(3, 'Must have at most 3 tags')
-    .optional(),
+    .max(3, 'Must have at most 3 tags'),
 })
 
 export type MCQBatchItem = z.infer<typeof mcqBatchItemSchema>
 
 /**
- * Schema for array of MCQ drafts (capped at 5).
+ * Schema for array of MCQ drafts (no artificial cap).
  * Used to validate the AI response after parsing.
+ * V8.6: Removed .max(5) to allow unlimited extraction from dense pages.
  */
-export const mcqBatchDraftSchema = z.array(mcqBatchItemSchema).max(5)
+export const mcqBatchDraftSchema = z.array(mcqBatchItemSchema)
 
 export type MCQBatchDraft = z.infer<typeof mcqBatchDraftSchema>
 

@@ -6,37 +6,27 @@ import { createDeckSchema } from '@/lib/validations'
 import type { ActionResult } from '@/types/actions'
 
 /**
- * Server Action for creating a new deck.
- * Validates input with Zod and creates deck via Supabase.
- * Requirements: 2.1, 9.3
- * 
- * When used with useActionState, the first argument is the previous state
- * and the second argument is the FormData.
+ * V8.0: Server Action for creating a new deck.
+ * Creates deck_template and auto-subscribes author via user_decks.
+ * Requirements: 2.1, 9.3, V8 2.2
  */
 export async function createDeckAction(
   prevState: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
-  const rawData = {
-    title: formData.get('title'),
-  }
+  const rawData = { title: formData.get('title') }
 
-  // Server-side Zod validation (Requirement 9.3)
   const validationResult = createDeckSchema.safeParse(rawData)
-  
   if (!validationResult.success) {
     const fieldErrors: Record<string, string[]> = {}
     for (const issue of validationResult.error.issues) {
       const field = issue.path[0] as string
-      if (!fieldErrors[field]) {
-        fieldErrors[field] = []
-      }
+      if (!fieldErrors[field]) fieldErrors[field] = []
       fieldErrors[field].push(issue.message)
     }
     return { success: false, error: 'Validation failed', fieldErrors }
   }
 
-  // Get authenticated user
   const user = await getUser()
   if (!user) {
     return { success: false, error: 'Authentication required' }
@@ -45,38 +35,38 @@ export async function createDeckAction(
   const { title } = validationResult.data
   const supabase = await createSupabaseServerClient()
 
-  // Create new deck linked to authenticated user (Requirement 2.1)
-  const { data, error } = await supabase
-    .from('decks')
-    .insert({
-      user_id: user.id,
-      title,
-    })
+  // V8.0: Create deck_template instead of legacy deck
+  const { data: deckTemplate, error: createError } = await supabase
+    .from('deck_templates')
+    .insert({ title, author_id: user.id, visibility: 'private' })
     .select()
     .single()
 
-  if (error) {
-    return { success: false, error: error.message }
+  if (createError) {
+    return { success: false, error: createError.message }
   }
 
-  // Revalidate dashboard to show new deck
-  revalidatePath('/dashboard')
+  // V8.0: Auto-subscribe author via user_decks
+  await supabase.from('user_decks').insert({
+    user_id: user.id,
+    deck_template_id: deckTemplate.id,
+    is_active: true,
+  })
 
-  return { success: true, data }
+  revalidatePath('/dashboard')
+  return { success: true, data: deckTemplate }
 }
 
 /**
- * Server Action for deleting a deck.
- * Removes the deck and all associated cards (via cascade delete).
- * Requirements: 2.3, 9.3
+ * V8.0: Server Action for deleting a deck.
+ * Deletes deck_template (cascade handles card_templates).
+ * Requirements: 2.3, 9.3, V8 2.4
  */
 export async function deleteDeckAction(deckId: string): Promise<ActionResult> {
-  // Validate deckId is a valid UUID
   if (!deckId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(deckId)) {
     return { success: false, error: 'Invalid deck ID' }
   }
 
-  // Get authenticated user
   const user = await getUser()
   if (!user) {
     return { success: false, error: 'Authentication required' }
@@ -84,48 +74,49 @@ export async function deleteDeckAction(deckId: string): Promise<ActionResult> {
 
   const supabase = await createSupabaseServerClient()
 
-  // Delete deck (RLS ensures user can only delete own decks)
-  // Cascade delete removes all associated cards (Requirement 2.3)
+  // V8.0: Delete deck_template (cascade handles card_templates, user_decks)
   const { error } = await supabase
-    .from('decks')
+    .from('deck_templates')
     .delete()
     .eq('id', deckId)
+    .eq('author_id', user.id)
 
   if (error) {
     return { success: false, error: error.message }
   }
 
-  // Revalidate dashboard to reflect deletion
   revalidatePath('/dashboard')
-
   return { success: true }
 }
 
 
 /**
- * Server Action for fetching all user's decks.
- * V6.3: Used by ConfigureSessionModal for deck selection.
+ * V8.0: Server Action for fetching all user's deck_templates.
+ * Queries user_decks joined with deck_templates.
+ * Requirements: V8 2.1
  */
 export async function getUserDecks(): Promise<{ id: string; title: string }[]> {
   const user = await getUser()
-  if (!user) {
-    return []
-  }
+  if (!user) return []
 
   const supabase = await createSupabaseServerClient()
 
-  const { data, error } = await supabase
-    .from('decks')
-    .select('id, title')
+  // V8.0: Query user_decks joined with deck_templates
+  const { data: userDecks, error } = await supabase
+    .from('user_decks')
+    .select(`deck_template_id, deck_templates!inner(id, title)`)
     .eq('user_id', user.id)
-    .order('title', { ascending: true })
+    .eq('is_active', true)
 
   if (error) {
     console.error('Failed to fetch user decks:', error)
     return []
   }
 
-  return data || []
+  return (userDecks || []).map(ud => {
+    const dt = ud.deck_templates as unknown as { id: string; title: string }
+    return { id: dt.id, title: dt.title }
+  }).sort((a, b) => a.title.localeCompare(b.title))
 }
 
 
@@ -322,4 +313,77 @@ export async function createDeckTemplateAction(
   revalidatePath('/dashboard')
 
   return { success: true, data: deckTemplate }
+}
+
+
+// ============================================
+// V8.6: Deck Renaming
+// ============================================
+
+/**
+ * V8.6: Server Action for updating a deck's title.
+ * Only the author can rename their deck.
+ * 
+ * Requirements: 3.2, 3.3
+ * 
+ * @param deckId - The deck_template ID to update
+ * @param newTitle - The new title (1-100 characters)
+ * @returns ActionResult with success/error
+ */
+export async function updateDeckTitle(
+  deckId: string,
+  newTitle: string
+): Promise<ActionResult> {
+  // Validate deck ID format
+  if (!deckId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(deckId)) {
+    return { success: false, error: 'Invalid deck ID' }
+  }
+
+  // Validate title length (1-100 characters)
+  const trimmedTitle = newTitle.trim()
+  if (!trimmedTitle || trimmedTitle.length < 1) {
+    return { success: false, error: 'Title cannot be empty' }
+  }
+  if (trimmedTitle.length > 100) {
+    return { success: false, error: 'Title must be at most 100 characters' }
+  }
+
+  const user = await getUser()
+  if (!user) {
+    return { success: false, error: 'Authentication required' }
+  }
+
+  const supabase = await createSupabaseServerClient()
+
+  // V8.6: Fetch deck to verify author
+  const { data: deckTemplate, error: fetchError } = await supabase
+    .from('deck_templates')
+    .select('id, author_id')
+    .eq('id', deckId)
+    .single()
+
+  if (fetchError || !deckTemplate) {
+    return { success: false, error: 'Deck not found' }
+  }
+
+  // V8.6: Check user is author
+  if (deckTemplate.author_id !== user.id) {
+    return { success: false, error: 'Only the author can rename this deck' }
+  }
+
+  // V8.6: Update the title
+  const { error: updateError } = await supabase
+    .from('deck_templates')
+    .update({ title: trimmedTitle })
+    .eq('id', deckId)
+
+  if (updateError) {
+    return { success: false, error: updateError.message }
+  }
+
+  // Revalidate paths
+  revalidatePath(`/decks/${deckId}`)
+  revalidatePath('/dashboard')
+
+  return { success: true, data: { title: trimmedTitle } }
 }

@@ -1,17 +1,19 @@
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { createSupabaseServerClient, getUser } from '@/lib/supabase/server'
 import { StudySession } from './StudySession'
-import type { Card, Deck, UserStats } from '@/types/database'
+import { resolveDeckId } from '@/lib/legacy-redirect'
+import type { Card, UserStats, CardTemplate, UserCardProgress } from '@/types/database'
 
 interface StudyPageProps {
   params: Promise<{ deckId: string }>
 }
 
 /**
- * Study Page - React Server Component
- * Fetches due cards for deck and renders study session.
- * Requirements: 5.1, 5.5
+ * V8.1: Study Page - React Server Component
+ * Fetches due cards from user_card_progress joined with card_templates.
+ * Supports legacy ID redirect for old bookmarks.
+ * Requirements: 5.1, 5.5, V8 2.5, V8.1 Fix 1
  */
 export default async function StudyPage({ params }: StudyPageProps) {
   const { deckId } = await params
@@ -23,35 +25,93 @@ export default async function StudyPage({ params }: StudyPageProps) {
 
   const supabase = await createSupabaseServerClient()
 
-  // Fetch deck details (RLS ensures user owns the deck)
-  const { data: deck, error: deckError } = await supabase
-    .from('decks')
-    .select('*')
-    .eq('id', deckId)
+  // V8.1: Resolve deck ID (supports legacy redirect)
+  const resolved = await resolveDeckId(deckId, supabase)
+  
+  if (!resolved) {
+    notFound()
+  }
+  
+  // V8.1: Redirect if this was a legacy ID
+  if (resolved.isLegacy) {
+    redirect(`/study/${resolved.id}`)
+  }
+
+  // Fetch deck_template data
+  const { data: deckTemplate, error: deckError } = await supabase
+    .from('deck_templates')
+    .select('id, title')
+    .eq('id', resolved.id)
     .single()
 
-  if (deckError || !deck) {
+  if (deckError || !deckTemplate) {
     notFound()
   }
 
-  // Fetch due cards (next_review <= now) - Requirement 5.1
+  // V8.0: Verify user has access via user_decks subscription or is author
+  const { data: userDeck } = await supabase
+    .from('user_decks')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('deck_template_id', deckId)
+    .eq('is_active', true)
+    .single()
+
+  // Also check if user is author
+  const { data: authorCheck } = await supabase
+    .from('deck_templates')
+    .select('author_id')
+    .eq('id', deckId)
+    .single()
+
+  const isAuthor = authorCheck?.author_id === user.id
+  if (!userDeck && !isAuthor) {
+    notFound()
+  }
+
+  // V8.0: Fetch due cards from user_card_progress joined with card_templates
   const now = new Date().toISOString()
-  const { data: dueCards, error: cardsError } = await supabase
-    .from('cards')
-    .select('*')
-    .eq('deck_id', deckId)
+  const { data: dueProgress, error: cardsError } = await supabase
+    .from('user_card_progress')
+    .select(`
+      *,
+      card_templates!inner(*)
+    `)
+    .eq('user_id', user.id)
+    .eq('card_templates.deck_template_id', deckId)
     .lte('next_review', now)
+    .eq('suspended', false)
     .order('next_review', { ascending: true })
 
-  // Fetch user stats for session summary - Requirements: 3.1, 3.4, 3.5
+  // Fetch user stats for session summary
   const { data: userStats } = await supabase
     .from('user_stats')
     .select('*')
     .eq('user_id', user.id)
     .single()
 
-  const deckData = deck as Deck
-  const cardList = (dueCards || []) as Card[]
+  // Map to Card format for StudySession compatibility
+  const cardList: Card[] = (dueProgress || []).map(record => {
+    const ct = record.card_templates as unknown as CardTemplate
+    const progress = record as unknown as UserCardProgress
+    return {
+      id: ct.id,
+      deck_id: ct.deck_template_id,
+      card_type: 'mcq' as const,
+      front: ct.stem,
+      back: ct.explanation || '',
+      stem: ct.stem,
+      options: ct.options as string[],
+      correct_index: ct.correct_index,
+      explanation: ct.explanation,
+      image_url: null,
+      interval: progress.interval,
+      ease_factor: progress.ease_factor,
+      next_review: progress.next_review,
+      created_at: ct.created_at,
+    }
+  }) as Card[]
+
   const userStatsData = userStats as UserStats | null
 
   return (
@@ -69,7 +129,7 @@ export default async function StudyPage({ params }: StudyPageProps) {
       {/* Deck title */}
       <div className="mb-8 text-center">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">
-          Studying: {deckData.title}
+          Studying: {deckTemplate.title}
         </h1>
         {cardsError ? (
           <p className="text-red-600 dark:text-red-400">Error loading cards: {cardsError.message}</p>

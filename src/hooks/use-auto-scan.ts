@@ -9,31 +9,18 @@ import { extractCleanPageText, combinePageTexts } from '@/lib/pdf-text-extractio
 import { draftBatchMCQFromText, bulkCreateMCQV2 } from '@/actions/batch-mcq-actions'
 import { toUIFormatArray } from '@/lib/batch-mcq-schema'
 import type { AIMode } from '@/lib/ai-mode-storage'
+import {
+  type AutoScanStats,
+  type SkippedPage,
+  type AutoScanState,
+  saveAutoScanState,
+  loadAutoScanState,
+  clearAutoScanState,
+} from '@/lib/auto-scan-storage'
 
-// ============================================
-// Types
-// ============================================
-
-export interface AutoScanStats {
-  cardsCreated: number
-  pagesProcessed: number
-  errorsCount: number
-}
-
-export interface SkippedPage {
-  pageNumber: number
-  reason: string
-}
-
-export interface AutoScanState {
-  isScanning: boolean
-  currentPage: number
-  totalPages: number
-  stats: AutoScanStats
-  skippedPages: SkippedPage[]
-  consecutiveErrors: number
-  lastUpdated: number
-}
+// Re-export types for backwards compatibility
+export type { AutoScanStats, SkippedPage, AutoScanState }
+export { saveAutoScanState, loadAutoScanState, clearAutoScanState }
 
 export interface UseAutoScanOptions {
   pdfDocument: PDFDocumentProxy | null
@@ -49,6 +36,18 @@ export interface UseAutoScanOptions {
   onOffline?: () => void  // V7.1: Called when connection lost during scan
 }
 
+// V8.3: Page range interface for precision scanning
+export interface ScanRange {
+  startPage: number
+  endPage: number
+}
+
+// V8.5: Options for startScan to clarify resume vs fresh start behavior
+export interface StartScanOptions {
+  startPage?: number
+  isResuming?: boolean
+}
+
 export interface UseAutoScanReturn {
   // State
   isScanning: boolean
@@ -62,7 +61,8 @@ export interface UseAutoScanReturn {
   // Controls
   startFresh: () => void       // V7.2: Always starts from page 1, clears state
   resume: () => void           // V7.2: Continues from saved page, preserves stats
-  startScan: (startPage?: number) => void  // Kept for backwards compatibility
+  startScan: (options?: StartScanOptions) => void  // V8.5: Updated to accept options object
+  startRangeScan: (range: ScanRange) => void  // V8.3: Start scan with specific range
   pauseScan: () => void
   stopScan: () => void
   resetScan: () => void
@@ -77,54 +77,6 @@ export interface UseAutoScanReturn {
 
 const SCAN_DELAY_MS = 1500 // 1.5 second delay between pages
 const MAX_CONSECUTIVE_ERRORS = 3
-
-// ============================================
-// localStorage Helpers
-// ============================================
-
-function getStorageKey(deckId: string, sourceId: string): string {
-  return `autoscan_state_${deckId}_${sourceId}`
-}
-
-export function saveAutoScanState(
-  deckId: string,
-  sourceId: string,
-  state: AutoScanState
-): void {
-  if (typeof window === 'undefined') return
-  try {
-    const key = getStorageKey(deckId, sourceId)
-    localStorage.setItem(key, JSON.stringify(state))
-  } catch (err) {
-    console.warn('[useAutoScan] Failed to save state to localStorage:', err)
-  }
-}
-
-export function loadAutoScanState(
-  deckId: string,
-  sourceId: string
-): AutoScanState | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const key = getStorageKey(deckId, sourceId)
-    const stored = localStorage.getItem(key)
-    if (!stored) return null
-    return JSON.parse(stored) as AutoScanState
-  } catch (err) {
-    console.warn('[useAutoScan] Failed to load state from localStorage:', err)
-    return null
-  }
-}
-
-export function clearAutoScanState(deckId: string, sourceId: string): void {
-  if (typeof window === 'undefined') return
-  try {
-    const key = getStorageKey(deckId, sourceId)
-    localStorage.removeItem(key)
-  } catch (err) {
-    console.warn('[useAutoScan] Failed to clear state from localStorage:', err)
-  }
-}
 
 // ============================================
 // Initial State
@@ -178,6 +130,8 @@ export function useAutoScan(options: UseAutoScanOptions): UseAutoScanReturn {
   const [skippedPages, setSkippedPages] = useState<SkippedPage[]>([])
   const [consecutiveErrors, setConsecutiveErrors] = useState(0)
   const [hasResumableState, setHasResumableState] = useState(false)
+  // V8.3: End page for range scanning (defaults to totalPages)
+  const [scanEndPage, setScanEndPage] = useState(totalPages)
 
   // Refs for latest values in async callbacks
   const isScanningRef = useRef(isScanning)
@@ -185,6 +139,7 @@ export function useAutoScan(options: UseAutoScanOptions): UseAutoScanReturn {
   const consecutiveErrorsRef = useRef(consecutiveErrors)
   const statsRef = useRef(stats)
   const skippedPagesRef = useRef(skippedPages)
+  const scanEndPageRef = useRef(scanEndPage)  // V8.3
 
   // Keep refs in sync
   useEffect(() => { isScanningRef.current = isScanning }, [isScanning])
@@ -192,6 +147,7 @@ export function useAutoScan(options: UseAutoScanOptions): UseAutoScanReturn {
   useEffect(() => { consecutiveErrorsRef.current = consecutiveErrors }, [consecutiveErrors])
   useEffect(() => { statsRef.current = stats }, [stats])
   useEffect(() => { skippedPagesRef.current = skippedPages }, [skippedPages])
+  useEffect(() => { scanEndPageRef.current = scanEndPage }, [scanEndPage])  // V8.3
 
   // Persist state on changes
   const persistState = useCallback(() => {
@@ -218,12 +174,20 @@ export function useAutoScan(options: UseAutoScanOptions): UseAutoScanReturn {
     if (!deckId || !sourceId) return
     const saved = loadAutoScanState(deckId, sourceId)
     if (saved && saved.isScanning) {
+      // V8.4: Log when resumable state is found
+      console.log('[useAutoScan] Found resumable state', {
+        currentPage: saved.currentPage,
+        cardsCreated: saved.stats.cardsCreated,
+        pagesProcessed: saved.stats.pagesProcessed,
+      })
       // There's a resumable state
       setHasResumableState(true)
       setCurrentPage(saved.currentPage)
       setStats(saved.stats)
       setSkippedPages(saved.skippedPages)
       setConsecutiveErrors(saved.consecutiveErrors)
+    } else {
+      console.log('[useAutoScan] No resumable state found for', { deckId, sourceId })
     }
   }, [deckId, sourceId])
 
@@ -339,13 +303,15 @@ export function useAutoScan(options: UseAutoScanOptions): UseAutoScanReturn {
   }, [pdfDocument, deckId, sessionTagNames, aiMode, includeNextPage, totalPages, onPageComplete, onError])
 
   // Main scan loop iteration
+  // V8.3: Updated to use scanEndPage instead of totalPages for range scanning
   const runScanIteration = useCallback(async () => {
     if (!isScanningRef.current) return
 
     const page = currentPageRef.current
+    const endPage = scanEndPageRef.current  // V8.3: Use range end page
 
     // Check if we've finished
-    if (page > totalPages) {
+    if (page > endPage) {
       setIsScanning(false)
       onComplete?.(statsRef.current)
       return
@@ -374,10 +340,21 @@ export function useAutoScan(options: UseAutoScanOptions): UseAutoScanReturn {
 
     // Advance to next page
     setCurrentPage(prev => prev + 1)
+    
+    // V8.4: Persist state synchronously BEFORE scheduling next iteration
+    // This ensures currentPage is saved immediately after successful processing
+    // React's batched updates may delay the useEffect-based persist, so we call it explicitly
+    currentPageRef.current = currentPageRef.current + 1
+    persistState()
+    console.log('[useAutoScan] State persisted after page', page, {
+      nextPage: currentPageRef.current,
+      cardsCreated: statsRef.current.cardsCreated,
+      pagesProcessed: statsRef.current.pagesProcessed,
+    })
 
     // Schedule next iteration
     setTimeout(runScanIteration, SCAN_DELAY_MS)
-  }, [totalPages, processPage, onComplete, onSafetyStop])
+  }, [processPage, onComplete, onSafetyStop, persistState])
 
   // V7.2: Start fresh - always starts from page 1, clears all state
   const startFresh = useCallback(() => {
@@ -400,7 +377,76 @@ export function useAutoScan(options: UseAutoScanOptions): UseAutoScanReturn {
     setTimeout(runScanIteration, 100)
   }, [pdfDocument, totalPages, deckId, sourceId, runScanIteration])
 
+  // V8.5: Start scanning with explicit isResuming flag
+  // - isResuming === true: Use saved currentPage from state, preserve stats
+  // - isResuming === false or undefined: Use startPage or default to 1, reset stats
+  // V8.6: Added defensive localStorage check for resume mode
+  const startScan = useCallback((options?: StartScanOptions) => {
+    if (!pdfDocument || totalPages === 0) return
+    
+    const { startPage, isResuming } = options ?? {}
+    
+    // V8.5: Explicit isResuming flag determines behavior
+    if (isResuming === true) {
+      // V8.6: Defensive check - verify saved state exists before resuming
+      const saved = loadAutoScanState(deckId, sourceId)
+      if (!saved || !saved.isScanning) {
+        console.warn('[useAutoScan] No valid saved state for resume, falling back to startFresh')
+        // Fall back to fresh start
+        if (deckId && sourceId) {
+          clearAutoScanState(deckId, sourceId)
+        }
+        setCurrentPage(1)
+        setStats(getInitialStats())
+        setSkippedPages([])
+        setConsecutiveErrors(0)
+        setHasResumableState(false)
+        setIsScanning(true)
+        setScanEndPage(totalPages)
+        // V8.6: Sync refs before loop starts
+        isScanningRef.current = true
+        currentPageRef.current = 1
+        setTimeout(runScanIteration, 100)
+        return
+      }
+      
+      // Resume mode: Use saved currentPage, preserve stats
+      console.log('[useAutoScan] Starting in RESUME mode from page', saved.currentPage)
+      // V8.6: Sync refs BEFORE setTimeout to prevent race conditions
+      isScanningRef.current = true
+      currentPageRef.current = saved.currentPage
+      setIsScanning(true)
+      setScanEndPage(totalPages)
+      setHasResumableState(false)
+      // Keep currentPage, stats, skippedPages, consecutiveErrors at their current values
+    } else {
+      // Fresh start mode: Use startPage or default to 1, reset stats
+      const effectiveStartPage = startPage ?? 1
+      console.log('[useAutoScan] Starting in FRESH mode from page', effectiveStartPage)
+      
+      // Clear localStorage state for fresh start
+      if (deckId && sourceId) {
+        clearAutoScanState(deckId, sourceId)
+      }
+      
+      setIsScanning(true)
+      setCurrentPage(effectiveStartPage)
+      setScanEndPage(totalPages)
+      setHasResumableState(false)
+      setStats(getInitialStats())
+      setSkippedPages([])
+      setConsecutiveErrors(0)
+      // V8.6: Sync refs before loop starts
+      isScanningRef.current = true
+      currentPageRef.current = effectiveStartPage
+    }
+
+    // Kick off the loop
+    setTimeout(runScanIteration, 100)
+  }, [pdfDocument, totalPages, deckId, sourceId, runScanIteration])
+
   // V7.2: Resume - continues from saved page, preserves stats
+  // V8.5: Now delegates to startScan with isResuming: true
   const resume = useCallback(() => {
     if (!pdfDocument || totalPages === 0) return
     
@@ -410,45 +456,46 @@ export function useAutoScan(options: UseAutoScanOptions): UseAutoScanReturn {
       return
     }
     
-    // Keep currentPage at saved value (already hydrated)
-    // Keep stats at saved values
-    // Keep skippedPages at saved values
-    setHasResumableState(false)
-    setIsScanning(true)
-    
-    // Kick off the loop from current page
-    setTimeout(runScanIteration, 100)
-  }, [pdfDocument, totalPages, hasResumableState, startFresh, runScanIteration])
+    // V8.5: Delegate to startScan with explicit isResuming flag
+    startScan({ isResuming: true })
+  }, [pdfDocument, totalPages, hasResumableState, startFresh, startScan])
 
-  // Start scanning (kept for backwards compatibility)
-  // V7.1: Fixed to use savedState.currentPage when resuming
-  const startScan = useCallback((startPage?: number) => {
+  // V8.3: Start scanning with specific page range
+  const startRangeScan = useCallback((range: ScanRange) => {
     if (!pdfDocument || totalPages === 0) return
     
-    // V7.1: If no explicit startPage and we have resumable state, use saved page
-    const effectiveStartPage = startPage ?? (hasResumableState ? currentPageRef.current : 1)
-    
-    setIsScanning(true)
-    setCurrentPage(effectiveStartPage)
-    setHasResumableState(false)
-    
-    if (effectiveStartPage === 1) {
-      // Fresh start - reset stats
-      setStats(getInitialStats())
-      setSkippedPages([])
-      setConsecutiveErrors(0)
+    // Validate range
+    if (range.startPage < 1 || range.endPage > totalPages || range.startPage > range.endPage) {
+      console.warn('[useAutoScan] Invalid range:', range)
+      return
     }
-    // V7.1: When resuming (effectiveStartPage > 1), preserve existing stats
-
+    
+    // Clear localStorage state for fresh range scan
+    if (deckId && sourceId) {
+      clearAutoScanState(deckId, sourceId)
+    }
+    
+    // Set up range scan
+    setCurrentPage(range.startPage)
+    setScanEndPage(range.endPage)
+    setStats(getInitialStats())
+    setSkippedPages([])
+    setConsecutiveErrors(0)
+    setHasResumableState(false)
+    setIsScanning(true)
+    
     // Kick off the loop
     setTimeout(runScanIteration, 100)
-  }, [pdfDocument, totalPages, runScanIteration, hasResumableState])
+  }, [pdfDocument, totalPages, deckId, sourceId, runScanIteration])
 
   // V7.2: Pause scanning - preserves state and persists immediately
   const pauseScan = useCallback(() => {
     setIsScanning(false)
     // V7.2: Persist state immediately so resume point is accurate
+    // V8.4: Update ref before persist to ensure isScanning=false is saved
+    isScanningRef.current = false
     persistState()
+    console.log('[useAutoScan] Scan paused, state persisted at page', currentPageRef.current)
   }, [persistState])
 
   // Stop scanning (preserves stats for review)
@@ -506,6 +553,7 @@ export function useAutoScan(options: UseAutoScanOptions): UseAutoScanReturn {
     startFresh,  // V7.2: Always starts from page 1, clears state
     resume,      // V7.2: Continues from saved page, preserves stats
     startScan,   // Kept for backwards compatibility
+    startRangeScan,  // V8.3: Start scan with specific range
     pauseScan,
     stopScan,
     resetScan,

@@ -99,16 +99,21 @@ export async function uploadSourceAction(
     const { title: validatedTitle, deckId: validatedDeckId } = validationResult.data
     const supabase = await createSupabaseServerClient()
 
-    // If deckId provided, verify user owns the deck
+    // V8.2.2: If deckId provided, verify user is the author of the deck_template
     if (validatedDeckId) {
-      const { data: deck, error: deckError } = await supabase
-        .from('decks')
-        .select('id')
+      const { data: deckTemplate, error: deckError } = await supabase
+        .from('deck_templates')
+        .select('id, author_id')
         .eq('id', validatedDeckId)
         .single()
 
-      if (deckError || !deck) {
-        return { success: false, error: 'Deck not found or access denied' }
+      if (deckError || !deckTemplate) {
+        return { success: false, error: 'Deck not found' }
+      }
+
+      // Only authors can upload PDFs to a deck
+      if (deckTemplate.author_id !== user.id) {
+        return { success: false, error: 'Only the deck author can upload source materials' }
       }
     }
 
@@ -298,15 +303,19 @@ export async function linkSourceToDeckAction(
     return { success: false, error: 'Source not found or access denied' }
   }
 
-  // Verify user owns the deck
-  const { data: deck, error: deckError } = await supabase
-    .from('decks')
-    .select('id')
+  // V8.2.2: Verify user is the author of the deck_template
+  const { data: deckTemplate, error: deckError } = await supabase
+    .from('deck_templates')
+    .select('id, author_id')
     .eq('id', deckId)
     .single()
 
-  if (deckError || !deck) {
-    return { success: false, error: 'Deck not found or access denied' }
+  if (deckError || !deckTemplate) {
+    return { success: false, error: 'Deck not found' }
+  }
+
+  if (deckTemplate.author_id !== user.id) {
+    return { success: false, error: 'Only the deck author can link source materials' }
   }
 
   // Create the link

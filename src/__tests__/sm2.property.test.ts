@@ -43,11 +43,11 @@ const cardStateArb: fc.Arbitrary<CardState> = fc.record({
 
 /**
  * **Feature: cellines-obgyn-prep, Property 1: SM-2 "Again" Rating Resets Interval**
- * **Validates: Requirements 4.1**
+ * **Validates: Requirements 4.1, V8.2 1.1**
  * 
  * For any card with any interval and ease factor, when rated as "Again" (1),
  * the resulting interval SHALL be 0 and the next review SHALL be approximately
- * 1 minute from the current time.
+ * 10 minutes from the current time (to prevent Groundhog Day bug).
  */
 describe('Property 1: SM-2 "Again" Rating Resets Interval', () => {
   test('Again rating always resets interval to 0', () => {
@@ -62,7 +62,7 @@ describe('Property 1: SM-2 "Again" Rating Resets Interval', () => {
     );
   });
 
-  test('Again rating sets next review to approximately 1 minute from now', () => {
+  test('Again rating sets next review to approximately 10 minutes from now', () => {
     fc.assert(
       fc.property(validIntervalArb, validEaseFactorArb, (interval, easeFactor) => {
         const before = Date.now();
@@ -70,8 +70,9 @@ describe('Property 1: SM-2 "Again" Rating Resets Interval', () => {
         const result = calculateNextReview(input);
         const after = Date.now();
         
-        const expectedMinTime = before + 60 * 1000;
-        const expectedMaxTime = after + 60 * 1000;
+        // V8.2: Changed from 1 minute to 10 minutes to fix Groundhog Day bug
+        const expectedMinTime = before + 10 * 60 * 1000;
+        const expectedMaxTime = after + 10 * 60 * 1000;
         
         expect(result.nextReview.getTime()).toBeGreaterThanOrEqual(expectedMinTime);
         expect(result.nextReview.getTime()).toBeLessThanOrEqual(expectedMaxTime);

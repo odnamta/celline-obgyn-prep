@@ -1,20 +1,45 @@
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { createSupabaseServerClient, getUser } from '@/lib/supabase/server'
 import { CardFormTabs } from '@/components/cards/CardFormTabs'
 import { CardList } from '@/components/cards/CardList'
 import { Button } from '@/components/ui/Button'
-import type { Card, Deck } from '@/types/database'
+import { resolveDeckId } from '@/lib/legacy-redirect'
+import { CleanDuplicatesButton } from '@/components/decks/CleanDuplicatesButton'
+import { EditableDeckTitle } from '@/components/decks/EditableDeckTitle'
+import type { Card, Tag } from '@/types/database'
+
+// Type for card template with nested tags from Supabase join
+interface CardTemplateWithNestedTags {
+  id: string
+  stem: string
+  options: string[]
+  correct_index: number
+  explanation: string | null
+  created_at: string
+  card_template_tags: {
+    tags: {
+      id: string
+      name: string
+      color: string
+    } | null
+  }[]
+}
+
+// Extended Card type with tags for CardList
+interface CardWithTags extends Card {
+  tags: Tag[]
+}
 
 interface DeckDetailsPageProps {
   params: Promise<{ deckId: string }>
 }
 
 /**
- * Deck Details Page - React Server Component
- * Displays deck info, card list, and form to add new cards.
- * Requirements: 3.1, 3.2, 6.3
- * V7.2.5: Added support for showing V2 migrated cards
+ * V8.1: Deck Details Page - React Server Component
+ * Displays deck_template info, card_templates list, and form to add new cards.
+ * Supports legacy ID redirect for old bookmarks.
+ * Requirements: 3.1, 3.2, 6.3, V8 2.1, V8.1 Fix 1
  */
 export default async function DeckDetailsPage({ params }: DeckDetailsPageProps) {
   const { deckId } = await params
@@ -26,73 +51,109 @@ export default async function DeckDetailsPage({ params }: DeckDetailsPageProps) 
 
   const supabase = await createSupabaseServerClient()
 
-  // Fetch deck details (RLS ensures user owns the deck)
-  const { data: deck, error: deckError } = await supabase
-    .from('decks')
+  // V8.1: Resolve deck ID (supports legacy redirect)
+  const resolved = await resolveDeckId(deckId, supabase)
+  
+  if (!resolved) {
+    notFound()
+  }
+  
+  // V8.1: Redirect if this was a legacy ID
+  if (resolved.isLegacy) {
+    redirect(`/decks/${resolved.id}`)
+  }
+
+  // Fetch full deck_template data
+  const { data: deckTemplate, error: deckError } = await supabase
+    .from('deck_templates')
     .select('*')
-    .eq('id', deckId)
+    .eq('id', resolved.id)
     .single()
 
-  if (deckError || !deck) {
+  if (deckError || !deckTemplate) {
     notFound()
   }
 
-  // V7.2.5: Check if this legacy deck has been migrated to V2
-  // If so, fetch cards from card_templates instead of legacy cards table
-  const { data: migratedTemplate } = await supabase
-    .from('deck_templates')
+  // V8.0: Verify user has access via user_decks subscription or is author
+  const { data: userDeck } = await supabase
+    .from('user_decks')
     .select('id')
-    .eq('legacy_id', deckId)
+    .eq('user_id', user.id)
+    .eq('deck_template_id', deckId)
+    .eq('is_active', true)
     .single()
-  
-  let cardList: Card[] = []
-  let cardsError: { message: string } | null = null
-  
-  if (migratedTemplate) {
-    // V7.2.5: Fetch V2 cards from card_templates
-    const { data: v2Cards, error: v2Error } = await supabase
-      .from('card_templates')
-      .select('id, stem, options, correct_index, explanation, created_at')
-      .eq('deck_template_id', migratedTemplate.id)
-      .order('created_at', { ascending: false })
-    
-    if (v2Error) {
-      cardsError = { message: v2Error.message }
-    } else {
-      // Map V2 card_templates to legacy Card format for CardList compatibility
-      cardList = (v2Cards || []).map(ct => ({
-        id: ct.id,
-        deck_id: deckId,
-        card_type: 'mcq' as const,
-        front: '',
-        back: '',
-        stem: ct.stem,
-        options: ct.options as string[],
-        correct_index: ct.correct_index,
-        explanation: ct.explanation,
-        image_url: null,
-        interval: 1,
-        ease_factor: 2.5,
-        next_review: new Date().toISOString(),
-        created_at: ct.created_at,
-      })) as Card[]
-    }
-  } else {
-    // Fetch legacy cards from cards table
-    const { data: cards, error } = await supabase
-      .from('cards')
-      .select('*')
-      .eq('deck_id', deckId)
-      .order('created_at', { ascending: false })
-    
-    if (error) {
-      cardsError = { message: error.message }
-    } else {
-      cardList = (cards || []) as Card[]
-    }
+
+  const isAuthor = deckTemplate.author_id === user.id
+  if (!userDeck && !isAuthor) {
+    notFound()
   }
 
-  const deckData = deck as Deck
+  // V8.0: Fetch card_templates for this deck_template
+  // V8.5: Join with card_template_tags and tags to fetch associated tags
+  const { data: cardTemplates, error: cardsError } = await supabase
+    .from('card_templates')
+    .select(`
+      id,
+      stem,
+      options,
+      correct_index,
+      explanation,
+      created_at,
+      card_template_tags (
+        tags (
+          id,
+          name,
+          color
+        )
+      )
+    `)
+    .eq('deck_template_id', deckId)
+    .order('created_at', { ascending: false })
+
+  // Map card_templates to Card format for CardList compatibility
+  // V8.5: Include tags array extracted from nested join
+  const cardList: CardWithTags[] = ((cardTemplates || []) as CardTemplateWithNestedTags[]).map(ct => {
+    // Extract tags from nested structure, filtering out nulls
+    const tags: Tag[] = (ct.card_template_tags || [])
+      .map(ctt => ctt.tags)
+      .filter((tag): tag is { id: string; name: string; color: string } => tag !== null)
+      .map(tag => ({
+        id: tag.id,
+        name: tag.name,
+        color: tag.color,
+        user_id: '', // Not needed for display
+        created_at: '', // Not needed for display
+      }))
+
+    return {
+      id: ct.id,
+      deck_id: deckId,
+      card_type: 'mcq' as const,
+      front: '',
+      back: '',
+      stem: ct.stem,
+      options: ct.options as string[],
+      correct_index: ct.correct_index,
+      explanation: ct.explanation,
+      image_url: null,
+      interval: 1,
+      ease_factor: 2.5,
+      next_review: new Date().toISOString(),
+      created_at: ct.created_at,
+      tags,
+    }
+  })
+
+  // V8.5: Extract all unique tags from cards for filter functionality
+  const allTagsMap = new Map<string, Tag>()
+  cardList.forEach(card => {
+    card.tags.forEach(tag => {
+      if (!allTagsMap.has(tag.id)) {
+        allTagsMap.set(tag.id, tag)
+      }
+    })
+  })
+  const allTags = Array.from(allTagsMap.values())
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
@@ -108,7 +169,14 @@ export default async function DeckDetailsPage({ params }: DeckDetailsPageProps) 
 
       {/* Deck info */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">{deckData.title}</h1>
+        {/* V8.6: Editable title for authors, static for non-authors */}
+        {isAuthor ? (
+          <div className="mb-2">
+            <EditableDeckTitle deckId={deckId} initialTitle={deckTemplate.title} />
+          </div>
+        ) : (
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">{deckTemplate.title}</h1>
+        )}
         <p className="text-slate-600 dark:text-slate-400">
           {cardList.length} {cardList.length === 1 ? 'card' : 'cards'} in this deck
         </p>
@@ -126,19 +194,28 @@ export default async function DeckDetailsPage({ params }: DeckDetailsPageProps) 
             Study MCQs
           </Button>
         </Link>
-        {/* Requirement 7.4: Link to bulk import page */}
-        <Link href={`/decks/${deckId}/add-bulk`}>
-          <Button size="lg" variant="secondary">
-            Bulk Import
-          </Button>
-        </Link>
+        {/* Author-only actions */}
+        {isAuthor && (
+          <>
+            {/* Requirement 7.4: Link to bulk import page */}
+            <Link href={`/decks/${deckId}/add-bulk`}>
+              <Button size="lg" variant="secondary">
+                Bulk Import
+              </Button>
+            </Link>
+            {/* V8.3: Clean Duplicates button */}
+            <CleanDuplicatesButton deckId={deckId} />
+          </>
+        )}
       </div>
 
-      {/* Add new card form with tabs for flashcard/MCQ */}
-      <div className="mb-8 p-4 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm dark:shadow-none">
-        <h2 className="text-lg font-medium text-slate-900 dark:text-slate-100 mb-4">Add New Card</h2>
-        <CardFormTabs deckId={deckId} />
-      </div>
+      {/* Add new card form with tabs for flashcard/MCQ - Author only */}
+      {isAuthor && (
+        <div className="mb-8 p-4 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm dark:shadow-none">
+          <h2 className="text-lg font-medium text-slate-900 dark:text-slate-100 mb-4">Add New Card</h2>
+          <CardFormTabs deckId={deckId} />
+        </div>
+      )}
 
       {/* Card list */}
       <div>
@@ -146,7 +223,7 @@ export default async function DeckDetailsPage({ params }: DeckDetailsPageProps) 
         {cardsError ? (
           <p className="text-red-600 dark:text-red-400">Error loading cards: {cardsError.message}</p>
         ) : (
-          <CardList cards={cardList} deckId={deckId} deckTitle={deckData.title} />
+          <CardList cards={cardList} deckId={deckId} deckTitle={deckTemplate.title} allTags={allTags} isAuthor={isAuthor} />
         )}
       </div>
     </div>

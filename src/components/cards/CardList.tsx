@@ -21,27 +21,52 @@ interface CardListProps {
   deckId: string
   deckTitle?: string
   allTags?: Tag[]
+  isAuthor?: boolean
 }
 
 /**
  * CardList - Client component wrapper for card list with bulk actions
  * Requirements: FR-1, FR-3, FR-4, C.1-C.9
  */
-export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [] }: CardListProps) {
+export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAuthor = true }: CardListProps) {
   const router = useRouter()
   const { showToast } = useToast()
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showDeckSelector, setShowDeckSelector] = useState(false)
   const [filterTagIds, setFilterTagIds] = useState<string[]>([])
+  // V8.6: NeedsReview filter toggle
+  const [showNeedsReviewOnly, setShowNeedsReviewOnly] = useState(false)
+
+  // V8.6: Helper to check if card has NeedsReview tag
+  const hasNeedsReviewTag = (card: CardWithTags) => {
+    return card.tags?.some((t) => t.name.toLowerCase() === 'needsreview') ?? false
+  }
+
+  // V8.6: Count cards needing review
+  const needsReviewCount = useMemo(() => {
+    return cards.filter(hasNeedsReviewTag).length
+  }, [cards])
 
   // Filter cards by selected tags (AND logic - card must have ALL selected tags)
+  // V8.6: Also filter by NeedsReview if toggle is on
   const filteredCards = useMemo(() => {
-    if (filterTagIds.length === 0) return cards
-    return cards.filter((card) => {
-      const cardTagIds = card.tags?.map((t) => t.id) || []
-      return filterTagIds.every((tagId) => cardTagIds.includes(tagId))
-    })
-  }, [cards, filterTagIds])
+    let result = cards
+    
+    // Apply tag filter
+    if (filterTagIds.length > 0) {
+      result = result.filter((card) => {
+        const cardTagIds = card.tags?.map((t) => t.id) || []
+        return filterTagIds.every((tagId) => cardTagIds.includes(tagId))
+      })
+    }
+    
+    // V8.6: Apply NeedsReview filter
+    if (showNeedsReviewOnly) {
+      result = result.filter(hasNeedsReviewTag)
+    }
+    
+    return result
+  }, [cards, filterTagIds, showNeedsReviewOnly])
 
   // Selection handlers
   const toggleSelection = (id: string) => {
@@ -144,6 +169,23 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [] }: Ca
 
   return (
     <>
+      {/* V8.6: NeedsReview filter toggle */}
+      {needsReviewCount > 0 && (
+        <div className="mb-4">
+          <button
+            onClick={() => setShowNeedsReviewOnly(!showNeedsReviewOnly)}
+            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              showNeedsReviewOnly
+                ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 border border-yellow-300 dark:border-yellow-700'
+                : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-yellow-400" />
+            {showNeedsReviewOnly ? 'Showing' : 'Show'} cards needing review ({needsReviewCount})
+          </button>
+        </div>
+      )}
+
       {/* Tag filter selector */}
       {allTags.length > 0 && (
         <div className="mb-4">
@@ -165,14 +207,16 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [] }: Ca
         onClear={() => setFilterTagIds([])}
       />
 
-      {/* Bulk actions bar */}
-      <BulkActionsBar
-        selectedCount={selectedIds.size}
-        onDelete={handleBulkDelete}
-        onMove={() => setShowDeckSelector(true)}
-        onExport={handleExport}
-        onClearSelection={clearSelection}
-      />
+      {/* Bulk actions bar - Author only for delete/move */}
+      {isAuthor && (
+        <BulkActionsBar
+          selectedCount={selectedIds.size}
+          onDelete={handleBulkDelete}
+          onMove={() => setShowDeckSelector(true)}
+          onExport={handleExport}
+          onClearSelection={clearSelection}
+        />
+      )}
 
       {/* Select all toggle */}
       {filteredCards.length > 0 && (
@@ -215,10 +259,11 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [] }: Ca
             card={card}
             deckId={deckId}
             tags={card.tags}
-            onDelete={handleDelete}
-            onDuplicate={handleDuplicate}
+            onDelete={isAuthor ? handleDelete : undefined}
+            onDuplicate={isAuthor ? handleDuplicate : undefined}
             isSelected={selectedIds.has(card.id)}
-            onToggleSelect={toggleSelection}
+            onToggleSelect={isAuthor ? toggleSelection : undefined}
+            isAuthor={isAuthor}
           />
         ))}
       </div>

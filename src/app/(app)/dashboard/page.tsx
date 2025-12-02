@@ -2,6 +2,7 @@ import { createSupabaseServerClient, getUser } from '@/lib/supabase/server'
 import { DashboardHero } from '@/components/dashboard/DashboardHero'
 import { LibrarySection } from '@/components/dashboard/LibrarySection'
 import { StudyHeatmap } from '@/components/dashboard/StudyHeatmap'
+import { RepairButton } from '@/components/dashboard/RepairButton'
 import type { CourseWithProgress } from '@/components/course'
 import { calculateDueCount } from '@/lib/due-count'
 import { getStudyLogs, getUserStats } from '@/actions/stats-actions'
@@ -107,19 +108,15 @@ export default async function DashboardPage() {
     }
   })
 
-  // Fetch user's decks with due counts (Requirement 6.1, 6.2)
-  // RLS ensures only user's own decks are returned (Requirement 2.2)
-  const { data: decks, error: decksError } = await supabase
-    .from('decks')
+  // V8.1: Fetch user's deck_templates via user_decks (V2 schema)
+  const { data: userDecks, error: decksError } = await supabase
+    .from('user_decks')
     .select(`
-      id,
-      user_id,
-      title,
-      created_at,
-      cards!left(id, next_review)
+      deck_template_id,
+      deck_templates!inner(id, title, author_id, created_at)
     `)
     .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
+    .eq('is_active', true)
 
   if (coursesError || decksError) {
     return (
@@ -129,19 +126,59 @@ export default async function DashboardPage() {
     )
   }
 
-  // Calculate due counts for each deck using the tested utility function
-  const decksWithDueCounts: DeckWithDueCount[] = (decks || []).map((deck) => {
-    const cards = (deck.cards || []) as { next_review: string }[]
-    const dueCount = calculateDueCount(cards, now)
-    
-    return {
-      id: deck.id,
-      user_id: deck.user_id,
-      title: deck.title,
-      created_at: deck.created_at,
-      due_count: dueCount,
+  // Get deck template IDs for due count calculation
+  const deckTemplateIds = (userDecks || []).map(ud => ud.deck_template_id)
+  
+  // Fetch card_templates for due count calculation
+  let cardTemplates: { id: string; deck_template_id: string }[] = []
+  if (deckTemplateIds.length > 0) {
+    const { data: ctData } = await supabase
+      .from('card_templates')
+      .select('id, deck_template_id')
+      .in('deck_template_id', deckTemplateIds)
+    cardTemplates = ctData || []
+  }
+
+  // Create map of card_template_id -> deck_template_id
+  const cardToDeckMap = new Map<string, string>()
+  for (const ct of cardTemplates) {
+    cardToDeckMap.set(ct.id, ct.deck_template_id)
+  }
+
+  // Fetch due progress records
+  const cardTemplateIdList = Array.from(cardToDeckMap.keys())
+  let dueProgress: { card_template_id: string }[] = []
+  if (cardTemplateIdList.length > 0) {
+    const { data: dueData } = await supabase
+      .from('user_card_progress')
+      .select('card_template_id')
+      .eq('user_id', user.id)
+      .lte('next_review', now)
+      .eq('suspended', false)
+      .in('card_template_id', cardTemplateIdList)
+    dueProgress = dueData || []
+  }
+
+  // Build due count map by deck_template_id
+  const dueCountMap = new Map<string, number>()
+  for (const record of dueProgress) {
+    const deckTemplateId = cardToDeckMap.get(record.card_template_id)
+    if (deckTemplateId) {
+      dueCountMap.set(deckTemplateId, (dueCountMap.get(deckTemplateId) || 0) + 1)
     }
-  })
+  }
+
+  // Build decks with due counts using V2 IDs
+  const decksWithDueCounts: DeckWithDueCount[] = (userDecks || []).map(ud => {
+    const dt = ud.deck_templates as unknown as { id: string; title: string; author_id: string; created_at: string }
+    return {
+      id: dt.id, // V2 deck_template ID
+      user_id: dt.author_id,
+      title: dt.title,
+      created_at: dt.created_at,
+      due_count: dueCountMap.get(dt.id) || 0,
+    }
+  }).sort((a, b) => a.title.localeCompare(b.title))
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
@@ -154,6 +191,11 @@ export default async function DashboardPage() {
         hasNewCards={globalStats.hasNewCards}
         userName={user.user_metadata?.name || user.email?.split('@')[0]}
       />
+
+      {/* V8.1: Repair Button - Shows if user has cards without progress */}
+      <div className="mb-4">
+        <RepairButton />
+      </div>
 
       {/* Study Heatmap (Requirement 2.2) */}
       <div className="mb-8 p-4 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm dark:shadow-none">
