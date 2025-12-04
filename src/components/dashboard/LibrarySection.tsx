@@ -1,11 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Library } from 'lucide-react'
+import { ChevronDown, ChevronRight, Library, BookOpen } from 'lucide-react'
 // CourseCard import commented out - courses hidden until AI Course Generator is built
 // import { CourseCard } from '@/components/course/CourseCard'
 import { DeckCard } from '@/components/decks/DeckCard'
 import { CreateDeckForm } from '@/components/decks/CreateDeckForm'
+import { EmptyState } from '@/components/ui/EmptyState'
 // CourseWithProgress type commented out - courses hidden
 // import type { CourseWithProgress } from '@/components/course/CourseCard'
 import type { DeckWithDueCount } from '@/types/database'
@@ -94,9 +95,11 @@ export function LibrarySection({
             </div>
 
             {decks.length === 0 ? (
-              <p className="text-slate-500 dark:text-slate-400 text-sm py-4 text-center">
-                No decks yet. Create your first deck above!
-              </p>
+              <EmptyState
+                icon={<BookOpen className="h-12 w-12" />}
+                title="No decks yet"
+                description="Create your first deck using the form above to start studying"
+              />
             ) : (
               <div className="grid gap-4 sm:grid-cols-2">
                 {decks.map((deck) => (

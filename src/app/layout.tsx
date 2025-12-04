@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { InstallBanner } from "@/components/pwa/InstallBanner";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,8 +15,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Celline's OBGYN Prep",
-  description: "A spaced repetition system for medical entrance exam preparation",
+  title: "Specialize",
+  description: "Medical exam preparation with spaced repetition",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Specialize",
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
 };
 
 export default function RootLayout({
@@ -25,11 +35,16 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="apple-touch-icon" href="/apple-touch-icon.svg" />
+        <meta name="theme-color" content="#ffffff" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 min-h-screen`}
       >
         <ThemeProvider>
           {children}
+          <InstallBanner />
         </ThemeProvider>
       </body>
     </html>

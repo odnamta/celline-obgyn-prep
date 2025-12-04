@@ -23,7 +23,7 @@
         "-y",
         "@upstash/context7-mcp@latest"
       ],
-      "disabled": false,
+      "disabled": true,
       "autoApprove": []
     },
     "filesystem": {
@@ -33,7 +33,7 @@
         "@modelcontextprotocol/server-filesystem",
         "."
       ],
-      "disabled": false,
+      "disabled": true,
       "autoApprove": [
         "create_directory"
       ]

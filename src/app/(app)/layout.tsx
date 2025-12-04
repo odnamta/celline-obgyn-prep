@@ -5,6 +5,7 @@ import { logoutAction } from '@/actions/auth-actions'
 import { Button } from '@/components/ui/Button'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { ToastProvider } from '@/components/ui/Toast'
+import { MobileNavBar } from '@/components/navigation/MobileNavBar'
 
 export default async function AppLayout({
   children,
@@ -24,7 +25,7 @@ export default async function AppLayout({
           <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
             <div className="flex items-center gap-6">
               <a href="/dashboard" className="text-xl font-semibold text-slate-900 dark:text-slate-100">
-                Celline&apos;s OBGYN Prep
+                Specialize
               </a>
               <nav className="hidden sm:flex items-center gap-4">
                 <a 
@@ -51,11 +52,12 @@ export default async function AppLayout({
             </div>
           </div>
         </header>
-        <main className="flex-1">
+        <main className="flex-1 pb-16 md:pb-0">
           <Suspense fallback={null}>
             {children}
           </Suspense>
         </main>
+        <MobileNavBar />
       </div>
     </ToastProvider>
   )
