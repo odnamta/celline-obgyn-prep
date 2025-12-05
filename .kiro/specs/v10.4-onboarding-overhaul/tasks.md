@@ -1,0 +1,102 @@
+# Implementation Plan
+
+- [x] 1. Refactor Login Page to Google-Only
+  - [x] 1.1 Simplify LoginPage component
+    - Remove email/password form, mode toggle, register action imports
+    - Keep Google OAuth button and error handling
+    - Update heading to "Welcome to Specialize"
+    - Apply centered white card with shadow-lg styling
+    - _Requirements: 1.1, 1.2, 1.3, 1.4_
+  - [x] 1.2 Create LegalFooter component
+    - Create `src/components/auth/LegalFooter.tsx`
+    - Display "By continuing, you agree to our Terms and Privacy Policy"
+    - Links use `target="_blank"` and `rel="noopener noreferrer"`
+    - _Requirements: 1.5_
+  - [x] 1.3 Write property test for login page structure
+    - **Property: Login page contains only Google auth button**
+    - Verify no email/password inputs exist
+    - **Validates: Requirements 1.3, 1.4**
+
+- [x] 2. Create Legal Pages
+  - [x] 2.1 Create Terms of Service page
+    - Create `src/app/(auth)/terms/page.tsx`
+    - Add placeholder legal text with proper heading structure
+    - _Requirements: 2.1_
+  - [x] 2.2 Create Privacy Policy page
+    - Create `src/app/(auth)/privacy/page.tsx`
+    - Add placeholder legal text with proper heading structure
+    - _Requirements: 2.2_
+  - [x] 2.3 Write unit tests for legal page links
+    - Verify Terms link has `target="_blank"`
+    - Verify Privacy link has `target="_blank"`
+    - **Validates: Requirements 2.3, 2.4**
+
+- [x] 3. Implement Zero State Dashboard
+  - [x] 3.1 Create onboarding utility functions
+    - Create `src/lib/onboarding-utils.ts`
+    - Implement `shouldShowWelcomeMode(subscribedDecks, totalCards)`
+    - Implement `shouldRedirectToLibrary(subscribedDecks)`
+    - Implement `isUserAdmin(userId, adminIds)`
+    - _Requirements: 3.1, 4.1_
+  - [x] 3.2 Write property test for Welcome Mode activation
+    - **Property 1: Welcome Mode activation**
+    - Test that Welcome Mode shows iff subscribedDecks=0 AND totalCards=0
+    - **Validates: Requirements 3.1**
+  - [x] 3.3 Write property test for redirect logic
+    - **Property 3: Zero-deck redirect logic**
+    - Test that redirect happens iff subscribedDecks=0
+    - **Validates: Requirements 4.1, 4.2**
+  - [x] 3.4 Extend DashboardHero with Welcome Mode
+    - Add `subscribedDecks` and `isAdmin` props
+    - Implement Welcome Mode UI when zero state detected
+    - Display "Welcome to Specialize. Let's find your first study deck."
+    - Add "Browse Library" primary button linking to `/library`
+    - Add "Create my own Deck" secondary button (admin only)
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
+  - [x] 3.5 Write property test for admin-conditional Create Deck
+    - **Property 2: Admin-conditional Create Deck visibility**
+    - Test that Create Deck button visible iff user is admin
+    - **Validates: Requirements 3.4, 3.5**
+  - [x] 3.6 Add redirect logic to Dashboard page
+    - Update `src/app/(app)/dashboard/page.tsx`
+    - Check subscribedDecks count before rendering
+    - Redirect to `/library` if subscribedDecks === 0
+    - Pass subscribedDecks count to DashboardHero
+    - _Requirements: 4.1, 4.2_
+
+- [x] 4. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 5. Implement Deck Visibility Controls
+  - [x] 5.1 Create updateDeckVisibilityAction
+    - Add to `src/actions/deck-actions.ts`
+    - Verify user is deck author before updating
+    - Update `deck_templates.visibility` field
+    - Return ActionResult with success/error
+    - _Requirements: 5.5_
+  - [x] 5.2 Create VisibilityToggle component
+    - Create `src/components/decks/VisibilityToggle.tsx`
+    - Accept `deckId`, `currentVisibility`, `isAuthor` props
+    - Render toggle only when `isAuthor` is true
+    - Call updateDeckVisibilityAction on toggle
+    - Show loading state during update
+    - _Requirements: 5.1, 5.4_
+  - [x] 5.3 Write property test for author-conditional toggle
+    - **Property 4: Author-conditional Visibility toggle**
+    - Test that toggle visible iff user.id === deck.author_id
+    - **Validates: Requirements 5.1, 5.4**
+  - [x] 5.4 Integrate VisibilityToggle into deck detail page
+    - Add VisibilityToggle to deck settings area
+    - Pass isAuthor prop based on user.id vs deck.author_id
+    - _Requirements: 5.1_
+  - [x] 5.5 Update library filtering for visibility
+    - Modify library browse query to filter private decks
+    - Show private decks only to their authors
+    - _Requirements: 5.2, 5.3_
+  - [x] 5.6 Write property test for private deck filtering
+    - **Property 5: Private deck filtering**
+    - Test that private decks hidden from non-authors in library
+    - **Validates: Requirements 5.2, 5.3**
+
+- [x] 6. Final Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.

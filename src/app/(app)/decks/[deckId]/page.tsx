@@ -9,7 +9,8 @@ import { CleanDuplicatesButton } from '@/components/decks/CleanDuplicatesButton'
 import { EditableDeckTitle } from '@/components/decks/EditableDeckTitle'
 import { EditableDeckSubject } from '@/components/decks/EditableDeckSubject'
 import { ManageTagsButton } from '@/components/decks/ManageTagsButton'
-import type { Card, Tag } from '@/types/database'
+import { VisibilityToggle } from '@/components/decks/VisibilityToggle'
+import type { Card, Tag, DeckVisibility } from '@/types/database'
 
 // Type for card template with nested tags from Supabase join
 // V9: Added category field to tags
@@ -224,6 +225,16 @@ export default async function DeckDetailsPage({ params }: DeckDetailsPageProps) 
             deckId={deckId} 
             initialSubject={deckTemplate.subject || 'Obstetrics & Gynecology'} 
           />
+        )}
+        {/* V10.4: Visibility toggle for authors */}
+        {isAuthor && (
+          <div className="mt-4">
+            <VisibilityToggle
+              deckId={deckId}
+              currentVisibility={(deckTemplate.visibility || 'private') as DeckVisibility}
+              isAuthor={isAuthor}
+            />
+          </div>
         )}
       </div>
 

@@ -6,6 +6,7 @@ import {
   isLowConfidence,
   formatDayName,
   findWeakestTopic,
+  deriveSubjectFromDecks,
 } from '@/lib/analytics-utils'
 import type {
   TopicAccuracy,
@@ -44,7 +45,7 @@ export async function getUserAnalytics(): Promise<AnalyticsResult> {
   try {
     const { data: userDecks, error: userDecksError } = await supabase
       .from('user_decks')
-      .select('deck_template_id, deck_templates!inner(id, title)')
+      .select(`deck_template_id, deck_templates!inner(id, title)`)
       .eq('user_id', user.id)
       .eq('is_active', true)
 
@@ -58,6 +59,7 @@ export async function getUserAnalytics(): Promise<AnalyticsResult> {
       }
     }
 
+
     const deckTemplateIds = userDecks?.map(d => d.deck_template_id) || []
 
     if (deckTemplateIds.length === 0) {
@@ -69,7 +71,7 @@ export async function getUserAnalytics(): Promise<AnalyticsResult> {
       }
     }
 
-    const selectQuery = 'correct_count, total_attempts, card_template_id, card_templates!inner(id, deck_template_id, card_template_tags(tags!inner(id, name, color, category)))'
+    const selectQuery = `correct_count, total_attempts, card_template_id, card_templates!inner(id, deck_template_id, card_template_tags(tags!inner(id, name, color, category)))`
     const { data: progressData, error: progressError } = await supabase
       .from('user_card_progress')
       .select(selectQuery)
@@ -121,6 +123,7 @@ export async function getUserAnalytics(): Promise<AnalyticsResult> {
         existing.totalCards = count || 0
       }
     }
+
 
     for (const progress of progressData || []) {
       const cardTemplate = progress.card_templates as unknown as {
@@ -197,6 +200,7 @@ export async function getUserAnalytics(): Promise<AnalyticsResult> {
   }
 }
 
+
 export async function getActivityData(days: number = 7): Promise<ActivityResult> {
   const user = await getUser()
   if (!user) {
@@ -258,6 +262,68 @@ export async function getActivityData(days: number = 7): Promise<ActivityResult>
       success: false,
       activity: [],
       error: 'Failed to fetch activity data',
+    }
+  }
+}
+
+
+export interface SubjectResult {
+  success: boolean
+  subject: string
+  error?: string
+}
+
+/**
+ * Gets the user's current subject from their first active deck.
+ * Returns "OBGYN" as default if no decks found.
+ * 
+ * Requirements: 2.2, 2.3
+ */
+export async function getUserSubject(): Promise<SubjectResult> {
+  const user = await getUser()
+  if (!user) {
+    return {
+      success: false,
+      subject: 'OBGYN',
+      error: 'Authentication required',
+    }
+  }
+
+  const supabase = await createSupabaseServerClient()
+
+  try {
+    const { data: userDecks, error: userDecksError } = await supabase
+      .from('user_decks')
+      .select(`deck_template_id, deck_templates!inner(id, title, subject)`)
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .limit(1)
+
+    if (userDecksError) {
+      return {
+        success: false,
+        subject: 'OBGYN',
+        error: userDecksError.message,
+      }
+    }
+
+    const decks = userDecks?.map(ud => {
+      const deck = ud.deck_templates as unknown as { title: string; subject?: string | null }
+      return { title: deck.title, subject: deck.subject }
+    }) || []
+
+    const subject = deriveSubjectFromDecks(decks)
+
+    return {
+      success: true,
+      subject,
+    }
+  } catch (error) {
+    console.error('getUserSubject error:', error)
+    return {
+      success: false,
+      subject: 'OBGYN',
+      error: 'Failed to fetch subject',
     }
   }
 }

@@ -480,3 +480,75 @@ export async function getDeckSubject(deckId: string): Promise<string> {
 
   return deckTemplate?.subject?.trim() || 'Obstetrics & Gynecology'
 }
+
+
+// ============================================
+// V10.4: Deck Visibility Management
+// ============================================
+
+import type { DeckVisibility } from '@/types/database'
+
+/**
+ * V10.4: Server Action for updating a deck's visibility.
+ * Only the author can change visibility settings.
+ * 
+ * Requirements: 5.1, 5.4, 5.5
+ * 
+ * @param deckId - The deck_template ID to update
+ * @param visibility - The new visibility setting ('private' | 'public')
+ * @returns ActionResult with success/error
+ */
+export async function updateDeckVisibilityAction(
+  deckId: string,
+  visibility: DeckVisibility
+): Promise<ActionResult> {
+  // Validate deck ID format
+  if (!deckId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(deckId)) {
+    return { success: false, error: 'Invalid deck ID' }
+  }
+
+  // Validate visibility value
+  if (visibility !== 'private' && visibility !== 'public') {
+    return { success: false, error: 'Invalid visibility value. Must be "private" or "public"' }
+  }
+
+  const user = await getUser()
+  if (!user) {
+    return { success: false, error: 'Authentication required' }
+  }
+
+  const supabase = await createSupabaseServerClient()
+
+  // Fetch deck to verify author
+  const { data: deckTemplate, error: fetchError } = await supabase
+    .from('deck_templates')
+    .select('id, author_id')
+    .eq('id', deckId)
+    .single()
+
+  if (fetchError || !deckTemplate) {
+    return { success: false, error: 'Deck not found' }
+  }
+
+  // Check user is author - only authors can change visibility
+  if (deckTemplate.author_id !== user.id) {
+    return { success: false, error: 'Only the author can change deck visibility' }
+  }
+
+  // Update the visibility
+  const { error: updateError } = await supabase
+    .from('deck_templates')
+    .update({ visibility })
+    .eq('id', deckId)
+
+  if (updateError) {
+    return { success: false, error: updateError.message }
+  }
+
+  // Revalidate paths
+  revalidatePath(`/decks/${deckId}`)
+  revalidatePath('/library')
+  revalidatePath('/dashboard')
+
+  return { success: true, data: { visibility } }
+}

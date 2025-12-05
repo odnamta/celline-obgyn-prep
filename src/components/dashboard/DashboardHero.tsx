@@ -4,8 +4,9 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
-import { Flame, Play, RotateCcw, Settings } from 'lucide-react'
+import { Flame, Play, RotateCcw, Settings, Library, Plus } from 'lucide-react'
 import { ConfigureSessionModal } from '@/components/study/ConfigureSessionModal'
+import { shouldShowWelcomeMode } from '@/lib/onboarding-utils'
 
 /**
  * Session state stored in localStorage for resume capability.
@@ -60,12 +61,57 @@ export interface DashboardHeroProps {
   currentStreak: number
   hasNewCards: boolean
   userName?: string
+  subscribedDecks?: number  // V10.4: for zero state detection
+  isAdmin?: boolean         // V10.4: for create deck button
+}
+
+/**
+ * Welcome Mode Component - V10.4
+ * Displays when user has no subscribed decks and no cards.
+ * Requirements: 3.1, 3.2, 3.3, 3.4, 3.5
+ */
+function WelcomeMode({ isAdmin }: { isAdmin: boolean }) {
+  return (
+    <div className="text-center py-6">
+      <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+        <Library className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+      </div>
+      
+      <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-2">
+        Welcome to Specialize
+      </h2>
+      <p className="text-slate-600 dark:text-slate-400 mb-6">
+        Let&apos;s find your first study deck.
+      </p>
+      
+      <div className="space-y-3">
+        {/* Primary CTA - Browse Library */}
+        <Link href="/library" className="block">
+          <Button size="lg" className="w-full min-h-[44px]">
+            <Library className="w-5 h-5 mr-2" />
+            Browse Library
+          </Button>
+        </Link>
+        
+        {/* Secondary CTA - Create Deck (Admin only) */}
+        {isAdmin && (
+          <Link href="/decks/new" className="block">
+            <Button variant="secondary" size="lg" className="w-full min-h-[44px]">
+              <Plus className="w-5 h-5 mr-2" />
+              Create my own Deck
+            </Button>
+          </Link>
+        )}
+      </div>
+    </div>
+  )
 }
 
 /**
  * DashboardHero Component - Client Component
  * Displays greeting, study stats, and primary call-to-action.
- * Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 7.2
+ * V10.4: Added Welcome Mode for zero state users.
+ * Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 3.1, 3.2, 3.3, 3.4, 3.5, 7.2
  */
 export function DashboardHero({
   globalDueCount,
@@ -74,6 +120,8 @@ export function DashboardHero({
   currentStreak,
   hasNewCards,
   userName,
+  subscribedDecks = 0,
+  isAdmin = false,
 }: DashboardHeroProps) {
   const [hasUnfinishedSession, setHasUnfinishedSession] = useState(false)
   // V6.3: Custom session modal state
@@ -89,8 +137,21 @@ export function DashboardHero({
   const goalProgress = dailyGoal ? Math.min(completedToday / dailyGoal, 1) : null
   const isGoalComplete = dailyGoal ? completedToday >= dailyGoal : false
 
-  // Determine if we should show empty state
-  const showEmptyState = globalDueCount === 0 && !hasNewCards
+  // V10.4: Check for Welcome Mode (zero state)
+  // Use globalDueCount as proxy for totalCards since we don't have direct card count
+  const showWelcomeMode = shouldShowWelcomeMode(subscribedDecks, globalDueCount)
+
+  // Determine if we should show empty state (existing logic, only when not in welcome mode)
+  const showEmptyState = !showWelcomeMode && globalDueCount === 0 && !hasNewCards
+
+  // V10.4: Show Welcome Mode for new users
+  if (showWelcomeMode) {
+    return (
+      <Card variant="elevated" padding="lg" className="mb-8">
+        <WelcomeMode isAdmin={isAdmin} />
+      </Card>
+    )
+  }
 
   return (
     <Card variant="elevated" padding="lg" className="mb-8">

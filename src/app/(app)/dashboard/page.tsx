@@ -1,18 +1,20 @@
+import { redirect } from 'next/navigation'
 import { createSupabaseServerClient, getUser } from '@/lib/supabase/server'
 import { DashboardHero } from '@/components/dashboard/DashboardHero'
 import { LibrarySection } from '@/components/dashboard/LibrarySection'
 import { StudyHeatmap } from '@/components/dashboard/StudyHeatmap'
 import { RepairButton } from '@/components/dashboard/RepairButton'
 import type { CourseWithProgress } from '@/components/course'
-import { calculateDueCount } from '@/lib/due-count'
-import { getStudyLogs, getUserStats } from '@/actions/stats-actions'
+import { getStudyLogs } from '@/actions/stats-actions'
 import { getGlobalStats } from '@/actions/global-study-actions'
+import { shouldRedirectToLibrary, isUserAdmin, ADMIN_USER_IDS } from '@/lib/onboarding-utils'
 import type { DeckWithDueCount, Course, Lesson, LessonProgress } from '@/types/database'
 
 /**
  * Dashboard Page - React Server Component
  * Displays user's courses and decks with progress.
- * Requirements: 2.2, 6.1, 6.2, 6.4
+ * V10.4: Added redirect logic for zero-deck users.
+ * Requirements: 2.2, 4.1, 4.2, 6.1, 6.2, 6.4
  */
 export default async function DashboardPage() {
   const user = await getUser()
@@ -126,6 +128,15 @@ export default async function DashboardPage() {
     )
   }
 
+  // V10.4: Redirect to library if user has no subscribed decks
+  const subscribedDecksCount = userDecks?.length || 0
+  if (shouldRedirectToLibrary(subscribedDecksCount)) {
+    redirect('/library')
+  }
+
+  // V10.4: Check if user is admin
+  const userIsAdmin = isUserAdmin(user.id, ADMIN_USER_IDS)
+
   // Get deck template IDs for due count calculation
   const deckTemplateIds = (userDecks || []).map(ud => ud.deck_template_id)
   
@@ -182,7 +193,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      {/* Dashboard Hero - First element (Requirements 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 3.5) */}
+      {/* Dashboard Hero - First element (Requirements 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 3.1-3.5) */}
       <DashboardHero
         globalDueCount={globalStats.totalDueCount}
         completedToday={globalStats.completedToday}
@@ -190,6 +201,8 @@ export default async function DashboardPage() {
         currentStreak={globalStats.currentStreak}
         hasNewCards={globalStats.hasNewCards}
         userName={user.user_metadata?.name || user.email?.split('@')[0]}
+        subscribedDecks={subscribedDecksCount}
+        isAdmin={userIsAdmin}
       />
 
       {/* V8.1: Repair Button - Shows if user has cards without progress */}
