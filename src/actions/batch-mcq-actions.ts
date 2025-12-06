@@ -464,6 +464,7 @@ export async function bulkCreateMCQV2(input: BulkCreateV2Input): Promise<BulkCre
     // Step 3: Insert card_templates
     const cardTemplateRows = cards.map((card) => ({
       deck_template_id: deckTemplateId,
+      author_id: user.id,
       stem: card.stem,
       options: card.options,
       correct_index: card.correctIndex,
