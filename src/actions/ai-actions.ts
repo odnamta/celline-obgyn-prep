@@ -47,13 +47,62 @@ If NO question is visible, say so instead of inventing one.`
 const DEFAULT_SUBJECT = 'Obstetrics & Gynecology'
 
 /**
+ * V11.2.1: Hard ban on meta-language patterns in Extract mode
+ * These patterns indicate AI is generating comprehension questions instead of copying real MCQs
+ */
+const EXTRACT_META_BAN = `
+HARD BAN - DO NOT PRODUCE THESE PATTERNS:
+- Questions about "page X", "section Y", "chapter Z"
+- Questions like "What is the main topic of..."
+- Questions like "What does this passage discuss..."
+- Questions like "According to page X..."
+- Questions about document structure, headings, or organization
+- Comprehension questions about what the text "covers" or "explains"
+
+If you cannot find a real exam-style MCQ in the text, return an empty response rather than inventing meta-questions.`
+
+/**
+ * V11.2.1: Positive example of properly extracted MCQ
+ */
+const EXTRACT_POSITIVE_EXAMPLE = `
+CORRECT EXAMPLE (properly extracted Lange/Williams-style MCQ):
+{
+  "stem": "A 32-year-old G2P1 at 28 weeks presents with painless vaginal bleeding. Ultrasound shows a placenta covering the internal os. What is the most appropriate next step?",
+  "options": ["Immediate cesarean delivery", "Expectant management with bed rest", "Amniocentesis", "Vaginal examination"],
+  "correct_index": 1,
+  "explanation": "Placenta previa is managed expectantly if the patient is stable and preterm.",
+  "tags": ["PlacentaPrevia", "AntepartumHemorrhage"]
+}`
+
+/**
+ * V11.2.1: Negative example of meta-question to avoid
+ */
+const EXTRACT_NEGATIVE_EXAMPLE = `
+WRONG EXAMPLE (meta-question - DO NOT PRODUCE):
+{
+  "stem": "What is the main topic discussed on page 5?",
+  "options": ["Placenta previa", "Preeclampsia", "Gestational diabetes", "Preterm labor"],
+  "correct_index": 0,
+  "explanation": "Page 5 covers placenta previa.",
+  "tags": ["Chapter1"]
+}
+This is WRONG because it's a comprehension question about the document, not a real exam MCQ.`
+
+/**
  * V9.1: Build system prompt for EXTRACT mode with dynamic subject.
  * V6.2: Extracts existing MCQs verbatim from Q&A text.
  * V6.6: Added tags field and Vision priority
+ * V11.2.1: Hardened prompt to prevent meta-questions - COPY ONLY, no generation
  */
 function buildExtractSystemPrompt(subject: string = DEFAULT_SUBJECT): string {
   return `You are a medical board exam expert specializing in ${subject}.
-Your task is to EXTRACT an existing multiple-choice question from the provided text.
+Your task is to COPY existing exam-style multiple-choice questions from the provided text.
+
+CRITICAL: You are in EXTRACT mode. Your job is to COPY, not CREATE.
+- Only extract questions that ALREADY EXIST in the text with numbered stems (1., 2., 3.) and options (A-E or similar)
+- The text likely comes from a Q&A book like Lange or Williams - find and copy the real MCQs
+- Do NOT create new questions
+- Do NOT write comprehension questions about the text itself
 
 Return valid JSON with these exact fields:
 - stem: The question text (extracted verbatim, fix obvious OCR spacing only)
@@ -63,11 +112,14 @@ Return valid JSON with these exact fields:
 ${TAG_GENERATION_INSTRUCTION}
 
 EXTRACTION RULES:
-- Identify any existing multiple-choice question already present in the selected text.
-- Extract the question stem and options VERBATIM (fix obvious OCR spacing only).
-- Do NOT create new questions or add options that aren't clearly present in the text.
-- If the text contains a question with fewer than 5 options, extract only the options present.
-- If no clear MCQ is found, return the closest question-like content.
+- Look for existing MCQs with numbered question stems and lettered options (A, B, C, D, E)
+- Extract the question stem and options VERBATIM (fix obvious OCR spacing only)
+- Do NOT create new questions or add options that aren't clearly present in the text
+- If the text contains a question with fewer than 5 options, extract only the options present
+- If no clear MCQ is found, return {"stem": "", "options": [], "correct_index": 0, "explanation": "", "tags": []}
+${EXTRACT_META_BAN}
+${EXTRACT_POSITIVE_EXAMPLE}
+${EXTRACT_NEGATIVE_EXAMPLE}
 ${VISION_PRIORITY_INSTRUCTION}
 ${DATA_INTEGRITY_RULES}`
 }

@@ -879,6 +879,7 @@ export default function BulkImportClient({ deckId, subject = 'Obstetrics & Gynec
       </div>
 
       {/* V11.3: Session Panel for draft/publish workflow */}
+      {/* V11.2.1: Pass deckId for fallback navigation to draft view */}
       {!importSession.isLoading && importSession.sessionId && (
         <div className="mb-6">
           <SessionPanel
@@ -886,6 +887,7 @@ export default function BulkImportClient({ deckId, subject = 'Obstetrics & Gynec
             draftCount={importSession.draftCount}
             detectedNumbers={[]}
             savedNumbers={importSession.questionNumbers}
+            deckId={deckId}
           />
         </div>
       )}

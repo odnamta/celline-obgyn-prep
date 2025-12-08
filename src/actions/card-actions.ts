@@ -639,3 +639,155 @@ export async function removeDuplicateCards(deckId: string): Promise<Deduplicatio
 
   return { ok: true, deletedCount: toDelete.length }
 }
+
+// ============================================
+// V11.4: Bulk Publish Support
+// ============================================
+
+import type { StatusFilter } from '@/components/cards/StatusFilterChips'
+
+export interface BulkPublishInput {
+  cardIds?: string[]
+  filterDescriptor?: {
+    deckId: string
+    status: StatusFilter
+    tagIds?: string[]
+  }
+}
+
+export interface BulkPublishResult {
+  ok: boolean
+  count?: number
+  error?: string
+}
+
+/**
+ * V11.4: Server Action for bulk publishing cards.
+ * Only updates cards where current status='draft' to status='published'.
+ * Accepts either explicit card IDs or a filter descriptor.
+ * Requirements: 3.2, 3.3, 3.4
+ */
+export async function bulkPublishCards(input: BulkPublishInput): Promise<BulkPublishResult> {
+  const user = await getUser()
+  if (!user) {
+    return { ok: false, error: 'Authentication required' }
+  }
+
+  const supabase = await createSupabaseServerClient()
+
+  let cardIdsToPublish: string[] = []
+  let deckId: string | null = null
+
+  if (input.cardIds && input.cardIds.length > 0) {
+    // Explicit card IDs provided
+    cardIdsToPublish = input.cardIds
+
+    // Verify ownership of all cards
+    const { data: cardTemplates, error: fetchError } = await supabase
+      .from('card_templates')
+      .select('id, deck_template_id, status, deck_templates!inner(author_id)')
+      .in('id', cardIdsToPublish)
+
+    if (fetchError || !cardTemplates) {
+      return { ok: false, error: 'Could not verify card ownership' }
+    }
+
+    // Check all cards belong to user
+    const unauthorized = cardTemplates.some((ct) => {
+      const deckData = ct.deck_templates as unknown as { author_id: string }
+      return deckData.author_id !== user.id
+    })
+
+    if (unauthorized) {
+      return { ok: false, error: 'Access denied to one or more cards' }
+    }
+
+    // Filter to only draft cards
+    cardIdsToPublish = cardTemplates
+      .filter(ct => ct.status === 'draft')
+      .map(ct => ct.id)
+
+    if (cardIdsToPublish.length === 0) {
+      return { ok: true, count: 0 }
+    }
+
+    deckId = cardTemplates[0]?.deck_template_id || null
+
+  } else if (input.filterDescriptor) {
+    // Filter descriptor provided - fetch matching cards
+    const { deckId: filterDeckId, status, tagIds } = input.filterDescriptor
+    deckId = filterDeckId
+
+    // Verify user owns the deck
+    const { data: deckTemplate, error: deckError } = await supabase
+      .from('deck_templates')
+      .select('id, author_id')
+      .eq('id', filterDeckId)
+      .single()
+
+    if (deckError || !deckTemplate) {
+      return { ok: false, error: 'Deck not found' }
+    }
+
+    if (deckTemplate.author_id !== user.id) {
+      return { ok: false, error: 'Access denied' }
+    }
+
+    // Build query for draft cards in this deck
+    let query = supabase
+      .from('card_templates')
+      .select('id')
+      .eq('deck_template_id', filterDeckId)
+      .eq('status', 'draft')
+
+    // If tag filter is provided, we need to join with card_template_tags
+    // For simplicity, we'll fetch all draft cards and filter by tags if needed
+    const { data: draftCards, error: cardsError } = await query
+
+    if (cardsError || !draftCards) {
+      return { ok: false, error: 'Could not fetch cards' }
+    }
+
+    cardIdsToPublish = draftCards.map(c => c.id)
+
+    // If tag filter is provided, filter further
+    if (tagIds && tagIds.length > 0) {
+      const { data: taggedCards, error: tagError } = await supabase
+        .from('card_template_tags')
+        .select('card_template_id')
+        .in('card_template_id', cardIdsToPublish)
+        .in('tag_id', tagIds)
+
+      if (tagError) {
+        return { ok: false, error: 'Could not filter by tags' }
+      }
+
+      const taggedCardIds = new Set(taggedCards?.map(tc => tc.card_template_id) || [])
+      cardIdsToPublish = cardIdsToPublish.filter(id => taggedCardIds.has(id))
+    }
+
+    if (cardIdsToPublish.length === 0) {
+      return { ok: true, count: 0 }
+    }
+
+  } else {
+    return { ok: false, error: 'No cards specified' }
+  }
+
+  // Update status to published
+  const { error: updateError } = await supabase
+    .from('card_templates')
+    .update({ status: 'published', updated_at: new Date().toISOString() })
+    .in('id', cardIdsToPublish)
+
+  if (updateError) {
+    return { ok: false, error: updateError.message }
+  }
+
+  // Revalidate deck page
+  if (deckId) {
+    revalidatePath(`/decks/${deckId}`)
+  }
+
+  return { ok: true, count: cardIdsToPublish.length }
+}

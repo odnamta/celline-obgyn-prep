@@ -45,7 +45,50 @@ If the text references a Figure (e.g., "Figure 19-1", "See diagram", "as shown b
 const DEFAULT_SUBJECT = 'Obstetrics & Gynecology'
 
 /**
+ * V11.2.1: Hard ban on meta-language patterns in Extract mode
+ * These patterns indicate AI is generating comprehension questions instead of copying real MCQs
+ */
+const EXTRACT_META_BAN = `
+HARD BAN - DO NOT PRODUCE THESE PATTERNS:
+- Questions about "page X", "section Y", "chapter Z"
+- Questions like "What is the main topic of..."
+- Questions like "What does this passage discuss..."
+- Questions like "According to page X..."
+- Questions about document structure, headings, or organization
+- Comprehension questions about what the text "covers" or "explains"
+
+If you cannot find real exam-style MCQs in the text, return {"questions": []} rather than inventing meta-questions.`
+
+/**
+ * V11.2.1: Positive example of properly extracted MCQ
+ */
+const EXTRACT_POSITIVE_EXAMPLE = `
+CORRECT EXAMPLE (properly extracted Lange/Williams-style MCQ):
+{
+  "stem": "A 32-year-old G2P1 at 28 weeks presents with painless vaginal bleeding. Ultrasound shows a placenta covering the internal os. What is the most appropriate next step?",
+  "options": ["Immediate cesarean delivery", "Expectant management with bed rest", "Amniocentesis", "Vaginal examination"],
+  "correctIndex": 1,
+  "explanation": "Placenta previa is managed expectantly if the patient is stable and preterm.",
+  "tags": ["PlacentaPrevia", "AntepartumHemorrhage"]
+}`
+
+/**
+ * V11.2.1: Negative example of meta-question to avoid
+ */
+const EXTRACT_NEGATIVE_EXAMPLE = `
+WRONG EXAMPLE (meta-question - DO NOT PRODUCE):
+{
+  "stem": "What is the main topic discussed on page 5?",
+  "options": ["Placenta previa", "Preeclampsia", "Gestational diabetes", "Preterm labor"],
+  "correctIndex": 0,
+  "explanation": "Page 5 covers placenta previa.",
+  "tags": ["Chapter1"]
+}
+This is WRONG because it's a comprehension question about the document, not a real exam MCQ from the source.`
+
+/**
  * V9/V9.1: Build system prompt with Golden List topics and dynamic subject
+ * V11.2.1: Hardened prompt to prevent meta-questions - COPY ONLY, no generation
  */
 function buildBatchExtractPrompt(goldenTopics: string[], subject: string = DEFAULT_SUBJECT): string {
   const topicList = goldenTopics.length > 0 
@@ -53,7 +96,13 @@ function buildBatchExtractPrompt(goldenTopics: string[], subject: string = DEFAU
     : 'Anatomy, Endocrinology, Infections, Oncology, MaternalFetal, Obstetrics, Gynecology'
   
   return `You are a medical board exam expert specializing in ${subject}.
-Your task is to EXTRACT existing multiple-choice questions from the provided text.
+Your task is to COPY existing exam-style multiple-choice questions from the provided text.
+
+CRITICAL: You are in EXTRACT mode. Your job is to COPY, not CREATE.
+- Only extract questions that ALREADY EXIST in the text with numbered stems (1., 2., 3.) and options (A-E or similar)
+- The text likely comes from a Q&A book like Lange or Williams - find and copy the real MCQs
+- Do NOT create new questions
+- Do NOT write comprehension questions about the text itself
 
 Return a JSON object with a "questions" array containing ALL MCQs found.
 Each MCQ must have:
@@ -62,11 +111,20 @@ Each MCQ must have:
 - correctIndex: Index of correct answer (0-based, 0-4)
 - explanation: The explanation from the source, or a brief teaching point if none provided
 - topic: EXACTLY ONE official topic from this list: [${topicList}]
-- tags: Array of 1-2 specific CONCEPT tags in PascalCase (e.g., "Preeclampsia", "GestationalDiabetes") - REQUIRED`
+- tags: Array of 1-2 specific CONCEPT tags in PascalCase (e.g., "Preeclampsia", "GestationalDiabetes") - REQUIRED
+${EXTRACT_META_BAN}
+${EXTRACT_POSITIVE_EXAMPLE}
+${EXTRACT_NEGATIVE_EXAMPLE}`
 }
 
 const BATCH_EXTRACT_SYSTEM_PROMPT = `You are a medical board exam expert specializing in obstetrics and gynecology.
-Your task is to EXTRACT existing multiple-choice questions from the provided text.
+Your task is to COPY existing exam-style multiple-choice questions from the provided text.
+
+CRITICAL: You are in EXTRACT mode. Your job is to COPY, not CREATE.
+- Only extract questions that ALREADY EXIST in the text with numbered stems (1., 2., 3.) and options (A-E or similar)
+- The text likely comes from a Q&A book like Lange or Williams - find and copy the real MCQs
+- Do NOT create new questions
+- Do NOT write comprehension questions about the text itself
 
 Return a JSON object with a "questions" array containing ALL MCQs found.
 Each MCQ must have:
@@ -84,11 +142,19 @@ FORENSIC MODE - THOROUGHNESS REQUIREMENTS:
 - Preserve the original ordering of questions as they appear in the source text
 
 EXTRACTION RULES:
-- Identify any existing multiple-choice questions already present in the selected text.
-- Extract the question stems and options VERBATIM (fix obvious OCR spacing only).
-- Do NOT create new questions or add options that aren't clearly present in the text.
-- If the text contains questions with fewer than 5 options, that's fine (2-5 options allowed).
-- If no clear MCQs are found, return {"questions": []}.
+- Look for existing MCQs with numbered question stems and lettered options (A, B, C, D, E)
+- Extract the question stems and options VERBATIM (fix obvious OCR spacing only)
+- Do NOT create new questions or add options that aren't clearly present in the text
+- If the text contains questions with fewer than 5 options, that's fine (2-5 options allowed)
+- If no clear MCQs are found, return {"questions": []}
+
+HARD BAN - DO NOT PRODUCE THESE PATTERNS:
+- Questions about "page X", "section Y", "chapter Z"
+- Questions like "What is the main topic of..."
+- Questions like "What does this passage discuss..."
+- Questions like "According to page X..."
+- Questions about document structure, headings, or organization
+- Comprehension questions about what the text "covers" or "explains"
 
 COMPLEX FORMAT FLAGGING (V8.6):
 - If a question has a complex format (matching questions, linked/sequential questions, tables, diagrams, or multi-part questions), add "NeedsReview" to the tags array.

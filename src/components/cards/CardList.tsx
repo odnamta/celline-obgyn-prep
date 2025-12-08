@@ -1,16 +1,19 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useMemo, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { CardListItem } from './CardListItem'
 import { BulkActionsBar } from './BulkActionsBar'
 import { BulkTagModal } from './BulkTagModal'
 import { DeckSelector } from './DeckSelector'
+import { StatusFilterChips, getDefaultStatusFilter, type StatusFilter } from './StatusFilterChips'
+import { PublishAllConfirmDialog } from './PublishAllConfirmDialog'
+import { CardEditorPanel } from './CardEditorPanel'
 import { FilterBar } from '@/components/tags/FilterBar'
 import { TagSelector } from '@/components/tags/TagSelector'
 import { AutoTagProgressModal } from '@/components/tags/AutoTagProgressModal'
-import { deleteCard, duplicateCard, bulkDeleteCards, bulkMoveCards, getAllCardIdsInDeck } from '@/actions/card-actions'
+import { deleteCard, duplicateCard, bulkDeleteCards, bulkMoveCards, getAllCardIdsInDeck, bulkPublishCards } from '@/actions/card-actions'
 import { useAutoTag } from '@/hooks/use-auto-tag'
 import { useToast } from '@/components/ui/Toast'
 import type { Card, Tag } from '@/types/database'
@@ -60,9 +63,37 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
   const [showAutoTagModal, setShowAutoTagModal] = useState(false)
   // V11.1: Source filter state
   const [filterSourceIds, setFilterSourceIds] = useState<string[]>([])
-  // V11.3: Show drafts toggle for authors
-  const [showDrafts, setShowDrafts] = useState(false)
-
+  // V11.4: Status filter state (replaces V11.3 showDrafts toggle)
+  const searchParams = useSearchParams()
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  // V11.4: Publish all confirmation dialog
+  const [showPublishAllDialog, setShowPublishAllDialog] = useState(false)
+  const [isPublishing, setIsPublishing] = useState(false)
+  // V11.4: isAllSelected flag for smart select-all
+  const [isAllSelected, setIsAllSelected] = useState(false)
+  // V11.4: CardEditorPanel state
+  const [showEditorPanel, setShowEditorPanel] = useState(false)
+  const [editingCardIndex, setEditingCardIndex] = useState(0)
+  
+  // V11.4: Calculate counts for status filter chips
+  const draftCount = useMemo(() => {
+    return cards.filter(card => card.status === 'draft').length
+  }, [cards])
+  
+  const publishedCount = useMemo(() => {
+    return cards.filter(card => !card.status || card.status === 'published').length
+  }, [cards])
+  
+  // V11.4: Initialize status filter based on draft count and URL params
+  useEffect(() => {
+    const showDraftsParam = searchParams.get('showDrafts')
+    if (showDraftsParam === 'true') {
+      setStatusFilter('draft')
+    } else {
+      setStatusFilter(getDefaultStatusFilter(draftCount))
+    }
+  }, [searchParams, draftCount])
+  
   // V9.3: useAutoTag hook for chunked processing with progress
   const autoTag = useAutoTag({
     onComplete: (totalTagged, totalSkipped) => {
@@ -95,16 +126,6 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
     return cards.filter(card => !card.tags || card.tags.length === 0).length
   }, [cards])
 
-  // V11.3: Count draft cards
-  const draftCount = useMemo(() => {
-    return cards.filter(card => card.status === 'draft').length
-  }, [cards])
-
-  // V11.3: Count archived cards
-  const archivedCount = useMemo(() => {
-    return cards.filter(card => card.status === 'archived').length
-  }, [cards])
-
   // V11.1: Extract distinct book_sources from cards for source filter
   const availableSources = useMemo(() => {
     const sourceMap = new Map<string, { id: string; title: string }>()
@@ -120,18 +141,22 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
   // V8.6: Also filter by NeedsReview if toggle is on
   // V9.2: Also filter by untagged if toggle is on
   // V11.1: Also filter by source (AND logic with tags)
-  // V11.3: Filter by status (default to published only, show drafts if toggled)
+  // V11.4: Filter by status using StatusFilterChips
   const filteredCards = useMemo(() => {
     let result = cards
     
-    // V11.3: Apply status filter first (authors can toggle to see drafts)
-    // Default: show only published cards
-    // When showDrafts is true: show published AND draft cards (not archived)
-    if (!showDrafts) {
-      result = result.filter(card => !card.status || card.status === 'published')
-    } else {
-      // Show published and draft, but not archived
-      result = result.filter(card => !card.status || card.status === 'published' || card.status === 'draft')
+    // V11.4: Apply status filter first
+    switch (statusFilter) {
+      case 'draft':
+        result = result.filter(card => card.status === 'draft')
+        break
+      case 'published':
+        result = result.filter(card => !card.status || card.status === 'published')
+        break
+      case 'all':
+        // Show draft and published, but not archived
+        result = result.filter(card => !card.status || card.status === 'published' || card.status === 'draft')
+        break
     }
     
     // V9.2: Apply untagged filter first (mutually exclusive with tag filter)
@@ -161,7 +186,25 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
     }
     
     return result
-  }, [cards, filterTagIds, filterSourceIds, showNeedsReviewOnly, showUntaggedOnly, showDrafts])
+  }, [cards, filterTagIds, filterSourceIds, showNeedsReviewOnly, showUntaggedOnly, statusFilter])
+  
+  // V11.4: Reset selection when status filter changes
+  useEffect(() => {
+    setSelectedIds(new Set())
+    setIsAllSelected(false)
+  }, [statusFilter])
+  
+  // V11.4: Open editor panel from URL param
+  useEffect(() => {
+    const editCardParam = searchParams.get('editCard')
+    if (editCardParam && filteredCards.length > 0) {
+      const index = filteredCards.findIndex(c => c.id === editCardParam)
+      if (index >= 0) {
+        setEditingCardIndex(index)
+        setShowEditorPanel(true)
+      }
+    }
+  }, [searchParams, filteredCards])
 
   // Selection handlers
   const toggleSelection = (id: string) => {
@@ -298,23 +341,108 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
     )
   }
 
+  // V11.4: Handle bulk publish
+  const handleBulkPublish = async () => {
+    if (selectedIds.size === 0 && !isAllSelected) return
+    
+    setIsPublishing(true)
+    try {
+      const result = isAllSelected
+        ? await bulkPublishCards({ filterDescriptor: { deckId, status: statusFilter, tagIds: filterTagIds.length > 0 ? filterTagIds : undefined } })
+        : await bulkPublishCards({ cardIds: [...selectedIds] })
+      
+      if (result.ok) {
+        showToast(`Published ${result.count} card${result.count !== 1 ? 's' : ''} successfully`, 'success')
+        clearSelection()
+        router.refresh()
+      } else {
+        showToast(result.error || 'Failed to publish cards', 'error')
+      }
+    } catch {
+      showToast('Failed to publish cards', 'error')
+    } finally {
+      setIsPublishing(false)
+    }
+  }
+  
+  // V11.4: Handle publish all drafts
+  const handlePublishAllDrafts = async () => {
+    setIsPublishing(true)
+    try {
+      const result = await bulkPublishCards({ filterDescriptor: { deckId, status: 'draft' } })
+      
+      if (result.ok) {
+        showToast(`Published ${result.count} card${result.count !== 1 ? 's' : ''} successfully`, 'success')
+        setShowPublishAllDialog(false)
+        setStatusFilter('published')
+        router.refresh()
+      } else {
+        showToast(result.error || 'Failed to publish cards', 'error')
+      }
+    } catch {
+      showToast('Failed to publish cards', 'error')
+    } finally {
+      setIsPublishing(false)
+    }
+  }
+  
+  // V11.4: Handle opening editor panel
+  const handleOpenEditor = (cardId: string) => {
+    const index = filteredCards.findIndex(c => c.id === cardId)
+    if (index >= 0) {
+      setEditingCardIndex(index)
+      setShowEditorPanel(true)
+      // Update URL with card ID
+      const url = new URL(window.location.href)
+      url.searchParams.set('editCard', cardId)
+      window.history.pushState({}, '', url.toString())
+    }
+  }
+  
+  // V11.4: Handle closing editor panel
+  const handleCloseEditor = () => {
+    setShowEditorPanel(false)
+    // Remove editCard from URL
+    const url = new URL(window.location.href)
+    url.searchParams.delete('editCard')
+    window.history.pushState({}, '', url.toString())
+  }
+  
+  // V11.4: Handle editor panel navigation
+  const handleEditorNavigate = (direction: 'prev' | 'next') => {
+    const newIndex = direction === 'prev' 
+      ? Math.max(0, editingCardIndex - 1)
+      : Math.min(filteredCards.length - 1, editingCardIndex + 1)
+    setEditingCardIndex(newIndex)
+    // Update URL with new card ID
+    const newCardId = filteredCards[newIndex]?.id
+    if (newCardId) {
+      const url = new URL(window.location.href)
+      url.searchParams.set('editCard', newCardId)
+      window.history.pushState({}, '', url.toString())
+    }
+  }
+  
+  // V11.4: Get card by ID for editor panel
+  const getCardById = (id: string) => filteredCards.find(c => c.id === id)
+  
+  // V11.4: Handle editor save success
+  const handleEditorSaveSuccess = () => {
+    router.refresh()
+  }
+
   return (
     <>
-      {/* V11.3: Show Drafts toggle for authors */}
-      {isAuthor && draftCount > 0 && (
-        <div className="mb-4">
-          <button
-            onClick={() => setShowDrafts(!showDrafts)}
-            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              showDrafts
-                ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
-                : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-blue-400" />
-            {showDrafts ? 'Showing' : 'Show'} draft cards ({draftCount})
-          </button>
-        </div>
+      {/* V11.4: Status filter chips for authors */}
+      {isAuthor && (draftCount > 0 || publishedCount > 0) && (
+        <StatusFilterChips
+          draftCount={draftCount}
+          publishedCount={publishedCount}
+          activeFilter={statusFilter}
+          onFilterChange={setStatusFilter}
+          onPublishAllDrafts={() => setShowPublishAllDialog(true)}
+          isAuthor={isAuthor}
+        />
       )}
 
       {/* V8.6: NeedsReview filter toggle */}
@@ -372,6 +500,9 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
           onAutoTag={handleAutoTag}
           isAutoTagging={autoTag.isTagging}
           onClearSelection={clearSelection}
+          onPublish={handleBulkPublish}
+          showPublish={statusFilter !== 'published' && (selectedIds.size > 0 || isAllSelected)}
+          isPublishing={isPublishing}
         />
       )}
 
@@ -438,6 +569,7 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
             isSelected={selectedIds.has(card.id)}
             onToggleSelect={isAuthor ? toggleSelection : undefined}
             isAuthor={isAuthor}
+            onEdit={isAuthor ? handleOpenEditor : undefined}
           />
         ))}
       </div>
@@ -470,6 +602,28 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
         error={autoTag.error}
         onCancel={autoTag.cancel}
         onClose={handleAutoTagModalClose}
+      />
+
+      {/* V11.4: Publish all confirmation dialog */}
+      <PublishAllConfirmDialog
+        isOpen={showPublishAllDialog}
+        onClose={() => setShowPublishAllDialog(false)}
+        onConfirm={handlePublishAllDrafts}
+        draftCount={draftCount}
+        isPublishing={isPublishing}
+      />
+
+      {/* V11.4: Card editor panel */}
+      <CardEditorPanel
+        isOpen={showEditorPanel}
+        onClose={handleCloseEditor}
+        card={filteredCards[editingCardIndex] || null}
+        cardIds={filteredCards.map(c => c.id)}
+        currentIndex={editingCardIndex}
+        onNavigate={handleEditorNavigate}
+        onSaveSuccess={handleEditorSaveSuccess}
+        deckId={deckId}
+        getCardById={getCardById}
       />
     </>
   )

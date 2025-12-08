@@ -1,0 +1,162 @@
+# Implementation Plan
+
+- [x] 1. Create StatusFilterChips component
+  - [x] 1.1 Create StatusFilterChips component
+    - Create `src/components/cards/StatusFilterChips.tsx`
+    - Display three chips: "Draft (X)", "Published (Y)", "All" with counts
+    - Highlight active filter chip with distinct styling
+    - Show "Publish all draft cards" button when Draft filter is active and draftCount > 0
+    - _Requirements: 1.1, 4.1_
+  - [x] 1.2 Write property test for status counts accuracy
+    - **Property 1: Status counts are accurate**
+    - **Validates: Requirements 1.1**
+  - [x] 1.3 Write property test for default filter logic
+    - **Property 2: Default filter based on draft count**
+    - **Validates: Requirements 1.2, 1.3**
+
+- [x] 2. Integrate status filtering into CardList
+  - [x] 2.1 Add status filter state and logic to CardList
+    - Add `statusFilter` state with default based on draft count
+    - Filter cards by status in `filteredCards` memo
+    - Calculate draft/published counts from full card list
+    - Pass counts and filter state to StatusFilterChips
+    - _Requirements: 1.2, 1.3, 1.4, 1.5, 1.6, 1.7_
+  - [x] 2.2 Write property test for filter correctness
+    - **Property 3: Filter produces correct card subset**
+    - **Validates: Requirements 1.4, 1.5, 1.6, 1.7**
+  - [x] 2.3 Add status badge to CardListItem
+    - Display small badge showing "Draft" (blue) or "Published" (green/none)
+    - Position badge near card content without cluttering
+    - _Requirements: 9.1, 9.2, 9.3_
+  - [x] 2.4 Write property test for badge styling
+    - **Property 12: Badge styling matches status**
+    - **Validates: Requirements 9.1, 9.2, 9.3**
+
+- [x] 3. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 4. Implement smart select-all
+  - [x] 4.1 Add isAllSelected state and prompt logic
+    - Add `isAllSelected` state to CardList
+    - When "Select all" clicked and totalCards > visibleCards, show inline prompt
+    - On confirm, set isAllSelected=true instead of selecting individual IDs
+    - _Requirements: 2.1, 2.2, 2.3_
+  - [x] 4.2 Write property test for smart select-all prompt
+    - **Property 4: Smart select-all prompt appears when needed**
+    - **Validates: Requirements 2.2**
+  - [x] 4.3 Reset selection on filter change
+    - Clear selectedIds and set isAllSelected=false when statusFilter changes
+    - _Requirements: 2.5_
+  - [x] 4.4 Write property test for selection reset
+    - **Property 6: Selection resets on filter change**
+    - **Validates: Requirements 2.5**
+
+- [x] 5. Implement bulk publish server action
+  - [x] 5.1 Create bulkPublishCards server action
+    - Create action in `src/actions/card-actions.ts`
+    - Accept either explicit card IDs or filter descriptor
+    - Only update cards where status='draft' to status='published'
+    - Verify ownership via deck_template author_id
+    - Revalidate deck page after success
+    - _Requirements: 3.2, 3.3, 3.4_
+  - [x] 5.2 Write property test for bulk publish draft-only
+    - **Property 7: Bulk publish only affects draft cards**
+    - **Validates: Requirements 3.2, 3.3, 3.4**
+  - [x] 5.3 Add Publish Selected to BulkActionsBar
+    - Add `onPublish` prop and "Publish Selected" button
+    - Show button when current filter includes draft cards
+    - Pass filter descriptor when isAllSelected=true, else pass card IDs
+    - Display toast on success: "Published X cards successfully"
+    - _Requirements: 3.1, 3.5, 3.6, 2.4_
+  - [x] 5.4 Write property test for filter descriptor
+    - **Property 5: Filter descriptor passed when isAllSelected**
+    - **Validates: Requirements 2.4**
+
+- [x] 6. Implement publish-all shortcut
+  - [x] 6.1 Create PublishAllConfirmDialog component
+    - Create `src/components/cards/PublishAllConfirmDialog.tsx`
+    - Show confirmation: "Publish all {X} draft cards in this deck?"
+    - Include cancel and confirm buttons with loading state
+    - _Requirements: 4.2_
+  - [x] 6.2 Wire up publish-all flow
+    - On "Publish all draft cards" click, open PublishAllConfirmDialog
+    - On confirm, call bulkPublishCards with filter descriptor for all drafts
+    - After success, switch active filter to "Published" or "All"
+    - _Requirements: 4.3, 4.4_
+  - [x] 6.3 Write property test for publish-all completeness
+    - **Property 8: Publish-all updates all drafts in deck**
+    - **Validates: Requirements 4.3**
+
+- [x] 7. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 8. Create CardEditorPanel component
+  - [x] 8.1 Create CardEditorPanel slide-over component
+    - Create `src/components/cards/CardEditorPanel.tsx`
+    - Implement slide-over drawer from right side
+    - Display navigation header: Previous, "Card X of Y", Next, Close
+    - Include EditCardForm content optimized for narrow width
+    - Display action buttons: Save, Save & Next (primary)
+    - _Requirements: 5.1, 5.2, 6.1, 6.2_
+  - [x] 8.2 Implement panel state management
+    - Maintain ordered list of card IDs from current filter
+    - Track current index in the list
+    - Update card data when navigating
+    - _Requirements: 5.3_
+  - [x] 8.3 Write property test for panel card list state
+    - **Property 9: Panel maintains card list state**
+    - **Validates: Requirements 5.3**
+
+- [x] 9. Implement Save & Next navigation
+  - [x] 9.1 Implement navigation actions
+    - "Save": Update card, stay on current index
+    - "Save & Next": Update card, increment index (clamp to max)
+    - "Previous": Decrement index without saving (clamp to 0)
+    - "Next": Increment index without saving (clamp to max)
+    - Disable "Save & Next" or show hint when on last card
+    - _Requirements: 6.3, 6.4, 6.5, 6.6, 6.7_
+  - [x] 9.2 Write property test for navigation index updates
+    - **Property 10: Navigation actions update index correctly**
+    - **Validates: Requirements 6.3, 6.4, 6.5, 6.6**
+  - [x] 9.3 Implement keyboard shortcuts
+    - Cmd+Enter (Ctrl+Enter): Trigger Save & Next
+    - Cmd+S (Ctrl+S): Trigger Save (prevent browser default)
+    - Escape: Close panel
+    - _Requirements: 7.1, 7.2, 7.3_
+
+- [x] 10. Implement URL state persistence
+  - [x] 10.1 Sync panel state with URL
+    - Update URL with `?editCard={cardId}` when panel opens
+    - Remove query param when panel closes
+    - On page load, check for editCard param and open panel
+    - _Requirements: 8.1, 8.2_
+  - [x] 10.2 Write property test for URL state sync
+    - **Property 11: URL state syncs with panel**
+    - **Validates: Requirements 8.1, 8.2**
+
+- [x] 11. Integrate CardEditorPanel into deck page
+  - [x] 11.1 Update CardList to open panel instead of navigating
+    - Change Edit button click to open CardEditorPanel
+    - Pass current filtered card IDs and clicked card index
+    - Handle panel close and refresh card list
+    - _Requirements: 5.1_
+  - [x] 11.2 Handle panel navigation edge cases
+    - If card not found in filter, open on first card
+    - Show info toast if URL card ID not in current filter
+    - _Requirements: 8.2_
+
+- [x] 12. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 13. Verify study safety
+  - [x] 13.1 Audit study queries for status filter
+    - Verify getDueCardsForDeck filters to status='published'
+    - Verify dashboard due counts filter to status='published'
+    - Verify global study actions filter to status='published'
+    - _Requirements: 10.1, 10.2, 10.3_
+  - [x] 13.2 Write property test for study query exclusion
+    - **Property 13: Study queries exclude non-published cards**
+    - **Validates: Requirements 10.1, 10.2, 10.3**
+
+- [x] 14. Final Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.

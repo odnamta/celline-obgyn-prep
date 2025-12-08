@@ -1,11 +1,12 @@
 'use client'
 
-import { Trash2, FolderInput, Download, X, Tag, Sparkles, Loader2 } from 'lucide-react'
+import { Trash2, FolderInput, Download, X, Tag, Sparkles, Loader2, Send } from 'lucide-react'
 
 /**
  * V9.1: Enhanced BulkActionsBar Props with onAddTag
  * V9.2: Added onAutoTag for AI retro-tagging
- * Requirements: C.2, C.3, V9.1 2.1, V9.2 2.1
+ * V11.4: Added onPublish for bulk publishing
+ * Requirements: C.2, C.3, V9.1 2.1, V9.2 2.1, V11.4 3.1
  */
 interface BulkActionsBarProps {
   selectedCount: number
@@ -16,6 +17,9 @@ interface BulkActionsBarProps {
   onAutoTag?: () => void  // V9.2: Optional handler for AI auto-tagging
   isAutoTagging?: boolean  // V9.2: Loading state for auto-tagging
   onClearSelection: () => void
+  onPublish?: () => void  // V11.4: Optional handler for bulk publishing
+  showPublish?: boolean  // V11.4: Show publish button when filter includes drafts
+  isPublishing?: boolean  // V11.4: Loading state for publishing
 }
 
 /**
@@ -33,6 +37,9 @@ export function BulkActionsBar({
   onAutoTag,
   isAutoTagging,
   onClearSelection,
+  onPublish,
+  showPublish,
+  isPublishing,
 }: BulkActionsBarProps) {
   if (selectedCount === 0) return null
 
@@ -43,6 +50,21 @@ export function BulkActionsBar({
         {selectedCount} card{selectedCount !== 1 ? 's' : ''} selected
       </span>
       <div className="flex flex-wrap gap-2">
+        {/* V11.4: Publish Selected button */}
+        {showPublish && onPublish && (
+          <button
+            onClick={onPublish}
+            disabled={isPublishing}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 hover:bg-green-100 dark:hover:bg-green-900/50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+          >
+            {isPublishing ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
+            {isPublishing ? 'Publishing...' : 'Publish Selected'}
+          </button>
+        )}
         {/* V9.2: Auto-Tag button with AI */}
         {onAutoTag && (
           <button
