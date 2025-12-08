@@ -195,17 +195,17 @@ export async function publishCards(cardIds: string[]): Promise<PublishCardsResul
   }
 
   // Update status to published (preserves import_session_id)
-  const { error: updateError, count } = await supabase
+  const { error: updateError, data } = await supabase
     .from('card_templates')
     .update({ status: 'published', updated_at: new Date().toISOString() })
     .in('id', cardIds)
-    .select('id', { count: 'exact', head: true })
+    .select('id')
 
   if (updateError) {
     return { ok: false, error: { message: updateError.message, code: 'DB_ERROR' } }
   }
 
-  return { ok: true, publishedCount: count || cardIds.length }
+  return { ok: true, publishedCount: data?.length || cardIds.length }
 }
 
 /**
@@ -247,17 +247,17 @@ export async function archiveCards(cardIds: string[]): Promise<ArchiveCardsResul
   }
 
   // Update status to archived
-  const { error: updateError, count } = await supabase
+  const { error: updateError, data } = await supabase
     .from('card_templates')
     .update({ status: 'archived', updated_at: new Date().toISOString() })
     .in('id', cardIds)
-    .select('id', { count: 'exact', head: true })
+    .select('id')
 
   if (updateError) {
     return { ok: false, error: { message: updateError.message, code: 'DB_ERROR' } }
   }
 
-  return { ok: true, archivedCount: count || cardIds.length }
+  return { ok: true, archivedCount: data?.length || cardIds.length }
 }
 
 
