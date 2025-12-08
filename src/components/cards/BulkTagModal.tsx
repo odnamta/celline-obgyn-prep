@@ -50,8 +50,9 @@ export function BulkTagModal({
       const result = await bulkAddTagToCards(selectedCardIds, tagId)
       
       if (result.ok) {
-        showToast(`Tagged ${result.taggedCount} cards successfully`, 'success')
-        onSuccess(result.taggedCount)
+        const taggedCount = result.data?.taggedCount ?? 0
+        showToast(`Tagged ${taggedCount} cards successfully`, 'success')
+        onSuccess(taggedCount)
         setSelectedTagIds([])
         onClose()
       } else {

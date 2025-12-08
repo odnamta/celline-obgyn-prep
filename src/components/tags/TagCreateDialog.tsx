@@ -74,9 +74,9 @@ export function TagCreateDialog({
       if (isEditMode && editTag) {
         // Update existing tag
         const result = await updateTag(editTag.id, trimmedName, category)
-        if (result.ok && result.tag) {
-          showToast(`Tag "${result.tag.name}" updated`, 'success')
-          onSuccess(result.tag)
+        if (result.ok && result.data) {
+          showToast(`Tag "${result.data.name}" updated`, 'success')
+          onSuccess(result.data)
           onClose()
         } else if (!result.ok) {
           setError(result.error)
@@ -84,9 +84,9 @@ export function TagCreateDialog({
       } else {
         // Create new tag
         const result = await createTag(trimmedName, category)
-        if (result.ok && result.tag) {
-          showToast(`Tag "${result.tag.name}" created`, 'success')
-          onSuccess(result.tag)
+        if (result.ok && result.data) {
+          showToast(`Tag "${result.data.name}" created`, 'success')
+          onSuccess(result.data)
           onClose()
         } else if (!result.ok) {
           setError(result.error)

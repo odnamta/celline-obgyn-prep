@@ -137,8 +137,8 @@ export function useAutoTag(options: UseAutoTagOptions = {}): UseAutoTagReturn {
           const chunkResult: ChunkResult = result.ok
             ? {
                 ok: true,
-                taggedCount: result.taggedCount,
-                skippedCount: result.skippedCount,
+                taggedCount: result.data?.taggedCount ?? 0,
+                skippedCount: result.data?.skippedCount ?? 0,
               }
             : {
                 ok: false,
