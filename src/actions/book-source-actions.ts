@@ -43,7 +43,7 @@ export async function createBookSource(
   // Validate input
   const validation = createBookSourceSchema.safeParse(input)
   if (!validation.success) {
-    return { success: false, error: validation.error.errors[0]?.message || 'Invalid input' }
+    return { success: false, error: validation.error.issues[0]?.message || 'Invalid input' }
   }
 
   const { title, edition, specialty } = validation.data
@@ -143,7 +143,7 @@ export async function updateBookSource(
   // Validate input
   const validation = updateBookSourceSchema.safeParse(input)
   if (!validation.success) {
-    return { success: false, error: validation.error.errors[0]?.message || 'Invalid input' }
+    return { success: false, error: validation.error.issues[0]?.message || 'Invalid input' }
   }
 
   const { id, ...updates } = validation.data
