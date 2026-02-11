@@ -1,49 +1,46 @@
-# Celline's OBGYN Prep
+# GamaTest
 
-A spaced repetition learning app for OBGYN exam preparation, featuring flashcards, multiple-choice questions, and gamification elements like streaks and study heatmaps.
+A multi-tenant assessment and study platform for organizations. Supports two modes: **Study Mode** (spaced repetition, flashcards, self-paced learning) and **Assessment Mode** (timed tests, proctoring, scoring, certification).
 
 ## Features
 
-- **Spaced Repetition (SM-2)** — Optimized review scheduling based on your performance
-- **Flashcards & MCQs** — Support for both card types with markdown rendering
-- **Bulk Import** — Create MCQs quickly from PDF source materials
-- **Gamification** — Daily streaks, study heatmaps, and progress tracking
+- **Spaced Repetition (SM-2)** — Optimized review scheduling based on performance
+- **MCQ Engine** — Multiple-choice questions with auto-grading
+- **AI Content Generation** — Create MCQs from PDFs with GPT-4 Vision
+- **Multi-Tenant** — Organizations with role-based access (owner/admin/creator/candidate)
+- **Feature Flags** — Enable/disable features per organization
+- **Analytics** — Study heatmaps, topic accuracy radar, skill gap analysis
 - **Dark Mode** — Full dark mode support with WCAG AA contrast compliance
-- **Mobile-First** — Responsive design optimized for studying on any device
+- **Mobile-First** — Responsive design, PWA support
 
 ## Tech Stack
 
 - **Framework:** Next.js 16 (App Router)
-- **Database:** Supabase (PostgreSQL + Auth + RLS)
-- **Styling:** Tailwind CSS 4
+- **Database:** Supabase (PostgreSQL + Auth + RLS + Storage)
+- **Styling:** Tailwind CSS 4 + shadcn/ui
 - **Testing:** Vitest + fast-check (property-based testing)
 - **Validation:** Zod
+- **AI:** OpenAI SDK
 
 ## Getting Started
 
 ### Prerequisites
-
 - Node.js 20+
-- A Supabase project ([create one here](https://supabase.com/dashboard))
+- A Supabase project
 
 ### 1. Clone and Install
-
 ```bash
 git clone <your-repo-url>
-cd cellines-obgyn-prep
+cd gamatest
 npm install
 ```
 
 ### 2. Set Up Supabase
-
 1. Create a new Supabase project
-2. Go to **SQL Editor** and run the contents of `schema.sql` to create all tables and RLS policies
-3. Enable Email Auth in **Authentication > Providers**
+2. Go to **SQL Editor** and run `schema.sql`
+3. Enable Google Auth in **Authentication > Providers**
 
 ### 3. Configure Environment Variables
-
-Copy the example env file and fill in your Supabase credentials:
-
 ```bash
 cp .env.local.example .env.local
 ```
@@ -52,17 +49,16 @@ Required variables:
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+OPENAI_API_KEY=your-openai-api-key
 ```
 
-Find these in your Supabase dashboard under **Settings > API**.
-
 ### 4. Run Development Server
-
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to see the app.
+Open [http://localhost:3000](http://localhost:3000)
 
 ## Scripts
 
@@ -82,13 +78,9 @@ Open [http://localhost:3000](http://localhost:3000) to see the app.
 src/
 ├── actions/        # Server Actions (mutations)
 ├── app/            # Next.js App Router pages
-├── components/     # React components
-│   ├── cards/      # Card creation components
-│   ├── course/     # Course hierarchy (WIP)
-│   ├── dashboard/  # Dashboard widgets
-│   ├── decks/      # Deck management
-│   ├── study/      # Study session components
+├── components/     # React components (by feature domain)
 │   └── ui/         # Reusable UI primitives
+├── hooks/          # Custom React hooks
 ├── lib/            # Pure functions & utilities
 ├── types/          # TypeScript type definitions
 └── __tests__/      # Property-based tests
@@ -96,13 +88,13 @@ src/
 
 ## Testing
 
-This project uses property-based testing with fast-check to verify correctness properties:
+Property-based testing with fast-check:
 
 ```bash
 npm run test
 ```
 
-Tests cover core algorithms like SM-2 spaced repetition, streak calculation, and session state management.
+Tests cover core algorithms (SM-2, streak), authorization, validation, and UI properties.
 
 ## License
 

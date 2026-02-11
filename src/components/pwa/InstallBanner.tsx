@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X, Share, Download } from 'lucide-react';
 
-const STORAGE_KEY = 'specialize-install-banner-dismissed';
+const STORAGE_KEY = 'gamatest-install-banner-dismissed';
 
 interface InstallBannerProps {
   className?: string;

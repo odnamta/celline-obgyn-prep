@@ -1,7 +1,7 @@
 {
-  "name": "Specialize",
-  "short_name": "Specialize",
-  "description": "Medical exam preparation with spaced repetition",
+  "name": "GamaTest",
+  "short_name": "GamaTest",
+  "description": "Assessment and study platform for organizations",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

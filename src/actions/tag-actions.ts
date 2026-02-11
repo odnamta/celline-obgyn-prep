@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { createSupabaseServerClient, getUser } from '@/lib/supabase/server'
-import { withUser, type AuthContext } from './_helpers'
+import { withUser, withOrgUser, type AuthContext, type OrgAuthContext } from './_helpers'
 import { getCategoryColor } from '@/lib/tag-colors'
 import { TAG_CATEGORIES, isValidTagCategory } from '@/lib/constants'
 import type { Tag, TagCategory } from '@/types/database'
@@ -50,8 +50,8 @@ export async function createTag(
     return { ok: false, error: validation.error.issues[0].message }
   }
 
-  return withUser(async ({ user, supabase }: AuthContext) => {
-    // Check for duplicate name (case-insensitive)
+  return withOrgUser(async ({ user, supabase, org }: OrgAuthContext) => {
+    // Check for duplicate name within org (case-insensitive)
     const { data: existing } = await supabase
       .from('tags')
       .select('id')
@@ -66,11 +66,12 @@ export async function createTag(
     // V9: Enforce color based on category
     const color = getCategoryColor(category)
 
-    // Create the tag with category and enforced color
+    // V13: Create the tag with org_id for multi-tenant scoping
     const { data: tag, error } = await supabase
       .from('tags')
       .insert({
         user_id: user.id,
+        org_id: org.id,
         name: name.trim(),
         color,
         category,
@@ -92,17 +93,19 @@ export async function createTag(
  * Req: 1.1
  */
 export async function getUserTags(): Promise<Tag[]> {
-  const result = await withUser(async ({ user, supabase }: AuthContext) => {
+  const result = await withOrgUser(async ({ user, supabase, org }: OrgAuthContext) => {
+    // V13: Filter tags by org_id. Also include legacy tags (org_id IS NULL) for migration.
     const { data: tags } = await supabase
       .from('tags')
       .select('*')
       .eq('user_id', user.id)
+      .or(`org_id.eq.${org.id},org_id.is.null`)
       .order('name')
 
     return { ok: true as const, data: tags || [] }
   })
 
-  // Return empty array if auth failed
+  // Return empty array if auth or org resolution failed
   if (!result.ok) return []
   return result.data ?? []
 }
@@ -123,7 +126,7 @@ export async function updateTag(
     return { ok: false, error: validation.error.issues[0].message }
   }
 
-  return withUser(async ({ user, supabase }: AuthContext) => {
+  return withOrgUser(async ({ user, supabase }: OrgAuthContext) => {
     // Verify ownership and get current tag
     const { data: existingTag } = await supabase
       .from('tags')
@@ -179,7 +182,7 @@ export async function deleteTag(tagId: string): Promise<ActionResultV2> {
     return { ok: false, error: 'Tag ID is required' }
   }
 
-  return withUser(async ({ user, supabase }: AuthContext) => {
+  return withOrgUser(async ({ user, supabase }: OrgAuthContext) => {
     // Verify ownership
     const { data: existingTag } = await supabase
       .from('tags')
@@ -386,7 +389,7 @@ export async function bulkAddTagToCards(
     return { ok: false, error: 'Tag ID is required' }
   }
 
-  return withUser(async ({ user, supabase }: AuthContext) => {
+  return withOrgUser(async ({ user, supabase }: OrgAuthContext) => {
     // Verify tag exists and belongs to user
     const { data: tag, error: tagError } = await supabase
       .from('tags')
@@ -508,13 +511,23 @@ export async function autoTagCards(
     return { ok: false, error: 'No cards selected' }
   }
 
-  // V11.5.1: Use withUser for auth, but we need user/supabase in scope for the rest
+  // V13: Resolve auth + org context for tag creation with org_id
   const user = await getUser()
   if (!user) {
     return { ok: false, error: 'AUTH_REQUIRED' }
   }
 
   const supabase = await createSupabaseServerClient()
+
+  // V13: Resolve user's active org for tag scoping
+  const { data: orgMembership } = await supabase
+    .from('organization_members')
+    .select('org_id')
+    .eq('user_id', user.id)
+    .order('joined_at', { ascending: true })
+    .limit(1)
+    .single()
+  const activeOrgId = orgMembership?.org_id ?? null
 
   // Fetch card templates with their deck info for authorization
   const { data: cardTemplates, error: fetchError } = await supabase
@@ -643,6 +656,7 @@ Respond with JSON only, no markdown:
               .from('tags')
               .insert({
                 user_id: user.id,
+                org_id: activeOrgId,
                 name: trimmedName,
                 category,
                 color,

@@ -192,6 +192,7 @@ export default async function DeckDetailsPage({ params }: DeckDetailsPageProps) 
         color: tag.color,
         category: (tag.category || 'concept') as 'source' | 'topic' | 'concept',
         user_id: '', // Not needed for display
+        org_id: null, // Not needed for display
         created_at: '', // Not needed for display
       }))
 

@@ -38,7 +38,7 @@ export default async function AppLayout({
           <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
             <div className="flex items-center gap-6">
               <a href="/dashboard" className="text-xl font-semibold text-slate-900 dark:text-slate-100">
-                Specialize
+                GamaTest
               </a>
               <nav className="hidden sm:flex items-center gap-4">
                 <a 

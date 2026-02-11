@@ -1,3 +1,62 @@
+// ============================================
+// Organization Types (V13 - Multi-Tenant)
+// ============================================
+
+export type OrgRole = 'owner' | 'admin' | 'creator' | 'candidate';
+
+/**
+ * Feature flags configurable per organization.
+ * Controls which platform capabilities are available.
+ */
+export interface OrgFeatures {
+  study_mode: boolean
+  assessment_mode: boolean
+  proctoring: boolean
+  certification: boolean
+  ai_generation: boolean
+  pdf_extraction: boolean
+  flashcards: boolean
+  erp_integration: boolean
+}
+
+export interface OrgBranding {
+  primary_color: string
+}
+
+export interface OrgSettings {
+  features: OrgFeatures
+  branding: OrgBranding
+  default_language: string
+}
+
+export interface Organization {
+  id: string
+  name: string
+  slug: string
+  settings: OrgSettings
+  created_at: string
+  updated_at: string
+}
+
+export interface OrganizationMember {
+  id: string
+  org_id: string
+  user_id: string
+  role: OrgRole
+  joined_at: string
+}
+
+/**
+ * Organization with member count for admin views
+ */
+export interface OrganizationWithMemberCount extends Organization {
+  member_count: number
+}
+
+// ============================================
+// Legacy Types (V1 — DO NOT USE for new code)
+// ============================================
+
 export interface Deck {
   id: string;
   user_id: string;
@@ -154,6 +213,7 @@ export type TagCategory = 'source' | 'topic' | 'concept';
 export interface Tag {
   id: string;
   user_id: string;
+  org_id: string | null;  // V13: Organization scope (null during migration)
   name: string;
   color: string;
   category: TagCategory;
@@ -184,7 +244,8 @@ export interface DeckTemplate {
   description: string | null;
   visibility: DeckVisibility;
   author_id: string;
-  subject?: string;  // V9.1: Medical specialty for AI prompt customization
+  org_id: string | null;  // V13: Organization scope (null during migration)
+  subject?: string;  // V9.1: Specialty for AI prompt customization
   legacy_id: string | null;
   created_at: string;
   updated_at: string;
@@ -327,6 +388,7 @@ export interface DailyActivity {
 export interface BookSource {
   id: string
   author_id: string
+  org_id: string | null  // V13: Organization scope (null during migration)
   title: string
   edition: string | null
   specialty: string | null

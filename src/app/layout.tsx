@@ -15,13 +15,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Specialize",
-  description: "Medical exam preparation with spaced repetition",
+  title: "GamaTest",
+  description: "Assessment and study platform for organizations",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Specialize",
+    title: "GamaTest",
   },
   other: {
     "mobile-web-app-capable": "yes",

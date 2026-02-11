@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient, getUser } from '@/lib/supabase/server'
-import { withUser, type AuthContext } from './_helpers'
+import { withUser, withOrgUser, type AuthContext, type OrgAuthContext } from './_helpers'
 import { createDeckSchema } from '@/lib/validations'
 import type { ActionResult, ActionResultV2 } from '@/types/actions'
 
@@ -37,13 +37,22 @@ export async function createDeckAction(
   const { title } = validationResult.data
   // V9.1: Get subject from form data, default to OBGYN
   const subject = (formData.get('subject') as string)?.trim() || 'Obstetrics & Gynecology'
-  
+
   const supabase = await createSupabaseServerClient()
 
-  // V8.0/V9.1: Create deck_template with subject
+  // V13: Resolve user's active org for content scoping
+  const { data: membership } = await supabase
+    .from('organization_members')
+    .select('org_id')
+    .eq('user_id', user.id)
+    .order('joined_at', { ascending: true })
+    .limit(1)
+    .single()
+
+  // V8.0/V9.1/V13: Create deck_template with subject and org_id
   const { data: deckTemplate, error: createError } = await supabase
     .from('deck_templates')
-    .insert({ title, author_id: user.id, visibility: 'private', subject })
+    .insert({ title, author_id: user.id, visibility: 'private', subject, org_id: membership?.org_id ?? null })
     .select()
     .single()
 
@@ -73,8 +82,8 @@ export async function deleteDeckAction(deckId: string): Promise<ActionResultV2> 
     return { ok: false, error: 'Invalid deck ID' }
   }
 
-  return withUser(async ({ user, supabase }: AuthContext) => {
-    // V8.0: Delete deck_template (cascade handles card_templates, user_decks)
+  return withOrgUser(async ({ user, supabase }: OrgAuthContext) => {
+    // V8.0/V13: Delete deck_template (cascade handles card_templates, user_decks)
     const { error } = await supabase
       .from('deck_templates')
       .delete()
@@ -312,13 +321,23 @@ export async function createDeckTemplateAction(
   const { title } = validationResult.data
   const supabase = await createSupabaseServerClient()
 
-  // Create deck_template
+  // V13: Resolve user's active org for content scoping
+  const { data: membership } = await supabase
+    .from('organization_members')
+    .select('org_id')
+    .eq('user_id', user.id)
+    .order('joined_at', { ascending: true })
+    .limit(1)
+    .single()
+
+  // V13: Create deck_template with org_id
   const { data: deckTemplate, error: createError } = await supabase
     .from('deck_templates')
     .insert({
       title,
       author_id: user.id,
       visibility: 'private',
+      org_id: membership?.org_id ?? null,
     })
     .select()
     .single()

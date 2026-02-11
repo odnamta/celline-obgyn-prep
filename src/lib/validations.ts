@@ -95,6 +95,45 @@ export const reorderLessonItemsSchema = z.object({
   itemIds: z.array(z.string().uuid('Invalid item ID')).min(1, 'At least one item required'),
 });
 
+// ============================================
+// Organization Validation Schemas (V13)
+// ============================================
+
+export const createOrgSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(100, 'Name too long'),
+  slug: z.string()
+    .min(3, 'Slug must be at least 3 characters')
+    .max(50, 'Slug too long')
+    .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$/, 'Slug must be lowercase alphanumeric with hyphens, cannot start or end with hyphen'),
+});
+
+export const updateOrgSettingsSchema = z.object({
+  orgId: z.string().uuid('Invalid org ID'),
+  name: z.string().min(1).max(100).optional(),
+  settings: z.object({
+    features: z.object({
+      study_mode: z.boolean(),
+      assessment_mode: z.boolean(),
+      proctoring: z.boolean(),
+      certification: z.boolean(),
+      ai_generation: z.boolean(),
+      pdf_extraction: z.boolean(),
+      flashcards: z.boolean(),
+      erp_integration: z.boolean(),
+    }).partial().optional(),
+    branding: z.object({
+      primary_color: z.string(),
+    }).partial().optional(),
+    default_language: z.string().optional(),
+  }).optional(),
+});
+
+export const inviteMemberSchema = z.object({
+  orgId: z.string().uuid('Invalid org ID'),
+  email: z.string().email('Invalid email address'),
+  role: z.enum(['admin', 'creator', 'candidate']),
+});
+
 // Export types inferred from schemas
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
@@ -110,3 +149,6 @@ export type CreateLessonInput = z.infer<typeof createLessonSchema>;
 export type UpdateLessonInput = z.infer<typeof updateLessonSchema>;
 export type AddLessonItemInput = z.infer<typeof addLessonItemSchema>;
 export type ReorderLessonItemsInput = z.infer<typeof reorderLessonItemsSchema>;
+export type CreateOrgInput = z.infer<typeof createOrgSchema>;
+export type UpdateOrgSettingsInput = z.infer<typeof updateOrgSettingsSchema>;
+export type InviteMemberInput = z.infer<typeof inviteMemberSchema>;

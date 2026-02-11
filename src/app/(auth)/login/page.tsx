@@ -66,13 +66,13 @@ function AppLogo() {
   return (
     <div className="flex flex-col items-center mb-8">
       <div className="w-20 h-20 bg-blue-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg">
-        <span className="text-4xl font-bold text-white">S</span>
+        <span className="text-4xl font-bold text-white">G</span>
       </div>
       <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-        Welcome to Specialize
+        Welcome to GamaTest
       </h1>
       <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
-        Medical exam preparation
+        Assessment and study platform
       </p>
     </div>
   )

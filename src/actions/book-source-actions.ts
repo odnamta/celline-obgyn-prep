@@ -1,12 +1,14 @@
 'use server'
 
 /**
- * V11: Book Source Server Actions
- * 
+ * V11/V13: Book Source Server Actions
+ *
  * CRUD operations for book sources (textbooks/question banks).
+ * V13: Org-scoped via withOrgUser helper.
  */
 
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { withOrgUser, type OrgAuthContext } from './_helpers'
 import {
   createBookSourceSchema,
   updateBookSourceSchema,
@@ -16,7 +18,7 @@ import {
 import type { BookSource } from '@/types/database'
 
 // ============================================
-// Result Types
+// Result Types (legacy — will migrate to ActionResultV2)
 // ============================================
 
 interface ActionResult<T = void> {
@@ -32,27 +34,37 @@ interface ActionResult<T = void> {
 export async function createBookSource(
   input: CreateBookSourceInput
 ): Promise<ActionResult<BookSource>> {
+  // Validate input before auth to fail fast
+  const validation = createBookSourceSchema.safeParse(input)
+  if (!validation.success) {
+    return { success: false, error: validation.error.issues[0]?.message || 'Invalid input' }
+  }
+
   const supabase = await createSupabaseServerClient()
-  
+
   // Get current user
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) {
     return { success: false, error: 'Not authenticated' }
   }
 
-  // Validate input
-  const validation = createBookSourceSchema.safeParse(input)
-  if (!validation.success) {
-    return { success: false, error: validation.error.issues[0]?.message || 'Invalid input' }
-  }
+  // V13: Resolve user's active org for content scoping
+  const { data: membership } = await supabase
+    .from('organization_members')
+    .select('org_id')
+    .eq('user_id', user.id)
+    .order('joined_at', { ascending: true })
+    .limit(1)
+    .single()
 
   const { title, edition, specialty } = validation.data
 
-  // Insert book source
+  // V13: Insert book source with org_id
   const { data, error } = await supabase
     .from('book_sources')
     .insert({
       author_id: user.id,
+      org_id: membership?.org_id ?? null,
       title,
       edition: edition ?? null,
       specialty: specialty ?? null,
@@ -74,19 +86,34 @@ export async function createBookSource(
 
 export async function getBookSources(): Promise<ActionResult<BookSource[]>> {
   const supabase = await createSupabaseServerClient()
-  
+
   // Get current user
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) {
     return { success: false, error: 'Not authenticated' }
   }
 
-  // Fetch book sources for current author
-  const { data, error } = await supabase
+  // V13: Resolve user's active org for filtering
+  const { data: membership } = await supabase
+    .from('organization_members')
+    .select('org_id')
+    .eq('user_id', user.id)
+    .order('joined_at', { ascending: true })
+    .limit(1)
+    .single()
+
+  // V13: Fetch book sources scoped to org (include legacy null org_id)
+  let query = supabase
     .from('book_sources')
     .select('*')
     .eq('author_id', user.id)
     .order('created_at', { ascending: false })
+
+  if (membership?.org_id) {
+    query = query.or(`org_id.eq.${membership.org_id},org_id.is.null`)
+  }
+
+  const { data, error } = await query
 
   if (error) {
     console.error('[getBookSources] Error:', error)
@@ -102,7 +129,7 @@ export async function getBookSources(): Promise<ActionResult<BookSource[]>> {
 
 export async function getBookSource(id: string): Promise<ActionResult<BookSource>> {
   const supabase = await createSupabaseServerClient()
-  
+
   // Get current user
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) {
@@ -133,7 +160,7 @@ export async function updateBookSource(
   input: UpdateBookSourceInput
 ): Promise<ActionResult<BookSource>> {
   const supabase = await createSupabaseServerClient()
-  
+
   // Get current user
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) {
@@ -181,7 +208,7 @@ export async function updateBookSource(
 
 export async function deleteBookSource(id: string): Promise<ActionResult> {
   const supabase = await createSupabaseServerClient()
-  
+
   // Get current user
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) {
