@@ -31,7 +31,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import type { OrganizationMember, OrgRole, Invitation } from '@/types/database'
+import type { OrganizationMemberWithProfile, OrgRole, Invitation } from '@/types/database'
 
 const ROLE_LABELS: Record<OrgRole, string> = {
   owner: 'Owner',
@@ -50,13 +50,13 @@ const ROLE_COLORS: Record<OrgRole, string> = {
 export default function OrgMembersPage() {
   const { org, role } = useOrg()
   const router = useRouter()
-  const [members, setMembers] = useState<OrganizationMember[]>([])
+  const [members, setMembers] = useState<OrganizationMemberWithProfile[]>([])
   const [invitations, setInvitations] = useState<Invitation[]>([])
   const [loading, setLoading] = useState(true)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [confirmRemove, setConfirmRemove] = useState<OrganizationMember | null>(null)
+  const [confirmRemove, setConfirmRemove] = useState<OrganizationMemberWithProfile | null>(null)
 
   // Invite form state
   const [inviteEmail, setInviteEmail] = useState('')
@@ -137,7 +137,7 @@ export default function OrgMembersPage() {
     })
   }
 
-  function handleRemove(member: OrganizationMember) {
+  function handleRemove(member: OrganizationMemberWithProfile) {
     setConfirmRemove(member)
   }
 
@@ -292,10 +292,10 @@ export default function OrgMembersPage() {
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
-                    {member.user_id.slice(0, 8)}...
+                    {member.full_name || member.email}
                   </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Joined {new Date(member.joined_at).toLocaleDateString()}
+                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                    {member.full_name ? member.email : `Joined ${new Date(member.joined_at).toLocaleDateString()}`}
                   </p>
                 </div>
               </div>

@@ -17,6 +17,7 @@ import {
   getAssessment,
   getSessionQuestions,
   getExistingAnswers,
+  reportTabSwitch,
 } from '@/actions/assessment-actions'
 import { Button } from '@/components/ui/Button'
 import type { Assessment, AssessmentSession } from '@/types/database'
@@ -43,6 +44,8 @@ export default function TakeAssessmentPage() {
   const [completing, setCompleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showConfirmFinish, setShowConfirmFinish] = useState(false)
+  const [tabSwitchCount, setTabSwitchCount] = useState(0)
+  const [showTabWarning, setShowTabWarning] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const completingRef = useRef(false)
 
@@ -164,6 +167,36 @@ export default function TakeAssessmentPage() {
     }
   }, [timeRemaining !== null, completing, handleCompleteRef])
 
+  // Tab-switch detection
+  useEffect(() => {
+    if (!session || completing) return
+
+    const sessionId = session.id
+    function handleVisibilityChange() {
+      if (document.hidden) {
+        setTabSwitchCount((prev) => prev + 1)
+        setShowTabWarning(true)
+        // Fire-and-forget: report to server
+        reportTabSwitch(sessionId)
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [session, completing])
+
+  // Warn before closing/navigating away from in-progress exam
+  useEffect(() => {
+    if (!session || completing) return
+
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      e.preventDefault()
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [session, completing])
+
   const formatTime = useCallback((seconds: number) => {
     const m = Math.floor(seconds / 60)
     const s = seconds % 60
@@ -203,8 +236,18 @@ export default function TakeAssessmentPage() {
 
   if (loading) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-12 text-center text-slate-500">
-        Preparing your assessment...
+      <div className="max-w-3xl mx-auto px-4 py-6 animate-pulse">
+        <div className="flex items-center justify-between mb-6">
+          <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded" />
+          <div className="h-8 w-20 bg-slate-200 dark:bg-slate-700 rounded-full" />
+        </div>
+        <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mb-8" />
+        <div className="h-6 w-3/4 bg-slate-200 dark:bg-slate-700 rounded mb-6" />
+        <div className="space-y-3">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-14 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700" />
+          ))}
+        </div>
       </div>
     )
   }
@@ -354,6 +397,28 @@ export default function TakeAssessmentPage() {
           </Button>
         )}
       </div>
+
+      {/* Confirm Finish Modal */}
+      {/* Tab Switch Warning */}
+      {showTabWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-6 max-w-sm mx-4 shadow-xl text-center">
+            <AlertTriangle className="h-10 w-10 mx-auto mb-3 text-amber-500" />
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">
+              Tab Switch Detected
+            </h3>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">
+              Leaving the exam window has been recorded.
+            </p>
+            <p className="text-sm text-amber-600 dark:text-amber-400 mb-4">
+              Tab switches: {tabSwitchCount}
+            </p>
+            <Button size="sm" onClick={() => setShowTabWarning(false)}>
+              Return to Exam
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Confirm Finish Modal */}
       {showConfirmFinish && (

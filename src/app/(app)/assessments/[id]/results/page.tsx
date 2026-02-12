@@ -27,6 +27,7 @@ import {
   getSessionResults,
   getAssessment,
   getAssessmentResultsDetailed,
+  getQuestionAnalytics,
 } from '@/actions/assessment-actions'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/badge'
@@ -263,19 +264,29 @@ function CandidateResultsView({ assessmentId, sessionId }: { assessmentId: strin
 // Creator Results View
 // ============================================
 
+type QuestionStat = {
+  cardTemplateId: string
+  stem: string
+  totalAttempts: number
+  correctCount: number
+  percentCorrect: number
+}
+
 function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
   const router = useRouter()
   const [assessment, setAssessment] = useState<Assessment | null>(null)
   const [sessions, setSessions] = useState<SessionWithEmail[]>([])
   const [stats, setStats] = useState<{ avgScore: number; passRate: number; totalAttempts: number } | null>(null)
+  const [questionStats, setQuestionStats] = useState<QuestionStat[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
-      const [aResult, rResult] = await Promise.all([
+      const [aResult, rResult, qResult] = await Promise.all([
         getAssessment(assessmentId),
         getAssessmentResultsDetailed(assessmentId),
+        getQuestionAnalytics(assessmentId),
       ])
 
       if (aResult.ok && aResult.data) setAssessment(aResult.data)
@@ -284,6 +295,9 @@ function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
       } else if (rResult.data) {
         setSessions(rResult.data.sessions as SessionWithEmail[])
         setStats(rResult.data.stats)
+      }
+      if (qResult.ok && qResult.data) {
+        setQuestionStats(qResult.data.questions)
       }
       setLoading(false)
     }
@@ -355,6 +369,64 @@ function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
         </div>
       )}
 
+      {/* Question Difficulty Analysis */}
+      {questionStats.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">
+            Question Difficulty
+          </h2>
+          <div className="space-y-2">
+            {questionStats.map((q, idx) => {
+              const isHard = q.percentCorrect < 40
+              const isMedium = q.percentCorrect >= 40 && q.percentCorrect < 70
+              return (
+                <div
+                  key={q.cardTemplateId}
+                  className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                >
+                  <span className="text-xs font-medium text-slate-400 w-6 text-right flex-shrink-0">
+                    {idx + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-slate-900 dark:text-slate-100 truncate">
+                      {q.stem}
+                    </p>
+                    <div className="mt-1 w-full h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${
+                          isHard
+                            ? 'bg-red-500'
+                            : isMedium
+                              ? 'bg-amber-500'
+                              : 'bg-green-500'
+                        }`}
+                        style={{ width: `${q.percentCorrect}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span
+                      className={`text-sm font-bold ${
+                        isHard
+                          ? 'text-red-500'
+                          : isMedium
+                            ? 'text-amber-600'
+                            : 'text-green-600'
+                      }`}
+                    >
+                      {q.percentCorrect}%
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      ({q.correctCount}/{q.totalAttempts})
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Candidate Sessions Table */}
       {sessions.length === 0 ? (
         <div className="text-center py-12 text-slate-500 dark:text-slate-400">
@@ -373,6 +445,7 @@ function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
                   <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Candidate</th>
                   <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Score</th>
                   <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Status</th>
+                  <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Tab Switches</th>
                   <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Date</th>
                 </tr>
               </thead>
@@ -404,6 +477,15 @@ function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
                         )
                       ) : (
                         <Badge variant="secondary">{s.status.replace('_', ' ')}</Badge>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {s.tab_switch_count > 0 ? (
+                        <span className="text-amber-600 dark:text-amber-400 font-medium">
+                          {s.tab_switch_count}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">0</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-slate-500">

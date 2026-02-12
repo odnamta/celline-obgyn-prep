@@ -772,3 +772,223 @@ export async function getAssessmentResultsDetailed(
     }
   })
 }
+
+/**
+ * Get per-question analytics for an assessment.
+ * Returns each question's stem, total attempts, correct count, and % correct.
+ */
+export async function getQuestionAnalytics(
+  assessmentId: string
+): Promise<ActionResultV2<{
+  questions: Array<{
+    cardTemplateId: string
+    stem: string
+    totalAttempts: number
+    correctCount: number
+    percentCorrect: number
+  }>
+}>> {
+  return withOrgUser(async ({ supabase, org, role }) => {
+    if (!hasMinimumRole(role, 'creator')) {
+      return { ok: false, error: 'Insufficient permissions' }
+    }
+
+    // Verify assessment belongs to org
+    const { data: assessment } = await supabase
+      .from('assessments')
+      .select('id, deck_template_id')
+      .eq('id', assessmentId)
+      .eq('org_id', org.id)
+      .single()
+
+    if (!assessment) {
+      return { ok: false, error: 'Assessment not found' }
+    }
+
+    // Get all completed session IDs for this assessment
+    const { data: sessions } = await supabase
+      .from('assessment_sessions')
+      .select('id')
+      .eq('assessment_id', assessmentId)
+      .eq('status', 'completed')
+
+    if (!sessions || sessions.length === 0) {
+      return { ok: true, data: { questions: [] } }
+    }
+
+    const sessionIds = sessions.map((s) => s.id)
+
+    // Get all answers for these sessions
+    const { data: answers } = await supabase
+      .from('assessment_answers')
+      .select('card_template_id, is_correct')
+      .in('session_id', sessionIds)
+
+    if (!answers) {
+      return { ok: true, data: { questions: [] } }
+    }
+
+    // Aggregate per question
+    const questionMap = new Map<string, { total: number; correct: number }>()
+    for (const a of answers) {
+      const entry = questionMap.get(a.card_template_id) ?? { total: 0, correct: 0 }
+      entry.total++
+      if (a.is_correct) entry.correct++
+      questionMap.set(a.card_template_id, entry)
+    }
+
+    // Fetch question stems
+    const cardIds = [...questionMap.keys()]
+    const { data: cards } = await supabase
+      .from('card_templates')
+      .select('id, stem')
+      .in('id', cardIds)
+
+    const stemMap = new Map<string, string>()
+    if (cards) {
+      for (const c of cards) {
+        stemMap.set(c.id, c.stem)
+      }
+    }
+
+    // Build result sorted by difficulty (lowest % correct first)
+    const questions = cardIds
+      .map((id) => {
+        const stats = questionMap.get(id)!
+        return {
+          cardTemplateId: id,
+          stem: stemMap.get(id) ?? 'Unknown question',
+          totalAttempts: stats.total,
+          correctCount: stats.correct,
+          percentCorrect: stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0,
+        }
+      })
+      .sort((a, b) => a.percentCorrect - b.percentCorrect)
+
+    return { ok: true, data: { questions } }
+  })
+}
+
+/**
+ * Report a tab switch during an assessment session.
+ * Increments the tab_switch_count on the session row.
+ */
+export async function reportTabSwitch(
+  sessionId: string
+): Promise<ActionResultV2<void>> {
+  return withOrgUser(async ({ user, supabase }) => {
+    // Use RPC or raw update — increment tab_switch_count
+    // Since Supabase doesn't support increment natively in the JS client,
+    // we read-then-write (acceptable for low-frequency tab switches)
+    const { data: session } = await supabase
+      .from('assessment_sessions')
+      .select('id, tab_switch_count')
+      .eq('id', sessionId)
+      .eq('user_id', user.id)
+      .eq('status', 'in_progress')
+      .single()
+
+    if (!session) {
+      return { ok: false, error: 'Session not found' }
+    }
+
+    const newCount = ((session.tab_switch_count as number) ?? 0) + 1
+
+    await supabase
+      .from('assessment_sessions')
+      .update({ tab_switch_count: newCount })
+      .eq('id', sessionId)
+
+    return { ok: true }
+  })
+}
+
+/**
+ * Get org-level dashboard stats for creators.
+ * Returns member count, assessment count, recent activity, and overall pass rate.
+ */
+export async function getOrgDashboardStats(): Promise<ActionResultV2<{
+  memberCount: number
+  assessmentCount: number
+  totalAttempts: number
+  avgPassRate: number
+  recentSessions: Array<{
+    assessmentTitle: string
+    userEmail: string
+    score: number | null
+    passed: boolean | null
+    completedAt: string | null
+  }>
+}>> {
+  return withOrgUser(async ({ supabase, org, role }) => {
+    if (!hasMinimumRole(role, 'creator')) {
+      return { ok: false, error: 'Insufficient permissions' }
+    }
+
+    // Member count
+    const { count: memberCount } = await supabase
+      .from('organization_members')
+      .select('*', { count: 'exact', head: true })
+      .eq('org_id', org.id)
+
+    // Assessment count
+    const { count: assessmentCount } = await supabase
+      .from('assessments')
+      .select('*', { count: 'exact', head: true })
+      .eq('org_id', org.id)
+
+    // All completed sessions for this org's assessments
+    const { data: sessions } = await supabase
+      .from('assessment_sessions')
+      .select(`
+        id, score, passed, completed_at, user_id,
+        assessments!inner(org_id, title)
+      `)
+      .eq('status', 'completed')
+      .order('completed_at', { ascending: false, nullsFirst: false })
+      .limit(100)
+
+    const orgSessions = (sessions ?? []).filter((s) => {
+      const a = s.assessments as unknown as { org_id: string }
+      return a.org_id === org.id
+    })
+
+    const totalAttempts = orgSessions.length
+    const avgPassRate = totalAttempts > 0
+      ? Math.round((orgSessions.filter((s) => s.passed).length / totalAttempts) * 100)
+      : 0
+
+    // Recent 5 sessions with profile emails
+    const recent = orgSessions.slice(0, 5)
+    const userIds = [...new Set(recent.map((s) => s.user_id))]
+    const emailMap = new Map<string, string>()
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .in('id', userIds)
+      if (profiles) {
+        for (const p of profiles) emailMap.set(p.id, p.email)
+      }
+    }
+
+    const recentSessions = recent.map((s) => ({
+      assessmentTitle: (s.assessments as unknown as { title: string }).title,
+      userEmail: emailMap.get(s.user_id) ?? `user-${s.user_id.slice(0, 8)}`,
+      score: s.score,
+      passed: s.passed,
+      completedAt: s.completed_at,
+    }))
+
+    return {
+      ok: true,
+      data: {
+        memberCount: memberCount ?? 0,
+        assessmentCount: assessmentCount ?? 0,
+        totalAttempts,
+        avgPassRate,
+        recentSessions,
+      },
+    }
+  })
+}

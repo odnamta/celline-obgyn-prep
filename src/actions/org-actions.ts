@@ -10,7 +10,7 @@ import { revalidatePath } from 'next/cache'
 import { withUser, withOrgUser } from '@/actions/_helpers'
 import { ACTIVE_ORG_COOKIE } from '@/lib/org-context'
 import type { ActionResultV2 } from '@/types/actions'
-import type { Organization, OrganizationMember, OrgRole } from '@/types/database'
+import type { Organization, OrganizationMember, OrganizationMemberWithProfile, OrgRole } from '@/types/database'
 import { createOrgSchema, updateOrgSettingsSchema } from '@/lib/validations'
 
 /**
@@ -108,7 +108,7 @@ export async function getMyOrganizations(): Promise<ActionResultV2<Array<Organiz
  * Get members of the current user's active organization.
  * Requires at least 'admin' role to see member details.
  */
-export async function getOrgMembers(): Promise<ActionResultV2<OrganizationMember[]>> {
+export async function getOrgMembers(): Promise<ActionResultV2<OrganizationMemberWithProfile[]>> {
   return withOrgUser(async ({ supabase, org }) => {
     const { data, error } = await supabase
       .from('organization_members')
@@ -120,7 +120,31 @@ export async function getOrgMembers(): Promise<ActionResultV2<OrganizationMember
       return { ok: false, error: error.message }
     }
 
-    return { ok: true, data: (data ?? []) as OrganizationMember[] }
+    const members = (data ?? []) as OrganizationMember[]
+
+    // Enrich with profile data
+    const userIds = members.map((m) => m.user_id)
+    const profileMap = new Map<string, { email: string; full_name: string | null }>()
+
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, email, full_name')
+        .in('id', userIds)
+      if (profiles) {
+        for (const p of profiles) {
+          profileMap.set(p.id, { email: p.email, full_name: p.full_name })
+        }
+      }
+    }
+
+    const enriched: OrganizationMemberWithProfile[] = members.map((m) => ({
+      ...m,
+      email: profileMap.get(m.user_id)?.email ?? `user-${m.user_id.slice(0, 8)}`,
+      full_name: profileMap.get(m.user_id)?.full_name ?? null,
+    }))
+
+    return { ok: true, data: enriched }
   })
 }
 

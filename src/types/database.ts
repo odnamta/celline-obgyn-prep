@@ -47,6 +47,14 @@ export interface OrganizationMember {
 }
 
 /**
+ * Organization member enriched with profile data
+ */
+export interface OrganizationMemberWithProfile extends OrganizationMember {
+  email: string
+  full_name: string | null
+}
+
+/**
  * Organization with member count for admin views
  */
 export interface OrganizationWithMemberCount extends Organization {
@@ -119,6 +127,7 @@ export interface AssessmentSession {
   passed: boolean | null
   question_order: string[] // card_template_ids
   status: SessionStatus
+  tab_switch_count: number
   created_at: string
 }
 
