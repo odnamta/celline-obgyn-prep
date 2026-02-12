@@ -1,0 +1,334 @@
+'use client'
+
+/**
+ * V13 Phase 10: Assessment Analytics Page
+ *
+ * Score distribution, completion rate, average time, question difficulty,
+ * and top performers for a single assessment.
+ */
+
+import { useState, useEffect } from 'react'
+import { useRouter, useParams } from 'next/navigation'
+import {
+  ArrowLeft,
+  BarChart3,
+  Clock,
+  Users,
+  TrendingUp,
+  Target,
+  Trophy,
+  Percent,
+  Download,
+} from 'lucide-react'
+import { useOrg } from '@/components/providers/OrgProvider'
+import { hasMinimumRole } from '@/lib/org-authorization'
+import {
+  getAssessment,
+  getAssessmentAnalyticsSummary,
+  getQuestionAnalytics,
+  exportResultsCsv,
+} from '@/actions/assessment-actions'
+import { Button } from '@/components/ui/Button'
+import type { Assessment } from '@/types/database'
+
+type AnalyticsSummary = {
+  scoreDistribution: number[]
+  completionRate: number
+  avgTimeMinutes: number | null
+  medianScore: number | null
+  totalStarted: number
+  totalCompleted: number
+  topPerformers: Array<{ email: string; score: number; completedAt: string }>
+}
+
+type QuestionStat = {
+  cardTemplateId: string
+  stem: string
+  totalAttempts: number
+  correctCount: number
+  percentCorrect: number
+}
+
+export default function AssessmentAnalyticsPage() {
+  const { role } = useOrg()
+  const router = useRouter()
+  const params = useParams()
+  const assessmentId = params.id as string
+  const isCreator = hasMinimumRole(role, 'creator')
+
+  const [assessment, setAssessment] = useState<Assessment | null>(null)
+  const [summary, setSummary] = useState<AnalyticsSummary | null>(null)
+  const [questionStats, setQuestionStats] = useState<QuestionStat[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!isCreator) return
+    async function load() {
+      const [aResult, sResult, qResult] = await Promise.all([
+        getAssessment(assessmentId),
+        getAssessmentAnalyticsSummary(assessmentId),
+        getQuestionAnalytics(assessmentId),
+      ])
+
+      if (aResult.ok && aResult.data) setAssessment(aResult.data)
+      if (!sResult.ok) {
+        setError(sResult.error)
+      } else if (sResult.data) {
+        setSummary(sResult.data)
+      }
+      if (qResult.ok && qResult.data) {
+        setQuestionStats(qResult.data.questions)
+      }
+      setLoading(false)
+    }
+    load()
+  }, [assessmentId, isCreator])
+
+  if (!isCreator) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-12 text-center text-slate-500">
+        You do not have permission to view analytics.
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-12 text-center text-slate-500">
+        Loading analytics...
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-12 text-center">
+        <p className="text-red-600 dark:text-red-400 mb-4">{error}</p>
+        <Button variant="secondary" onClick={() => router.push('/assessments')}>
+          Back to Assessments
+        </Button>
+      </div>
+    )
+  }
+
+  const maxBucket = summary ? Math.max(...summary.scoreDistribution, 1) : 1
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-8">
+      <button
+        onClick={() => router.push('/assessments')}
+        className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 mb-6"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to Assessments
+      </button>
+
+      <div className="flex items-start justify-between mb-1">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+          {assessment?.title ?? 'Assessment'} — Analytics
+        </h1>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => router.push(`/assessments/${assessmentId}/results`)}
+          >
+            <Users className="h-4 w-4 mr-1" />
+            All Results
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={async () => {
+              const result = await exportResultsCsv(assessmentId)
+              if (result.ok && result.data) {
+                const blob = new Blob([result.data], { type: 'text/csv' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `${assessment?.title ?? 'assessment'}-results.csv`
+                a.click()
+                URL.revokeObjectURL(url)
+              }
+            }}
+          >
+            <Download className="h-4 w-4 mr-1" />
+            CSV
+          </Button>
+        </div>
+      </div>
+      {assessment && (
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-8">
+          {assessment.question_count} questions · {assessment.time_limit_minutes} min · {assessment.pass_score}% to pass
+        </p>
+      )}
+
+      {/* Summary Stats */}
+      {summary && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+          <StatCard icon={Users} label="Started" value={summary.totalStarted} />
+          <StatCard icon={Target} label="Completed" value={`${summary.totalCompleted} (${summary.completionRate}%)`} />
+          <StatCard
+            icon={TrendingUp}
+            label="Median Score"
+            value={summary.medianScore !== null ? `${summary.medianScore}%` : '—'}
+          />
+          <StatCard
+            icon={Clock}
+            label="Avg Time"
+            value={summary.avgTimeMinutes !== null ? `${summary.avgTimeMinutes} min` : '—'}
+          />
+        </div>
+      )}
+
+      {/* Score Distribution */}
+      {summary && summary.totalCompleted > 0 && (
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">
+            Score Distribution
+          </h2>
+          <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <div className="flex items-end gap-1 h-32">
+              {summary.scoreDistribution.map((count, idx) => {
+                const height = maxBucket > 0 ? (count / maxBucket) * 100 : 0
+                const passThreshold = assessment ? Math.floor(assessment.pass_score / 10) : 7
+                const isPassBucket = idx >= passThreshold
+                return (
+                  <div key={idx} className="flex-1 flex flex-col items-center gap-1">
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      {count > 0 ? count : ''}
+                    </span>
+                    <div
+                      className={`w-full rounded-t transition-all ${
+                        isPassBucket ? 'bg-green-500' : 'bg-red-400'
+                      }`}
+                      style={{ height: `${Math.max(height, count > 0 ? 4 : 0)}%` }}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+            <div className="flex gap-1 mt-1">
+              {summary.scoreDistribution.map((_, idx) => (
+                <div key={idx} className="flex-1 text-center text-[9px] text-slate-400">
+                  {idx * 10}
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-center gap-4 mt-3 text-xs text-slate-500">
+              <span className="flex items-center gap-1">
+                <span className="w-3 h-2 rounded bg-green-500" /> Pass
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-3 h-2 rounded bg-red-400" /> Fail
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Top Performers */}
+      {summary && summary.topPerformers.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">
+            Top Performers
+          </h2>
+          <div className="space-y-2">
+            {summary.topPerformers.map((p, idx) => (
+              <div
+                key={idx}
+                className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+              >
+                <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 flex-shrink-0">
+                  {idx + 1}
+                </span>
+                <span className="text-sm text-slate-900 dark:text-slate-100 flex-1 min-w-0 truncate">
+                  {p.email}
+                </span>
+                <span className="text-sm font-bold text-green-600 dark:text-green-400 flex-shrink-0">
+                  {p.score}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Question Difficulty */}
+      {questionStats.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">
+            Question Difficulty
+          </h2>
+          <div className="space-y-2">
+            {questionStats.map((q, idx) => {
+              const isHard = q.percentCorrect < 40
+              const isMedium = q.percentCorrect >= 40 && q.percentCorrect < 70
+              return (
+                <div
+                  key={q.cardTemplateId}
+                  className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                >
+                  <span className="text-xs font-medium text-slate-400 w-6 text-right flex-shrink-0">
+                    {idx + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-slate-900 dark:text-slate-100 truncate">
+                      {q.stem}
+                    </p>
+                    <div className="mt-1 w-full h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${
+                          isHard ? 'bg-red-500' : isMedium ? 'bg-amber-500' : 'bg-green-500'
+                        }`}
+                        style={{ width: `${q.percentCorrect}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span
+                      className={`text-sm font-bold ${
+                        isHard ? 'text-red-500' : isMedium ? 'text-amber-600' : 'text-green-600'
+                      }`}
+                    >
+                      {q.percentCorrect}%
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      ({q.correctCount}/{q.totalAttempts})
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {summary && summary.totalCompleted === 0 && (
+        <div className="text-center py-12 text-slate-500 dark:text-slate-400">
+          <BarChart3 className="h-10 w-10 mx-auto mb-2 opacity-50" />
+          <p>No completed attempts yet. Analytics will appear once candidates complete the assessment.</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+  value: string | number
+}) {
+  return (
+    <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-center">
+      <Icon className="h-5 w-5 mx-auto text-slate-400 mb-1" />
+      <div className="text-xl font-bold text-slate-900 dark:text-slate-100">{value}</div>
+      <div className="text-xs text-slate-500">{label}</div>
+    </div>
+  )
+}

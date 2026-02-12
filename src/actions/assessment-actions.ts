@@ -889,6 +889,110 @@ export async function getAssessmentResultsDetailed(
 }
 
 /**
+ * Get analytics summary for an assessment.
+ * Includes score distribution, completion rate, average time, and top/bottom performers.
+ */
+export async function getAssessmentAnalyticsSummary(
+  assessmentId: string
+): Promise<ActionResultV2<{
+  scoreDistribution: number[] // 10 buckets: [0-9, 10-19, ..., 90-100]
+  completionRate: number
+  avgTimeMinutes: number | null
+  medianScore: number | null
+  totalStarted: number
+  totalCompleted: number
+  topPerformers: Array<{ email: string; score: number; completedAt: string }>
+}>> {
+  return withOrgUser(async ({ supabase, org, role }) => {
+    if (!hasMinimumRole(role, 'creator')) {
+      return { ok: false, error: 'Insufficient permissions' }
+    }
+
+    // Get all sessions for this assessment
+    const { data: allSessions } = await supabase
+      .from('assessment_sessions')
+      .select('*, assessments!inner(org_id, time_limit_minutes)')
+      .eq('assessment_id', assessmentId)
+      .order('completed_at', { ascending: false })
+
+    const orgSessions = (allSessions ?? []).filter((s) => {
+      const a = s.assessments as unknown as { org_id: string }
+      return a.org_id === org.id
+    })
+
+    const totalStarted = orgSessions.length
+    const completed = orgSessions.filter((s) => s.status === 'completed')
+    const totalCompleted = completed.length
+    const completionRate = totalStarted > 0 ? Math.round((totalCompleted / totalStarted) * 100) : 0
+
+    // Score distribution: 10 buckets
+    const scoreDistribution = Array(10).fill(0)
+    const scores: number[] = []
+    for (const s of completed) {
+      const score = s.score ?? 0
+      scores.push(score)
+      const bucket = score === 100 ? 9 : Math.floor(score / 10)
+      scoreDistribution[bucket]++
+    }
+
+    // Median score
+    scores.sort((a, b) => a - b)
+    const medianScore = scores.length > 0
+      ? scores.length % 2 === 0
+        ? Math.round((scores[scores.length / 2 - 1] + scores[scores.length / 2]) / 2)
+        : scores[Math.floor(scores.length / 2)]
+      : null
+
+    // Average time (time_limit - time_remaining at completion)
+    let avgTimeMinutes: number | null = null
+    const timeLimitMinutes = orgSessions[0]
+      ? (orgSessions[0].assessments as unknown as { time_limit_minutes: number }).time_limit_minutes
+      : null
+    if (timeLimitMinutes && completed.length > 0) {
+      const totalTimeSeconds = completed.reduce((sum, s) => {
+        const remaining = s.time_remaining_seconds ?? 0
+        return sum + (timeLimitMinutes * 60 - remaining)
+      }, 0)
+      avgTimeMinutes = Math.round((totalTimeSeconds / completed.length / 60) * 10) / 10
+    }
+
+    // Top performers
+    const userIds = [...new Set(completed.slice(0, 10).map((s) => s.user_id))]
+    const emailMap = new Map<string, string>()
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .in('id', userIds)
+      if (profiles) {
+        for (const p of profiles) emailMap.set(p.id, p.email)
+      }
+    }
+
+    // Sort by score desc, take top 5
+    const sortedByScore = [...completed].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+    const topPerformers = sortedByScore.slice(0, 5).map((s) => ({
+      email: emailMap.get(s.user_id) ?? `user-${s.user_id.slice(0, 8)}`,
+      score: s.score ?? 0,
+      completedAt: s.completed_at ?? '',
+    }))
+
+    return {
+      ok: true,
+      data: {
+        scoreDistribution,
+        completionRate,
+        avgTimeMinutes,
+        medianScore,
+        totalStarted,
+        totalCompleted,
+        topPerformers,
+      },
+    }
+  })
+}
+
+/**
  * Get per-question analytics for an assessment.
  * Returns each question's stem, total attempts, correct count, and % correct.
  */
@@ -992,12 +1096,9 @@ export async function reportTabSwitch(
   sessionId: string
 ): Promise<ActionResultV2<void>> {
   return withOrgUser(async ({ user, supabase }) => {
-    // Use RPC or raw update — increment tab_switch_count
-    // Since Supabase doesn't support increment natively in the JS client,
-    // we read-then-write (acceptable for low-frequency tab switches)
     const { data: session } = await supabase
       .from('assessment_sessions')
-      .select('id, tab_switch_count')
+      .select('id, tab_switch_count, tab_switch_log')
       .eq('id', sessionId)
       .eq('user_id', user.id)
       .eq('status', 'in_progress')
@@ -1008,13 +1109,65 @@ export async function reportTabSwitch(
     }
 
     const newCount = ((session.tab_switch_count as number) ?? 0) + 1
+    const log = Array.isArray(session.tab_switch_log) ? session.tab_switch_log : []
+    log.push({ timestamp: new Date().toISOString(), type: 'tab_hidden' })
 
     await supabase
       .from('assessment_sessions')
-      .update({ tab_switch_count: newCount })
+      .update({ tab_switch_count: newCount, tab_switch_log: log })
       .eq('id', sessionId)
 
     return { ok: true }
+  })
+}
+
+/**
+ * Get proctoring violations for a specific session.
+ * Creator+ only.
+ */
+export async function getSessionViolations(
+  sessionId: string
+): Promise<ActionResultV2<{
+  tabSwitchCount: number
+  tabSwitchLog: Array<{ timestamp: string; type: string }>
+  userEmail: string
+  assessmentTitle: string
+}>> {
+  return withOrgUser(async ({ supabase, org, role }) => {
+    if (!hasMinimumRole(role, 'creator')) {
+      return { ok: false, error: 'Insufficient permissions' }
+    }
+
+    const { data: session } = await supabase
+      .from('assessment_sessions')
+      .select('*, assessments!inner(org_id, title)')
+      .eq('id', sessionId)
+      .single()
+
+    if (!session) {
+      return { ok: false, error: 'Session not found' }
+    }
+
+    const assessmentData = session.assessments as unknown as { org_id: string; title: string }
+    if (assessmentData.org_id !== org.id) {
+      return { ok: false, error: 'Session not found' }
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('email')
+      .eq('id', session.user_id)
+      .single()
+
+    return {
+      ok: true,
+      data: {
+        tabSwitchCount: session.tab_switch_count ?? 0,
+        tabSwitchLog: Array.isArray(session.tab_switch_log) ? session.tab_switch_log : [],
+        userEmail: profile?.email ?? `user-${session.user_id.slice(0, 8)}`,
+        assessmentTitle: assessmentData.title,
+      },
+    }
   })
 }
 
@@ -1027,6 +1180,8 @@ export async function getOrgDashboardStats(): Promise<ActionResultV2<{
   assessmentCount: number
   totalAttempts: number
   avgPassRate: number
+  activeCandidatesThisWeek: number
+  topPerformers: Array<{ email: string; avgScore: number; totalCompleted: number }>
   recentSessions: Array<{
     assessmentTitle: string
     userEmail: string
@@ -1061,7 +1216,7 @@ export async function getOrgDashboardStats(): Promise<ActionResultV2<{
       `)
       .eq('status', 'completed')
       .order('completed_at', { ascending: false, nullsFirst: false })
-      .limit(100)
+      .limit(200)
 
     const orgSessions = (sessions ?? []).filter((s) => {
       const a = s.assessments as unknown as { org_id: string }
@@ -1073,21 +1228,57 @@ export async function getOrgDashboardStats(): Promise<ActionResultV2<{
       ? Math.round((orgSessions.filter((s) => s.passed).length / totalAttempts) * 100)
       : 0
 
-    // Recent 5 sessions with profile emails
-    const recent = orgSessions.slice(0, 5)
-    const userIds = [...new Set(recent.map((s) => s.user_id))]
+    // Active candidates this week
+    const weekAgo = new Date()
+    weekAgo.setDate(weekAgo.getDate() - 7)
+    const weekAgoStr = weekAgo.toISOString()
+    const recentUserIds = new Set(
+      orgSessions
+        .filter((s) => s.completed_at && s.completed_at >= weekAgoStr)
+        .map((s) => s.user_id)
+    )
+    const activeCandidatesThisWeek = recentUserIds.size
+
+    // Top performers: aggregate avg score per user
+    const userScores = new Map<string, { total: number; count: number }>()
+    for (const s of orgSessions) {
+      if (s.score !== null) {
+        const entry = userScores.get(s.user_id) ?? { total: 0, count: 0 }
+        entry.total += s.score
+        entry.count++
+        userScores.set(s.user_id, entry)
+      }
+    }
+
+    // Get all user IDs we need emails for
+    const allUserIds = [...new Set([
+      ...orgSessions.slice(0, 5).map((s) => s.user_id),
+      ...userScores.keys(),
+    ])]
     const emailMap = new Map<string, string>()
-    if (userIds.length > 0) {
+    if (allUserIds.length > 0) {
       const { data: profiles } = await supabase
         .from('profiles')
         .select('id, email')
-        .in('id', userIds)
+        .in('id', allUserIds)
       if (profiles) {
         for (const p of profiles) emailMap.set(p.id, p.email)
       }
     }
 
-    const recentSessions = recent.map((s) => ({
+    // Build top performers (min 2 attempts, sorted by avg score desc)
+    const topPerformers = [...userScores.entries()]
+      .filter(([, stats]) => stats.count >= 2)
+      .map(([userId, stats]) => ({
+        email: emailMap.get(userId) ?? `user-${userId.slice(0, 8)}`,
+        avgScore: Math.round(stats.total / stats.count),
+        totalCompleted: stats.count,
+      }))
+      .sort((a, b) => b.avgScore - a.avgScore)
+      .slice(0, 5)
+
+    // Recent 5 sessions
+    const recentSessions = orgSessions.slice(0, 5).map((s) => ({
       assessmentTitle: (s.assessments as unknown as { title: string }).title,
       userEmail: emailMap.get(s.user_id) ?? `user-${s.user_id.slice(0, 8)}`,
       score: s.score,
@@ -1102,7 +1293,187 @@ export async function getOrgDashboardStats(): Promise<ActionResultV2<{
         assessmentCount: assessmentCount ?? 0,
         totalAttempts,
         avgPassRate,
+        activeCandidatesThisWeek,
+        topPerformers,
         recentSessions,
+      },
+    }
+  })
+}
+
+/**
+ * List org candidates with their assessment summary stats.
+ * Creator+ only.
+ */
+export async function getOrgCandidateList(): Promise<ActionResultV2<
+  Array<{
+    userId: string
+    email: string
+    fullName: string | null
+    totalCompleted: number
+    avgScore: number
+    lastActiveAt: string | null
+  }>
+>> {
+  return withOrgUser(async ({ supabase, org, role }) => {
+    if (!hasMinimumRole(role, 'creator')) {
+      return { ok: false, error: 'Insufficient permissions' }
+    }
+
+    // Get candidate members
+    const { data: members } = await supabase
+      .from('organization_members')
+      .select('user_id, role')
+      .eq('org_id', org.id)
+      .eq('role', 'candidate')
+
+    if (!members || members.length === 0) {
+      return { ok: true, data: [] }
+    }
+
+    const userIds = members.map((m) => m.user_id)
+
+    // Profiles
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, email, full_name')
+      .in('id', userIds)
+    const profileMap = new Map(
+      (profiles ?? []).map((p) => [p.id, { email: p.email, fullName: p.full_name }])
+    )
+
+    // Get completed sessions for these users
+    const { data: sessions } = await supabase
+      .from('assessment_sessions')
+      .select('user_id, score, completed_at, assessments!inner(org_id)')
+      .eq('status', 'completed')
+      .in('user_id', userIds)
+
+    const orgSessions = (sessions ?? []).filter((s) => {
+      const a = s.assessments as unknown as { org_id: string }
+      return a.org_id === org.id
+    })
+
+    // Aggregate per user
+    const userStats = new Map<string, { total: number; scoreSum: number; lastAt: string | null }>()
+    for (const s of orgSessions) {
+      const entry = userStats.get(s.user_id) ?? { total: 0, scoreSum: 0, lastAt: null }
+      entry.total++
+      entry.scoreSum += s.score ?? 0
+      if (!entry.lastAt || (s.completed_at && s.completed_at > entry.lastAt)) {
+        entry.lastAt = s.completed_at
+      }
+      userStats.set(s.user_id, entry)
+    }
+
+    const result = userIds.map((uid) => {
+      const profile = profileMap.get(uid)
+      const stats = userStats.get(uid)
+      return {
+        userId: uid,
+        email: profile?.email ?? `user-${uid.slice(0, 8)}`,
+        fullName: profile?.fullName ?? null,
+        totalCompleted: stats?.total ?? 0,
+        avgScore: stats && stats.total > 0 ? Math.round(stats.scoreSum / stats.total) : 0,
+        lastActiveAt: stats?.lastAt ?? null,
+      }
+    })
+
+    // Sort by most recently active first
+    result.sort((a, b) => {
+      if (!a.lastActiveAt && !b.lastActiveAt) return 0
+      if (!a.lastActiveAt) return 1
+      if (!b.lastActiveAt) return -1
+      return b.lastActiveAt.localeCompare(a.lastActiveAt)
+    })
+
+    return { ok: true, data: result }
+  })
+}
+
+/**
+ * Get a single candidate's assessment history across all org assessments.
+ * Creator+ only.
+ */
+export async function getCandidateProgress(
+  userId: string
+): Promise<ActionResultV2<{
+  candidate: { email: string; fullName: string | null }
+  sessions: Array<{
+    assessmentTitle: string
+    score: number | null
+    passed: boolean | null
+    completedAt: string | null
+    tabSwitchCount: number
+    tabSwitchLog: Array<{ timestamp: string; type: string }>
+    status: string
+  }>
+  summary: { totalCompleted: number; avgScore: number; passRate: number }
+}>> {
+  return withOrgUser(async ({ supabase, org, role }) => {
+    if (!hasMinimumRole(role, 'creator')) {
+      return { ok: false, error: 'Insufficient permissions' }
+    }
+
+    // Verify user is in org
+    const { data: membership } = await supabase
+      .from('organization_members')
+      .select('id')
+      .eq('org_id', org.id)
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (!membership) {
+      return { ok: false, error: 'Candidate not found in this organization' }
+    }
+
+    // Get profile
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('email, full_name')
+      .eq('id', userId)
+      .single()
+
+    // Get all sessions
+    const { data: sessionsData } = await supabase
+      .from('assessment_sessions')
+      .select('*, assessments!inner(org_id, title)')
+      .eq('user_id', userId)
+      .order('completed_at', { ascending: false, nullsFirst: false })
+
+    const orgSessions = (sessionsData ?? []).filter((s) => {
+      const a = s.assessments as unknown as { org_id: string }
+      return a.org_id === org.id
+    })
+
+    const sessions = orgSessions.map((s) => ({
+      assessmentTitle: (s.assessments as unknown as { title: string }).title,
+      score: s.score,
+      passed: s.passed,
+      completedAt: s.completed_at,
+      tabSwitchCount: s.tab_switch_count ?? 0,
+      tabSwitchLog: Array.isArray(s.tab_switch_log) ? s.tab_switch_log as Array<{ timestamp: string; type: string }> : [],
+      status: s.status,
+    }))
+
+    const completed = sessions.filter((s) => s.status === 'completed')
+    const totalCompleted = completed.length
+    const avgScore = totalCompleted > 0
+      ? Math.round(completed.reduce((sum, s) => sum + (s.score ?? 0), 0) / totalCompleted)
+      : 0
+    const passRate = totalCompleted > 0
+      ? Math.round((completed.filter((s) => s.passed).length / totalCompleted) * 100)
+      : 0
+
+    return {
+      ok: true,
+      data: {
+        candidate: {
+          email: profile?.email ?? `user-${userId.slice(0, 8)}`,
+          fullName: profile?.full_name ?? null,
+        },
+        sessions,
+        summary: { totalCompleted, avgScore, passRate },
       },
     }
   })

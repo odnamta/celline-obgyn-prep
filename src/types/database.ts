@@ -130,6 +130,11 @@ export interface Assessment {
   updated_at: string
 }
 
+export interface TabSwitchEntry {
+  timestamp: string
+  type: 'tab_hidden' | 'tab_visible'
+}
+
 export interface AssessmentSession {
   id: string
   assessment_id: string
@@ -142,6 +147,7 @@ export interface AssessmentSession {
   question_order: string[] // card_template_ids
   status: SessionStatus
   tab_switch_count: number
+  tab_switch_log: TabSwitchEntry[]
   created_at: string
 }
 

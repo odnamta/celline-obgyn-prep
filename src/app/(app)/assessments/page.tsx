@@ -12,7 +12,7 @@ import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Plus, Play, Eye, BarChart3, Clock, Target, CheckCircle2, XCircle,
-  Pencil, Send, Archive, CalendarDays, Copy, ChevronDown, Search, Database,
+  Pencil, Send, Archive, CalendarDays, Copy, ChevronDown, Search, Database, Users,
 } from 'lucide-react'
 import { useOrg } from '@/components/providers/OrgProvider'
 import {
@@ -105,6 +105,10 @@ export default function AssessmentsPage() {
         </div>
         {isCreator && (
           <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => router.push('/assessments/candidates')}>
+              <Users className="h-4 w-4 mr-2" />
+              Candidates
+            </Button>
             <Button variant="secondary" onClick={() => router.push('/assessments/questions')}>
               <Database className="h-4 w-4 mr-2" />
               Question Bank
@@ -331,12 +335,25 @@ export default function AssessmentsPage() {
                       </Button>
                     )}
 
+                    {/* Creator: Analytics */}
+                    {isCreator && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => router.push(`/assessments/${assessment.id}/analytics`)}
+                        title="Analytics"
+                      >
+                        <BarChart3 className="h-4 w-4" />
+                      </Button>
+                    )}
+
                     {/* Creator: View results */}
                     {isCreator && (
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={() => router.push(`/assessments/${assessment.id}/results`)}
+                        title="All results"
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
