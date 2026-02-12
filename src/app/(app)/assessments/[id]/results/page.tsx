@@ -20,6 +20,7 @@ import {
   Users,
   TrendingUp,
   Target,
+  Download,
 } from 'lucide-react'
 import { useOrg } from '@/components/providers/OrgProvider'
 import { hasMinimumRole } from '@/lib/org-authorization'
@@ -28,6 +29,7 @@ import {
   getAssessment,
   getAssessmentResultsDetailed,
   getQuestionAnalytics,
+  exportResultsCsv,
 } from '@/actions/assessment-actions'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/badge'
@@ -333,9 +335,32 @@ function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
         Back to Assessments
       </button>
 
-      <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-1">
-        {assessment?.title ?? 'Assessment'} — Results
-      </h1>
+      <div className="flex items-start justify-between mb-1">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+          {assessment?.title ?? 'Assessment'} — Results
+        </h1>
+        {sessions.length > 0 && (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={async () => {
+              const result = await exportResultsCsv(assessmentId)
+              if (result.ok && result.data) {
+                const blob = new Blob([result.data], { type: 'text/csv' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `${assessment?.title ?? 'assessment'}-results.csv`
+                a.click()
+                URL.revokeObjectURL(url)
+              }
+            }}
+          >
+            <Download className="h-4 w-4 mr-1" />
+            Export CSV
+          </Button>
+        )}
+      </div>
       {assessment && (
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
           {assessment.question_count} questions · {assessment.time_limit_minutes} min · {assessment.pass_score}% to pass

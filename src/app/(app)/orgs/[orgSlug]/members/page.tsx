@@ -63,6 +63,7 @@ export default function OrgMembersPage() {
   const [inviteRole, setInviteRole] = useState<OrgRole>('candidate')
   const [inviting, setInviting] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [copiedJoinLink, setCopiedJoinLink] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -220,6 +221,32 @@ export default function OrgMembersPage() {
           </Button>
         </div>
       </form>
+
+      {/* Public Join Link */}
+      <div className="mb-6 p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-2">
+          Public Join Link
+        </h2>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+          Share this link to let candidates join your organization directly.
+        </p>
+        <div className="flex items-center gap-2">
+          <code className="flex-1 text-xs bg-slate-100 dark:bg-slate-700 px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 truncate">
+            {typeof window !== 'undefined' ? `${window.location.origin}/join/${org.slug}` : `/join/${org.slug}`}
+          </code>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={async () => {
+              await navigator.clipboard.writeText(`${window.location.origin}/join/${org.slug}`)
+              setCopiedJoinLink(true)
+              setTimeout(() => setCopiedJoinLink(false), 2000)
+            }}
+          >
+            {copiedJoinLink ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+          </Button>
+        </div>
+      </div>
 
       {/* Pending Invitations */}
       {invitations.length > 0 && (

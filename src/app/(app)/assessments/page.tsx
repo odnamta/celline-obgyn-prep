@@ -12,7 +12,7 @@ import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Plus, Play, Eye, BarChart3, Clock, Target, CheckCircle2, XCircle,
-  Pencil, Send, Archive,
+  Pencil, Send, Archive, CalendarDays, Copy, ChevronDown,
 } from 'lucide-react'
 import { useOrg } from '@/components/providers/OrgProvider'
 import {
@@ -20,6 +20,7 @@ import {
   getMyAssessmentSessions,
   publishAssessment,
   archiveAssessment,
+  duplicateAssessment,
 } from '@/actions/assessment-actions'
 import { hasMinimumRole } from '@/lib/org-authorization'
 import { Button } from '@/components/ui/Button'
@@ -34,6 +35,7 @@ export default function AssessmentsPage() {
   const [sessions, setSessions] = useState<SessionWithAssessment[]>([])
   const [loading, setLoading] = useState(true)
   const [isPending, startTransition] = useTransition()
+  const [expandedHistory, setExpandedHistory] = useState<Set<string>>(new Set())
 
   const isCreator = hasMinimumRole(role, 'creator')
 
@@ -62,6 +64,13 @@ export default function AssessmentsPage() {
   function handleArchive(assessmentId: string) {
     startTransition(async () => {
       const result = await archiveAssessment(assessmentId)
+      if (result.ok) await loadData()
+    })
+  }
+
+  function handleDuplicate(assessmentId: string) {
+    startTransition(async () => {
+      const result = await duplicateAssessment(assessmentId)
       if (result.ok) await loadData()
     })
   }
@@ -114,6 +123,10 @@ export default function AssessmentsPage() {
           {assessments.map((assessment) => {
             const mySessions = sessions.filter((s) => s.assessment_id === assessment.id)
             const lastSession = mySessions[0]
+            const now = new Date()
+            const isUpcoming = assessment.start_date && new Date(assessment.start_date) > now
+            const isClosed = assessment.end_date && new Date(assessment.end_date) < now
+            const isScheduleBlocked = isUpcoming || isClosed
 
             return (
               <div
@@ -146,6 +159,18 @@ export default function AssessmentsPage() {
                       {isCreator && (
                         <span>{assessment.session_count} attempts</span>
                       )}
+                      {(assessment.start_date || assessment.end_date) && (
+                        <span className="inline-flex items-center gap-1">
+                          <CalendarDays className="h-3 w-3" />
+                          {isUpcoming
+                            ? `Opens ${new Date(assessment.start_date!).toLocaleDateString()}`
+                            : isClosed
+                              ? 'Closed'
+                              : assessment.end_date
+                                ? `Closes ${new Date(assessment.end_date).toLocaleDateString()}`
+                                : ''}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -171,6 +196,8 @@ export default function AssessmentsPage() {
                       <Button
                         size="sm"
                         onClick={() => router.push(`/assessments/${assessment.id}/take`)}
+                        disabled={!!isScheduleBlocked}
+                        title={isUpcoming ? 'Not yet available' : isClosed ? 'Assessment closed' : undefined}
                       >
                         <Play className="h-4 w-4 mr-1" />
                         {lastSession ? 'Retake' : 'Start'}
@@ -214,6 +241,19 @@ export default function AssessmentsPage() {
                       </Button>
                     )}
 
+                    {/* Creator: Duplicate */}
+                    {isCreator && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleDuplicate(assessment.id)}
+                        disabled={isPending}
+                        title="Duplicate assessment"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    )}
+
                     {/* Creator: View results */}
                     {isCreator && (
                       <Button
@@ -226,6 +266,43 @@ export default function AssessmentsPage() {
                     )}
                   </div>
                 </div>
+
+                {/* Expandable attempt history */}
+                {mySessions.length > 1 && (
+                  <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700">
+                    <button
+                      onClick={() => setExpandedHistory((prev) => {
+                        const next = new Set(prev)
+                        if (next.has(assessment.id)) next.delete(assessment.id)
+                        else next.add(assessment.id)
+                        return next
+                      })}
+                      className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                    >
+                      <ChevronDown className={`h-3 w-3 transition-transform ${expandedHistory.has(assessment.id) ? 'rotate-180' : ''}`} />
+                      {mySessions.length} attempts
+                    </button>
+                    {expandedHistory.has(assessment.id) && (
+                      <div className="mt-2 space-y-1">
+                        {mySessions.map((s, idx) => (
+                          <div key={s.id} className="flex items-center justify-between text-xs py-1 px-2 rounded bg-slate-50 dark:bg-slate-800/50">
+                            <span className="text-slate-500">
+                              Attempt {mySessions.length - idx}
+                              {s.completed_at && ` · ${new Date(s.completed_at).toLocaleDateString()}`}
+                            </span>
+                            <span className={`font-medium ${s.passed ? 'text-green-600' : s.status === 'completed' ? 'text-red-500' : 'text-slate-400'}`}>
+                              {s.status === 'completed' && s.score !== null
+                                ? `${s.score}% ${s.passed ? 'Passed' : 'Failed'}`
+                                : s.status === 'in_progress'
+                                  ? 'In progress'
+                                  : '—'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}

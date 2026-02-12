@@ -341,3 +341,60 @@ export async function switchOrganization(
     return { ok: true }
   })
 }
+
+/**
+ * Join an organization by slug as a candidate.
+ * Used for self-registration via public join link.
+ */
+export async function joinOrgBySlug(
+  slug: string
+): Promise<ActionResultV2<{ orgName: string }>> {
+  return withUser(async ({ user, supabase }) => {
+    // Find org by slug
+    const { data: org } = await supabase
+      .from('organizations')
+      .select('id, name')
+      .eq('slug', slug)
+      .single()
+
+    if (!org) {
+      return { ok: false, error: 'Organization not found' }
+    }
+
+    // Check if already a member
+    const { data: existing } = await supabase
+      .from('organization_members')
+      .select('id')
+      .eq('org_id', org.id)
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    if (existing) {
+      return { ok: false, error: 'You are already a member of this organization' }
+    }
+
+    // Add as candidate
+    const { error } = await supabase
+      .from('organization_members')
+      .insert({
+        org_id: org.id,
+        user_id: user.id,
+        role: 'candidate',
+      })
+
+    if (error) {
+      return { ok: false, error: error.message }
+    }
+
+    // Set as active org
+    const cookieStore = await cookies()
+    cookieStore.set(ACTIVE_ORG_COOKIE, org.id, {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: 'lax',
+    })
+
+    revalidatePath('/', 'layout')
+    return { ok: true, data: { orgName: org.name } }
+  })
+}

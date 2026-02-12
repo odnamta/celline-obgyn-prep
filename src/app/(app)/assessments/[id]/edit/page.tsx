@@ -42,6 +42,8 @@ export default function EditAssessmentPage() {
   const [shuffleOptions, setShuffleOptions] = useState(false)
   const [showResults, setShowResults] = useState(true)
   const [maxAttempts, setMaxAttempts] = useState<number | undefined>(undefined)
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -58,6 +60,8 @@ export default function EditAssessmentPage() {
         setShuffleOptions(a.shuffle_options)
         setShowResults(a.show_results)
         setMaxAttempts(a.max_attempts ?? undefined)
+        setStartDate(a.start_date ? new Date(a.start_date).toISOString().slice(0, 16) : '')
+        setEndDate(a.end_date ? new Date(a.end_date).toISOString().slice(0, 16) : '')
       } else if (!result.ok) {
         setError(result.error)
       }
@@ -90,6 +94,8 @@ export default function EditAssessmentPage() {
       shuffleOptions,
       showResults,
       maxAttempts: maxAttempts ?? null,
+      startDate: startDate ? new Date(startDate).toISOString() : null,
+      endDate: endDate ? new Date(endDate).toISOString() : null,
     })
 
     if (result.ok) {
@@ -236,6 +242,34 @@ export default function EditAssessmentPage() {
             placeholder="Unlimited"
             className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
           />
+        </div>
+
+        {/* Schedule */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+              Start Date (optional)
+            </label>
+            <input
+              type="datetime-local"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              disabled={!isDraft}
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+              End Date (optional)
+            </label>
+            <input
+              type="datetime-local"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              disabled={!isDraft}
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            />
+          </div>
         </div>
 
         <div className="space-y-3">

@@ -38,6 +38,8 @@ export async function createAssessment(
     shuffleOptions?: boolean
     showResults?: boolean
     maxAttempts?: number
+    startDate?: string
+    endDate?: string
   }
 ): Promise<ActionResultV2<Assessment>> {
   return withOrgUser(async ({ user, supabase, org, role }) => {
@@ -88,6 +90,8 @@ export async function createAssessment(
         shuffle_options: input.shuffleOptions ?? false,
         show_results: input.showResults ?? true,
         max_attempts: input.maxAttempts ?? null,
+        start_date: input.startDate ?? null,
+        end_date: input.endDate ?? null,
         status: 'draft',
         created_by: user.id,
       })
@@ -232,6 +236,59 @@ export async function archiveAssessment(
 }
 
 /**
+ * Duplicate an assessment as a new draft.
+ */
+export async function duplicateAssessment(
+  assessmentId: string
+): Promise<ActionResultV2<Assessment>> {
+  return withOrgUser(async ({ user, supabase, org, role }) => {
+    if (!hasMinimumRole(role, 'creator')) {
+      return { ok: false, error: 'Insufficient permissions' }
+    }
+
+    const { data: source } = await supabase
+      .from('assessments')
+      .select('*')
+      .eq('id', assessmentId)
+      .eq('org_id', org.id)
+      .single()
+
+    if (!source) {
+      return { ok: false, error: 'Assessment not found' }
+    }
+
+    const { data: clone, error } = await supabase
+      .from('assessments')
+      .insert({
+        org_id: org.id,
+        deck_template_id: source.deck_template_id,
+        title: `${source.title} (Copy)`,
+        description: source.description,
+        time_limit_minutes: source.time_limit_minutes,
+        pass_score: source.pass_score,
+        question_count: source.question_count,
+        shuffle_questions: source.shuffle_questions,
+        shuffle_options: source.shuffle_options,
+        show_results: source.show_results,
+        max_attempts: source.max_attempts,
+        start_date: null,
+        end_date: null,
+        status: 'draft',
+        created_by: user.id,
+      })
+      .select()
+      .single()
+
+    if (error) {
+      return { ok: false, error: error.message }
+    }
+
+    revalidatePath('/assessments')
+    return { ok: true, data: clone as Assessment }
+  })
+}
+
+/**
  * Update assessment settings (draft only).
  * Creator+ only.
  */
@@ -247,6 +304,8 @@ export async function updateAssessment(
     shuffleOptions?: boolean
     showResults?: boolean
     maxAttempts?: number | null
+    startDate?: string | null
+    endDate?: string | null
   }
 ): Promise<ActionResultV2<Assessment>> {
   return withOrgUser(async ({ supabase, org, role }) => {
@@ -265,6 +324,8 @@ export async function updateAssessment(
     if (input.shuffleOptions !== undefined) updates.shuffle_options = input.shuffleOptions
     if (input.showResults !== undefined) updates.show_results = input.showResults
     if (input.maxAttempts !== undefined) updates.max_attempts = input.maxAttempts
+    if (input.startDate !== undefined) updates.start_date = input.startDate
+    if (input.endDate !== undefined) updates.end_date = input.endDate
 
     const { data, error } = await supabase
       .from('assessments')
@@ -307,6 +368,15 @@ export async function startAssessmentSession(
 
     if (aError || !assessment) {
       return { ok: false, error: 'Assessment not found or not published' }
+    }
+
+    // Check schedule window
+    const now = new Date()
+    if (assessment.start_date && new Date(assessment.start_date) > now) {
+      return { ok: false, error: 'This assessment has not started yet' }
+    }
+    if (assessment.end_date && new Date(assessment.end_date) < now) {
+      return { ok: false, error: 'This assessment has closed' }
     }
 
     // Check max attempts
@@ -990,5 +1060,58 @@ export async function getOrgDashboardStats(): Promise<ActionResultV2<{
         recentSessions,
       },
     }
+  })
+}
+
+/**
+ * Export assessment results as CSV string.
+ */
+export async function exportResultsCsv(
+  assessmentId: string
+): Promise<ActionResultV2<string>> {
+  return withOrgUser(async ({ supabase, org, role }) => {
+    if (!hasMinimumRole(role, 'creator')) {
+      return { ok: false, error: 'Insufficient permissions' }
+    }
+
+    const { data: sessions } = await supabase
+      .from('assessment_sessions')
+      .select(`*, assessments!inner(org_id, title)`)
+      .eq('assessment_id', assessmentId)
+      .eq('status', 'completed')
+      .order('completed_at', { ascending: false })
+
+    const orgSessions = (sessions ?? []).filter((s) => {
+      const a = s.assessments as unknown as { org_id: string }
+      return a.org_id === org.id
+    })
+
+    // Fetch emails
+    const userIds = [...new Set(orgSessions.map((s) => s.user_id))]
+    const emailMap = new Map<string, string>()
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .in('id', userIds)
+      if (profiles) {
+        for (const p of profiles) emailMap.set(p.id, p.email)
+      }
+    }
+
+    // Build CSV
+    const header = 'Candidate,Score,Passed,Tab Switches,Completed At'
+    const rows = orgSessions.map((s) => {
+      const email = emailMap.get(s.user_id) ?? `user-${s.user_id.slice(0, 8)}`
+      const score = s.score ?? 0
+      const passed = s.passed ? 'Yes' : 'No'
+      const tabSwitches = s.tab_switch_count ?? 0
+      const completedAt = s.completed_at ? new Date(s.completed_at).toISOString() : ''
+      // Escape email in case it contains commas
+      return `"${email}",${score},${passed},${tabSwitches},${completedAt}`
+    })
+
+    const csv = [header, ...rows].join('\n')
+    return { ok: true, data: csv }
   })
 }
