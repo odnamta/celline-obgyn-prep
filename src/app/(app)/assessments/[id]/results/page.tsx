@@ -31,6 +31,7 @@ import {
   getQuestionAnalytics,
   exportResultsCsv,
   getSessionWeakAreas,
+  expireStaleSessions,
 } from '@/actions/assessment-actions'
 import { useToast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/Button'
@@ -388,6 +389,9 @@ function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
 
   useEffect(() => {
     async function load() {
+      // Auto-expire stale sessions before loading results
+      await expireStaleSessions()
+
       const [aResult, rResult, qResult] = await Promise.all([
         getAssessment(assessmentId),
         getAssessmentResultsDetailed(assessmentId),
@@ -570,13 +574,14 @@ function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
             All Attempts
           </h2>
           <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-x-auto">
-            <table className="w-full text-sm min-w-[600px]" aria-label="Candidate attempt results">
+            <table className="w-full text-sm min-w-[700px]" aria-label="Candidate attempt results">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-800/50 text-left">
                   <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Candidate</th>
                   <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Score</th>
                   <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Status</th>
                   <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Tab Switches</th>
+                  <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">IP</th>
                   <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Date</th>
                 </tr>
               </thead>
@@ -587,7 +592,7 @@ function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
                       {s.user_email}
                     </td>
                     <td className="px-4 py-3">
-                      {s.status === 'completed' && s.score !== null ? (
+                      {(s.status === 'completed' || s.status === 'timed_out') && s.score !== null ? (
                         <span className={`font-bold ${s.passed ? 'text-green-600' : 'text-red-500'}`}>
                           {s.score}%
                         </span>
@@ -606,8 +611,12 @@ function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
                             Failed
                           </Badge>
                         )
+                      ) : s.status === 'timed_out' ? (
+                        <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+                          Timed Out
+                        </Badge>
                       ) : (
-                        <Badge variant="secondary">{s.status.replace('_', ' ')}</Badge>
+                        <Badge variant="secondary">In Progress</Badge>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -618,6 +627,9 @@ function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
                       ) : (
                         <span className="text-slate-400">0</span>
                       )}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-400 font-mono">
+                      {s.ip_address ?? '—'}
                     </td>
                     <td className="px-4 py-3 text-slate-500">
                       {s.completed_at

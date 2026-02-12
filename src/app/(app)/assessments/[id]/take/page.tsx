@@ -22,6 +22,7 @@ import {
   getExistingAnswers,
   reportTabSwitch,
   getMyAssessmentSessions,
+  expireStaleSessions,
 } from '@/actions/assessment-actions'
 import { Button } from '@/components/ui/Button'
 import type { Assessment, AssessmentSession } from '@/types/database'
@@ -74,7 +75,9 @@ export default function TakeAssessmentPage() {
   const [showConfirmFinish, setShowConfirmFinish] = useState(false)
   const [tabSwitchCount, setTabSwitchCount] = useState(0)
   const [showTabWarning, setShowTabWarning] = useState(false)
+  const [fullscreenExited, setFullscreenExited] = useState(false)
   const [attemptCount, setAttemptCount] = useState(0)
+  const [accessCodeInput, setAccessCodeInput] = useState('')
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const completingRef = useRef(false)
 
@@ -93,6 +96,9 @@ export default function TakeAssessmentPage() {
         return
       }
       setAssessment(aResult.data)
+
+      // Auto-expire any stale sessions before checking for resumable ones
+      await expireStaleSessions()
 
       // Check if there's an existing in-progress session to resume
       const sessionsResult = await getMyAssessmentSessions()
@@ -122,7 +128,7 @@ export default function TakeAssessmentPage() {
     if (existingSession) {
       sessionData = existingSession
     } else {
-      const sResult = await startAssessmentSession(assessmentId)
+      const sResult = await startAssessmentSession(assessmentId, accessCodeInput || undefined)
       if (!sResult.ok) {
         setError(sResult.error)
         setStarting(false)
@@ -202,6 +208,15 @@ export default function TakeAssessmentPage() {
     setLoading(false)
     setStarting(false)
     setPhase('exam')
+
+    // Request fullscreen for exam lockdown (best-effort, some browsers may deny)
+    try {
+      if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+        await document.documentElement.requestFullscreen().catch(() => {})
+      }
+    } catch {
+      // Fullscreen not supported or denied — continue without it
+    }
   }
 
   // Auto-complete handler (stable ref to avoid stale closures in timer)
@@ -210,6 +225,7 @@ export default function TakeAssessmentPage() {
     completingRef.current = true
     setCompleting(true)
     if (timerRef.current) clearInterval(timerRef.current)
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
 
     // Read session from ref via state updater to avoid stale closure
     setSession((currentSession) => {
@@ -264,6 +280,23 @@ export default function TakeAssessmentPage() {
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [session, completing])
+
+  // Fullscreen exit detection
+  useEffect(() => {
+    if (phase !== 'exam' || !session || completing) return
+
+    function handleFullscreenChange() {
+      if (!document.fullscreenElement) {
+        setFullscreenExited(true)
+        setTabSwitchCount((prev) => prev + 1)
+        setShowTabWarning(true)
+        reportTabSwitch(session!.id)
+      }
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [phase, session, completing])
 
   // Warn before closing/navigating away from in-progress exam
   useEffect(() => {
@@ -361,6 +394,11 @@ export default function TakeAssessmentPage() {
     completingRef.current = true
     if (timerRef.current) clearInterval(timerRef.current)
 
+    // Exit fullscreen before navigating
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {})
+    }
+
     const result = await completeSession(session.id)
     if (result.ok) {
       router.push(`/assessments/${assessmentId}/results?sessionId=${session.id}`)
@@ -448,7 +486,7 @@ export default function TakeAssessmentPage() {
             )}
             <div className="flex items-center gap-3">
               <Shield className="h-4 w-4 text-red-500 flex-shrink-0" />
-              <span>Tab switches are monitored and recorded</span>
+              <span>Fullscreen mode is required — tab switches and exits are monitored</span>
             </div>
           </div>
         </div>
@@ -459,8 +497,25 @@ export default function TakeAssessmentPage() {
           </p>
         </div>
 
+        {assessment.access_code && (
+          <div className="mb-4">
+            <label htmlFor="access-code" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+              Access Code
+            </label>
+            <input
+              id="access-code"
+              type="text"
+              placeholder="Enter access code..."
+              value={accessCodeInput}
+              onChange={(e) => setAccessCodeInput(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              autoComplete="off"
+            />
+          </div>
+        )}
+
         {error && (
-          <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm">
+          <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm" role="alert">
             {error}
           </div>
         )}
@@ -476,7 +531,7 @@ export default function TakeAssessmentPage() {
           <Button
             onClick={() => startExam()}
             loading={starting}
-            disabled={starting}
+            disabled={starting || (!!assessment.access_code && !accessCodeInput)}
             className="flex-1"
           >
             Begin Assessment
@@ -668,11 +723,26 @@ export default function TakeAssessmentPage() {
               Leaving the exam window has been recorded.
             </p>
             <p className="text-sm text-amber-600 dark:text-amber-400 mb-4">
-              Tab switches: {tabSwitchCount}
+              Violations: {tabSwitchCount}
             </p>
-            <Button size="sm" onClick={() => setShowTabWarning(false)}>
-              Return to Exam
-            </Button>
+            <div className="flex items-center gap-2 justify-center">
+              <Button size="sm" onClick={() => setShowTabWarning(false)}>
+                Return to Exam
+              </Button>
+              {fullscreenExited && !document.fullscreenElement && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    document.documentElement.requestFullscreen().catch(() => {})
+                    setFullscreenExited(false)
+                    setShowTabWarning(false)
+                  }}
+                >
+                  Re-enter Fullscreen
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       )}

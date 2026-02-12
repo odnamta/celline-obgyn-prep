@@ -12,7 +12,7 @@ import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Plus, Play, Eye, BarChart3, Clock, Target, CheckCircle2, XCircle,
-  Pencil, Send, Archive, CalendarDays, Copy, ChevronDown, Search, Database, Users, Bell,
+  Pencil, Send, Archive, CalendarDays, Copy, ChevronDown, Search, Database, Users, Bell, Link2,
 } from 'lucide-react'
 import { useOrg } from '@/components/providers/OrgProvider'
 import {
@@ -113,6 +113,15 @@ export default function AssessmentsPage() {
       } else if (!result.ok) {
         showToast(result.error, 'error')
       }
+    })
+  }
+
+  function handleCopyLink(assessment: AssessmentWithDeck) {
+    const base = `${window.location.origin}/assessments/${assessment.id}/take`
+    navigator.clipboard.writeText(base).then(() => {
+      showToast('Assessment link copied to clipboard', 'success')
+    }).catch(() => {
+      showToast('Failed to copy link', 'error')
     })
   }
 
@@ -360,6 +369,18 @@ export default function AssessmentsPage() {
                       )
                     )}
 
+                    {/* Creator: Copy shareable link */}
+                    {isCreator && assessment.status === 'published' && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleCopyLink(assessment)}
+                        title="Copy assessment link"
+                      >
+                        <Link2 className="h-4 w-4" />
+                      </Button>
+                    )}
+
                     {/* Creator: Archive published */}
                     {isCreator && assessment.status === 'published' && (
                       <Button
@@ -446,9 +467,9 @@ export default function AssessmentsPage() {
                               Attempt {mySessions.length - idx}
                               {s.completed_at && ` · ${new Date(s.completed_at).toLocaleDateString()}`}
                             </span>
-                            <span className={`font-medium ${s.passed ? 'text-green-600' : s.status === 'completed' ? 'text-red-500' : 'text-slate-400'}`}>
-                              {s.status === 'completed' && s.score !== null
-                                ? `${s.score}% ${s.passed ? 'Passed' : 'Failed'}`
+                            <span className={`font-medium ${s.passed ? 'text-green-600' : (s.status === 'completed' || s.status === 'timed_out') ? 'text-red-500' : 'text-slate-400'}`}>
+                              {(s.status === 'completed' || s.status === 'timed_out') && s.score !== null
+                                ? `${s.score}% ${s.passed ? 'Passed' : s.status === 'timed_out' ? 'Timed Out' : 'Failed'}`
                                 : s.status === 'in_progress'
                                   ? 'In progress'
                                   : '—'}
@@ -496,7 +517,7 @@ export default function AssessmentsPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
-                  {session.status === 'completed' && session.score !== null && (
+                  {(session.status === 'completed' || session.status === 'timed_out') && session.score !== null && (
                     <span className={`text-sm font-bold ${session.passed ? 'text-green-600' : 'text-red-500'}`}>
                       {session.score}%
                     </span>

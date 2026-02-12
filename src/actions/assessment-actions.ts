@@ -6,6 +6,7 @@
  */
 
 import { revalidatePath } from 'next/cache'
+import { headers } from 'next/headers'
 import { withOrgUser } from '@/actions/_helpers'
 import { createAssessmentSchema, submitAnswerSchema } from '@/lib/validations'
 import { hasMinimumRole } from '@/lib/org-authorization'
@@ -43,6 +44,7 @@ export async function createAssessment(
     allowReview?: boolean
     startDate?: string
     endDate?: string
+    accessCode?: string
   }
 ): Promise<ActionResultV2<Assessment>> {
   return withOrgUser(async ({ user, supabase, org, role }) => {
@@ -97,6 +99,7 @@ export async function createAssessment(
         allow_review: input.allowReview ?? true,
         start_date: input.startDate ?? null,
         end_date: input.endDate ?? null,
+        access_code: input.accessCode || null,
         status: 'draft',
         created_by: user.id,
       })
@@ -335,6 +338,7 @@ export async function updateAssessment(
     allowReview?: boolean
     startDate?: string | null
     endDate?: string | null
+    accessCode?: string | null
   }
 ): Promise<ActionResultV2<Assessment>> {
   return withOrgUser(async ({ supabase, org, role }) => {
@@ -357,6 +361,7 @@ export async function updateAssessment(
     if (input.allowReview !== undefined) updates.allow_review = input.allowReview
     if (input.startDate !== undefined) updates.start_date = input.startDate
     if (input.endDate !== undefined) updates.end_date = input.endDate
+    if (input.accessCode !== undefined) updates.access_code = input.accessCode || null
 
     const { data, error } = await supabase
       .from('assessments')
@@ -385,7 +390,8 @@ export async function updateAssessment(
  * Selects questions, creates session and empty answer rows.
  */
 export async function startAssessmentSession(
-  assessmentId: string
+  assessmentId: string,
+  accessCode?: string
 ): Promise<ActionResultV2<AssessmentSession>> {
   return withOrgUser(async ({ user, supabase, org }) => {
     // Fetch assessment
@@ -399,6 +405,13 @@ export async function startAssessmentSession(
 
     if (aError || !assessment) {
       return { ok: false, error: 'Assessment not found or not published' }
+    }
+
+    // Validate access code if set
+    if (assessment.access_code) {
+      if (!accessCode || accessCode !== assessment.access_code) {
+        return { ok: false, error: 'Invalid access code' }
+      }
     }
 
     // Check schedule window
@@ -467,6 +480,10 @@ export async function startAssessmentSession(
     }
     questionIds = questionIds.slice(0, assessment.question_count)
 
+    // Capture client IP from headers
+    const hdrs = await headers()
+    const clientIp = hdrs.get('x-forwarded-for')?.split(',')[0]?.trim() ?? hdrs.get('x-real-ip') ?? null
+
     // Create session
     const { data: session, error: sError } = await supabase
       .from('assessment_sessions')
@@ -476,6 +493,7 @@ export async function startAssessmentSession(
         question_order: questionIds,
         time_remaining_seconds: assessment.time_limit_minutes * 60,
         status: 'in_progress',
+        ip_address: clientIp,
       })
       .select()
       .single()
@@ -869,13 +887,13 @@ export async function getAssessmentResultsDetailed(
       user_email: userEmailMap.get(s.user_id) ?? `user-${s.user_id.slice(0, 8)}`,
     })) as (AssessmentSession & { user_email: string })[]
 
-    // Calculate stats from completed sessions
-    const completed = sessions.filter((s) => s.status === 'completed')
-    const avgScore = completed.length > 0
-      ? Math.round(completed.reduce((sum, s) => sum + (s.score ?? 0), 0) / completed.length)
+    // Calculate stats from finished sessions (completed + timed_out)
+    const finished = sessions.filter((s) => s.status === 'completed' || s.status === 'timed_out')
+    const avgScore = finished.length > 0
+      ? Math.round(finished.reduce((sum, s) => sum + (s.score ?? 0), 0) / finished.length)
       : 0
-    const passRate = completed.length > 0
-      ? Math.round((completed.filter((s) => s.passed).length / completed.length) * 100)
+    const passRate = finished.length > 0
+      ? Math.round((finished.filter((s) => s.passed).length / finished.length) * 100)
       : 0
 
     return {
@@ -1739,5 +1757,74 @@ export async function getSessionWeakAreas(
       .sort((a, b) => a.percent - b.percent)
 
     return { ok: true, data: { topics } }
+  })
+}
+
+/**
+ * Auto-expire stale in-progress sessions that have exceeded their time limit.
+ * Calculates final score from submitted answers and marks status as 'timed_out'.
+ * Safe to call on any page load — only affects genuinely expired sessions.
+ */
+export async function expireStaleSessions(): Promise<ActionResultV2<{ expired: number }>> {
+  return withOrgUser(async ({ supabase, org }) => {
+    // Get all in-progress sessions for this org's assessments
+    const { data: sessions } = await supabase
+      .from('assessment_sessions')
+      .select('id, started_at, user_id, assessments!inner(org_id, time_limit_minutes, pass_score)')
+      .eq('status', 'in_progress')
+
+    if (!sessions || sessions.length === 0) {
+      return { ok: true, data: { expired: 0 } }
+    }
+
+    // Filter to this org and find genuinely expired ones
+    const now = Date.now()
+    const stale = sessions.filter((s) => {
+      const a = s.assessments as unknown as { org_id: string; time_limit_minutes: number }
+      if (a.org_id !== org.id) return false
+      const startedMs = new Date(s.started_at).getTime()
+      const expiresMs = startedMs + a.time_limit_minutes * 60 * 1000
+      return now > expiresMs
+    })
+
+    if (stale.length === 0) {
+      return { ok: true, data: { expired: 0 } }
+    }
+
+    // Process each stale session
+    let expiredCount = 0
+    for (const s of stale) {
+      const a = s.assessments as unknown as { pass_score: number }
+
+      // Get answers to calculate score
+      const { data: answers } = await supabase
+        .from('assessment_answers')
+        .select('is_correct')
+        .eq('session_id', s.id)
+
+      const total = answers?.length ?? 0
+      const correct = answers?.filter((ans) => ans.is_correct === true).length ?? 0
+      const score = total > 0 ? Math.round((correct / total) * 100) : 0
+      const passed = score >= a.pass_score
+
+      const { error } = await supabase
+        .from('assessment_sessions')
+        .update({
+          status: 'timed_out',
+          completed_at: new Date().toISOString(),
+          score,
+          passed,
+          time_remaining_seconds: 0,
+        })
+        .eq('id', s.id)
+
+      if (!error) expiredCount++
+    }
+
+    if (expiredCount > 0) {
+      revalidatePath('/assessments')
+    }
+
+    return { ok: true, data: { expired: expiredCount } }
   })
 }

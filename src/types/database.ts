@@ -124,6 +124,7 @@ export interface Assessment {
   allow_review: boolean
   start_date: string | null
   end_date: string | null
+  access_code: string | null
   status: AssessmentStatus
   created_by: string
   created_at: string
@@ -148,6 +149,7 @@ export interface AssessmentSession {
   status: SessionStatus
   tab_switch_count: number
   tab_switch_log: TabSwitchEntry[]
+  ip_address: string | null
   created_at: string
 }
 
