@@ -24,6 +24,7 @@ import {
 } from '@/actions/assessment-actions'
 import { sendAssessmentReminder } from '@/actions/notification-actions'
 import { hasMinimumRole } from '@/lib/org-authorization'
+import { useToast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -42,6 +43,7 @@ export default function AssessmentsPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft' | 'archived'>('all')
   const [displayLimit, setDisplayLimit] = useState(20)
 
+  const { showToast } = useToast()
   const isCreator = hasMinimumRole(role, 'creator')
 
   useEffect(() => {
@@ -62,21 +64,36 @@ export default function AssessmentsPage() {
   function handlePublish(assessmentId: string) {
     startTransition(async () => {
       const result = await publishAssessment(assessmentId)
-      if (result.ok) await loadData()
+      if (result.ok) {
+        showToast('Assessment published', 'success')
+        await loadData()
+      } else {
+        showToast(result.error, 'error')
+      }
     })
   }
 
   function handleArchive(assessmentId: string) {
     startTransition(async () => {
       const result = await archiveAssessment(assessmentId)
-      if (result.ok) await loadData()
+      if (result.ok) {
+        showToast('Assessment archived', 'success')
+        await loadData()
+      } else {
+        showToast(result.error, 'error')
+      }
     })
   }
 
   function handleDuplicate(assessmentId: string) {
     startTransition(async () => {
       const result = await duplicateAssessment(assessmentId)
-      if (result.ok) await loadData()
+      if (result.ok) {
+        showToast('Assessment duplicated', 'success')
+        await loadData()
+      } else {
+        showToast(result.error, 'error')
+      }
     })
   }
 
@@ -85,10 +102,16 @@ export default function AssessmentsPage() {
       const result = await sendAssessmentReminder(assessmentId)
       if (result.ok && result.data) {
         const count = result.data.notified
+        const msg = count > 0
+          ? `Reminder sent to ${count} candidate${count !== 1 ? 's' : ''}`
+          : 'All candidates have already completed this assessment'
+        showToast(msg, 'success')
         setReminderSent((prev) => ({
           ...prev,
           [assessmentId]: `Sent to ${count} candidate${count !== 1 ? 's' : ''}`,
         }))
+      } else if (!result.ok) {
+        showToast(result.error, 'error')
       }
     })
   }
@@ -114,24 +137,24 @@ export default function AssessmentsPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Assessments</h1>
           <p className="text-sm text-slate-600 dark:text-slate-400">{org.name}</p>
         </div>
         {isCreator && (
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" onClick={() => router.push('/assessments/candidates')}>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button size="sm" variant="secondary" onClick={() => router.push('/assessments/candidates')}>
               <Users className="h-4 w-4 mr-2" />
               Candidates
             </Button>
-            <Button variant="secondary" onClick={() => router.push('/assessments/questions')}>
+            <Button size="sm" variant="secondary" onClick={() => router.push('/assessments/questions')}>
               <Database className="h-4 w-4 mr-2" />
               Question Bank
             </Button>
-            <Button onClick={() => router.push('/assessments/create')}>
+            <Button size="sm" onClick={() => router.push('/assessments/create')}>
               <Plus className="h-4 w-4 mr-2" />
-              Create Assessment
+              Create
             </Button>
           </div>
         )}
@@ -143,6 +166,7 @@ export default function AssessmentsPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
             type="text"
+            aria-label="Search assessments"
             placeholder="Search assessments..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -217,7 +241,7 @@ export default function AssessmentsPage() {
                 key={assessment.id}
                 className="p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
               >
-                <div className="flex items-start justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <h3 className="font-semibold text-slate-900 dark:text-slate-100 truncate">
@@ -268,7 +292,7 @@ export default function AssessmentsPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 ml-4">
+                  <div className="flex items-center gap-2 flex-wrap">
                     {/* Candidate: last score */}
                     {lastSession?.status === 'completed' && (
                       <div className="text-right mr-2">

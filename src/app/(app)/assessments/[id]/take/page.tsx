@@ -489,8 +489,8 @@ export default function TakeAssessmentPage() {
   if (error) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-12 text-center">
-        <AlertTriangle className="h-12 w-12 mx-auto mb-3 text-red-500" />
-        <p className="text-red-600 dark:text-red-400 mb-4">{error}</p>
+        <AlertTriangle className="h-12 w-12 mx-auto mb-3 text-red-500" aria-hidden="true" />
+        <p className="text-red-600 dark:text-red-400 mb-4" role="alert">{error}</p>
         <Button variant="secondary" onClick={() => router.push('/assessments')}>
           Back to Assessments
         </Button>
@@ -516,13 +516,16 @@ export default function TakeAssessmentPage() {
           </div>
           {timeRemaining !== null && (
             <div
+              role="timer"
+              aria-label={`Time remaining: ${formatTime(timeRemaining)}`}
+              aria-live={isTimeLow ? 'assertive' : 'off'}
               className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-mono font-medium ${
                 isTimeLow
                   ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 animate-pulse'
                   : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
               }`}
             >
-              <Clock className="h-4 w-4" />
+              <Clock className="h-4 w-4" aria-hidden="true" />
               {formatTime(timeRemaining)}
             </div>
           )}
@@ -530,7 +533,14 @@ export default function TakeAssessmentPage() {
       </div>
 
       {/* Progress bar */}
-      <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mb-8">
+      <div
+        role="progressbar"
+        aria-valuenow={currentIndex + 1}
+        aria-valuemin={1}
+        aria-valuemax={questions.length}
+        aria-label={`Question ${currentIndex + 1} of ${questions.length}`}
+        className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mb-8"
+      >
         <div
           className="h-full bg-blue-600 rounded-full transition-all duration-300"
           style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }}
@@ -544,7 +554,7 @@ export default function TakeAssessmentPage() {
             {currentQuestion.stem || `Question ${currentIndex + 1}`}
           </h2>
 
-          <div className="space-y-3">
+          <div className="space-y-3" role="radiogroup" aria-label={`Options for question ${currentIndex + 1}`}>
             {currentQuestion.options.map((option, idx) => {
               const isSelected = currentQuestion.selectedIndex === idx
               return (
@@ -552,6 +562,9 @@ export default function TakeAssessmentPage() {
                   key={idx}
                   onClick={() => handleSelectAnswer(idx)}
                   disabled={completing}
+                  role="radio"
+                  aria-checked={isSelected}
+                  aria-label={`Option ${String.fromCharCode(65 + idx)}: ${option}`}
                   className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
                     isSelected
                       ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
@@ -560,6 +573,7 @@ export default function TakeAssessmentPage() {
                 >
                   <div className="flex items-start gap-3">
                     <span
+                      aria-hidden="true"
                       className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-sm font-medium ${
                         isSelected
                           ? 'bg-blue-600 text-white'
@@ -593,7 +607,7 @@ export default function TakeAssessmentPage() {
 
         <div className="flex items-center gap-2">
           {/* Question dots */}
-          <div className="hidden sm:flex items-center gap-1">
+          <nav className="hidden sm:flex items-center gap-1" aria-label="Question navigation">
             {questions.map((q, idx) => (
               <button
                 key={idx}
@@ -605,10 +619,11 @@ export default function TakeAssessmentPage() {
                       ? 'bg-green-500'
                       : 'bg-slate-300 dark:bg-slate-600'
                 }`}
-                title={`Question ${idx + 1}${q.answered ? ' (answered)' : ''}`}
+                aria-label={`Question ${idx + 1}${q.answered ? ', answered' : ', unanswered'}${idx === currentIndex ? ', current' : ''}`}
+                aria-current={idx === currentIndex ? 'step' : undefined}
               />
             ))}
-          </div>
+          </nav>
         </div>
 
         {isLastQuestion ? (
@@ -643,10 +658,10 @@ export default function TakeAssessmentPage() {
 
       {/* Tab Switch Warning */}
       {showTabWarning && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="dialog" aria-modal="true" aria-labelledby="tab-warning-title">
           <div className="bg-white dark:bg-slate-800 rounded-xl p-6 max-w-sm mx-4 shadow-xl text-center">
-            <AlertTriangle className="h-10 w-10 mx-auto mb-3 text-amber-500" />
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">
+            <AlertTriangle className="h-10 w-10 mx-auto mb-3 text-amber-500" aria-hidden="true" />
+            <h3 id="tab-warning-title" className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">
               Tab Switch Detected
             </h3>
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">
@@ -664,9 +679,9 @@ export default function TakeAssessmentPage() {
 
       {/* Confirm Finish Modal */}
       {showConfirmFinish && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="dialog" aria-modal="true" aria-labelledby="confirm-finish-title">
           <div className="bg-white dark:bg-slate-800 rounded-xl p-6 max-w-sm mx-4 shadow-xl">
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">
+            <h3 id="confirm-finish-title" className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">
               Submit Assessment?
             </h3>
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">

@@ -32,6 +32,7 @@ import {
   exportResultsCsv,
   getSessionWeakAreas,
 } from '@/actions/assessment-actions'
+import { useToast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -376,6 +377,7 @@ type QuestionStat = {
 
 function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
   const router = useRouter()
+  const { showToast } = useToast()
   const [assessment, setAssessment] = useState<Assessment | null>(null)
   const [sessions, setSessions] = useState<SessionWithEmail[]>([])
   const [stats, setStats] = useState<{ avgScore: number; passRate: number; totalAttempts: number } | null>(null)
@@ -454,6 +456,9 @@ function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
                 a.download = `${assessment?.title ?? 'assessment'}-results.csv`
                 a.click()
                 URL.revokeObjectURL(url)
+                showToast('CSV exported', 'success')
+              } else if (!result.ok) {
+                showToast(result.error, 'error')
               }
             }}
           >
@@ -470,7 +475,7 @@ function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
 
       {/* Stats Cards */}
       {stats && (
-        <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
           <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-center">
             <Users className="h-5 w-5 mx-auto text-slate-400 mb-1" />
             <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">
@@ -564,8 +569,8 @@ function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">
             All Attempts
           </h2>
-          <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-x-auto">
+            <table className="w-full text-sm min-w-[600px]" aria-label="Candidate attempt results">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-800/50 text-left">
                   <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Candidate</th>

@@ -81,3 +81,23 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Respect prefers-reduced-motion: disable animations & transitions */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Global focus-visible ring for bare interactive elements */
+button:not([class*="focus"]):focus-visible,
+a:not([class*="focus"]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

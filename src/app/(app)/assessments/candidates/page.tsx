@@ -13,6 +13,7 @@ import { ArrowLeft, Users, Search, TrendingUp, Target, Clock, Download } from 'l
 import { useOrg } from '@/components/providers/OrgProvider'
 import { hasMinimumRole } from '@/lib/org-authorization'
 import { getOrgCandidateList, exportCandidatesCsv } from '@/actions/assessment-actions'
+import { useToast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/Button'
 
 type Candidate = {
@@ -27,6 +28,7 @@ type Candidate = {
 export default function CandidateListPage() {
   const { role } = useOrg()
   const router = useRouter()
+  const { showToast } = useToast()
   const isCreator = hasMinimumRole(role, 'creator')
 
   const [candidates, setCandidates] = useState<Candidate[]>([])
@@ -91,6 +93,9 @@ export default function CandidateListPage() {
                 a.download = 'candidates.csv'
                 a.click()
                 URL.revokeObjectURL(url)
+                showToast('CSV exported', 'success')
+              } else if (!result.ok) {
+                showToast(result.error, 'error')
               }
             }}
           >
@@ -105,6 +110,7 @@ export default function CandidateListPage() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
         <input
           type="text"
+          aria-label="Search candidates"
           placeholder="Search by name or email..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -131,7 +137,7 @@ export default function CandidateListPage() {
               onClick={() => router.push(`/assessments/candidates/${c.userId}`)}
               className="w-full text-left p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
             >
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
                     {c.fullName || c.email}
@@ -140,7 +146,7 @@ export default function CandidateListPage() {
                     <p className="text-xs text-slate-500 truncate">{c.email}</p>
                   )}
                 </div>
-                <div className="flex items-center gap-4 text-xs text-slate-500 flex-shrink-0 ml-4">
+                <div className="flex items-center gap-4 text-xs text-slate-500 flex-shrink-0">
                   <span className="inline-flex items-center gap-1">
                     <TrendingUp className="h-3 w-3" />
                     {c.totalCompleted} exams

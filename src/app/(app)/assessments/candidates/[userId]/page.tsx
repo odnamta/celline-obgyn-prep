@@ -111,7 +111,7 @@ export default function CandidateProgressPage() {
 
       {/* Summary Stats */}
       {summary && (
-        <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
           <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-center">
             <BarChart3 className="h-5 w-5 mx-auto text-blue-500 mb-1" />
             <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">
@@ -143,15 +143,15 @@ export default function CandidateProgressPage() {
           <p>No assessment attempts yet.</p>
         </div>
       ) : (
-        <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-x-auto">
+          <table className="w-full text-sm min-w-[600px]" aria-label="Assessment history">
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-800/50 text-left">
-                <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Assessment</th>
-                <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Score</th>
-                <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Status</th>
-                <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Tab Switches</th>
-                <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Date</th>
+                <th scope="col" className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Assessment</th>
+                <th scope="col" className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Score</th>
+                <th scope="col" className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Status</th>
+                <th scope="col" className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Tab Switches</th>
+                <th scope="col" className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Date</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
