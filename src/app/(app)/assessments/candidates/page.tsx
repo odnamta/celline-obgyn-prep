@@ -7,12 +7,12 @@
  * Links to individual candidate progress pages.
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Users, Search, TrendingUp, Target, Clock, Download } from 'lucide-react'
+import { ArrowLeft, Users, Search, TrendingUp, Target, Clock, Download, Upload } from 'lucide-react'
 import { useOrg } from '@/components/providers/OrgProvider'
 import { hasMinimumRole } from '@/lib/org-authorization'
-import { getOrgCandidateList, exportCandidatesCsv } from '@/actions/assessment-actions'
+import { getOrgCandidateList, exportCandidatesCsv, importCandidatesCsv } from '@/actions/assessment-actions'
 import { useToast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/Button'
 
@@ -35,6 +35,9 @@ export default function CandidateListPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [displayLimit, setDisplayLimit] = useState(30)
+  const [isPending, startTransition] = useTransition()
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!isCreator) return
@@ -45,6 +48,30 @@ export default function CandidateListPage() {
       setLoading(false)
     })
   }, [isCreator])
+
+  function handleCsvImport(file: File) {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const text = e.target?.result as string
+      if (!text) return
+      startTransition(async () => {
+        const result = await importCandidatesCsv(text)
+        if (result.ok && result.data) {
+          setImportResult(result.data)
+          showToast(
+            `Imported ${result.data.imported}, skipped ${result.data.skipped}${result.data.errors.length ? `, ${result.data.errors.length} error(s)` : ''}`,
+            result.data.errors.length > 0 ? 'error' : 'success'
+          )
+          // Reload candidates
+          const fresh = await getOrgCandidateList()
+          if (fresh.ok && fresh.data) setCandidates(fresh.data)
+        } else if (!result.ok) {
+          showToast(result.error, 'error')
+        }
+      })
+    }
+    reader.readAsText(file)
+  }
 
   if (!isCreator) {
     return (
@@ -79,30 +106,52 @@ export default function CandidateListPage() {
             {candidates.length} candidate{candidates.length !== 1 ? 's' : ''} in your organization
           </p>
         </div>
-        {candidates.length > 0 && (
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) handleCsvImport(file)
+              e.target.value = ''
+            }}
+          />
           <Button
             size="sm"
             variant="secondary"
-            onClick={async () => {
-              const result = await exportCandidatesCsv()
-              if (result.ok && result.data) {
-                const blob = new Blob([result.data], { type: 'text/csv' })
-                const url = URL.createObjectURL(blob)
-                const a = document.createElement('a')
-                a.href = url
-                a.download = 'candidates.csv'
-                a.click()
-                URL.revokeObjectURL(url)
-                showToast('CSV exported', 'success')
-              } else if (!result.ok) {
-                showToast(result.error, 'error')
-              }
-            }}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isPending}
           >
-            <Download className="h-4 w-4 mr-1" />
-            Export CSV
+            <Upload className="h-4 w-4 mr-1" />
+            Import CSV
           </Button>
-        )}
+          {candidates.length > 0 && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={async () => {
+                const result = await exportCandidatesCsv()
+                if (result.ok && result.data) {
+                  const blob = new Blob([result.data], { type: 'text/csv' })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = 'candidates.csv'
+                  a.click()
+                  URL.revokeObjectURL(url)
+                  showToast('CSV exported', 'success')
+                } else if (!result.ok) {
+                  showToast(result.error, 'error')
+                }
+              }}
+            >
+              <Download className="h-4 w-4 mr-1" />
+              Export CSV
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Search */}
@@ -117,6 +166,31 @@ export default function CandidateListPage() {
           className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
+
+      {/* Import result feedback */}
+      {importResult && (
+        <div className="mb-4 p-3 rounded-lg border border-blue-200 dark:border-blue-800/50 bg-blue-50/50 dark:bg-blue-900/10 text-sm">
+          <p className="font-medium text-slate-800 dark:text-slate-200">
+            Import complete: {importResult.imported} added, {importResult.skipped} skipped
+          </p>
+          {importResult.errors.length > 0 && (
+            <ul className="mt-1 text-xs text-red-600 dark:text-red-400 list-disc pl-4">
+              {importResult.errors.slice(0, 5).map((err, i) => (
+                <li key={i}>{err}</li>
+              ))}
+              {importResult.errors.length > 5 && (
+                <li>...and {importResult.errors.length - 5} more</li>
+              )}
+            </ul>
+          )}
+          <button
+            onClick={() => setImportResult(null)}
+            className="mt-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="space-y-3 animate-pulse">

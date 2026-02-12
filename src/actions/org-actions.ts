@@ -12,6 +12,7 @@ import { ACTIVE_ORG_COOKIE } from '@/lib/org-context'
 import type { ActionResultV2 } from '@/types/actions'
 import type { Organization, OrganizationMember, OrganizationMemberWithProfile, OrgRole, AssessmentDefaults } from '@/types/database'
 import { createOrgSchema, updateOrgSettingsSchema } from '@/lib/validations'
+import { logAuditEvent } from '@/actions/audit-actions'
 
 /**
  * Create a new organization. The creating user becomes the owner.
@@ -156,7 +157,7 @@ export async function updateOrgSettings(
   orgId: string,
   updates: { name?: string; settings?: Record<string, unknown> }
 ): Promise<ActionResultV2<void>> {
-  return withOrgUser(async ({ supabase, org, role }) => {
+  return withOrgUser(async ({ user, supabase, org, role }) => {
     if (role !== 'owner' && role !== 'admin') {
       return { ok: false, error: 'Only admins and owners can update org settings' }
     }
@@ -182,6 +183,10 @@ export async function updateOrgSettings(
     if (error) {
       return { ok: false, error: error.message }
     }
+
+    logAuditEvent(supabase, org.id, user.id, 'settings.updated', {
+      metadata: { changes: Object.keys(updates) },
+    })
 
     revalidatePath('/dashboard')
     return { ok: true }
@@ -237,6 +242,11 @@ export async function updateMemberRole(
       return { ok: false, error: error.message }
     }
 
+    logAuditEvent(supabase, org.id, user.id, 'member.role_changed', {
+      targetType: 'user', targetId: target.user_id,
+      metadata: { from: target.role, to: newRole },
+    })
+
     revalidatePath('/dashboard')
     return { ok: true }
   })
@@ -290,6 +300,11 @@ export async function removeMember(
     if (error) {
       return { ok: false, error: error.message }
     }
+
+    logAuditEvent(supabase, org.id, user.id, 'member.removed', {
+      targetType: 'user', targetId: target.user_id,
+      metadata: { role: target.role, selfRemoval: isSelf },
+    })
 
     revalidatePath('/dashboard')
     return { ok: true }

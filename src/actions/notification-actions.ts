@@ -293,3 +293,75 @@ export async function sendDeadlineReminders(): Promise<ActionResultV2<{ notified
     return { ok: true, data: { notified: totalNotified, assessments: assessments.length } }
   })
 }
+
+/**
+ * Assign an assessment to all candidates who haven't started it yet.
+ * Sends an 'assessment_assigned' notification. Creator+ only.
+ */
+export async function assignAssessmentToAll(
+  assessmentId: string
+): Promise<ActionResultV2<{ notified: number }>> {
+  return withOrgUser(async ({ user, supabase, org, role }) => {
+    if (!hasMinimumRole(role, 'creator')) {
+      return { ok: false, error: 'Insufficient permissions' }
+    }
+
+    // Get the assessment
+    const { data: assessment } = await supabase
+      .from('assessments')
+      .select('id, title, status')
+      .eq('id', assessmentId)
+      .eq('org_id', org.id)
+      .single()
+
+    if (!assessment) {
+      return { ok: false, error: 'Assessment not found' }
+    }
+
+    if (assessment.status !== 'published') {
+      return { ok: false, error: 'Can only assign published assessments' }
+    }
+
+    // Get all candidates
+    const { data: candidates } = await supabase
+      .from('organization_members')
+      .select('user_id')
+      .eq('org_id', org.id)
+      .eq('role', 'candidate')
+
+    if (!candidates || candidates.length === 0) {
+      return { ok: true, data: { notified: 0 } }
+    }
+
+    // Get users who already have sessions (started or completed)
+    const { data: existingSessions } = await supabase
+      .from('assessment_sessions')
+      .select('user_id')
+      .eq('assessment_id', assessmentId)
+
+    const startedUserIds = new Set((existingSessions ?? []).map((s) => s.user_id))
+
+    // Filter to candidates who haven't started
+    const pending = candidates.filter((c) => !startedUserIds.has(c.user_id))
+
+    if (pending.length === 0) {
+      return { ok: true, data: { notified: 0 } }
+    }
+
+    const rows = pending.map((c) => ({
+      user_id: c.user_id,
+      org_id: org.id,
+      type: 'assessment_assigned',
+      title: 'Assessment Assigned',
+      body: `You have been assigned "${assessment.title}". Please complete it.`,
+      link: `/assessments/${assessment.id}/take`,
+    }))
+
+    const { error } = await supabase.from('notifications').insert(rows)
+    if (error) {
+      return { ok: false, error: error.message }
+    }
+
+    return { ok: true, data: { notified: pending.length } }
+  })
+}

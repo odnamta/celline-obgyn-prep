@@ -8,7 +8,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, Shield } from 'lucide-react'
 import { useOrg } from '@/components/providers/OrgProvider'
 import { updateOrgSettings } from '@/actions/org-actions'
 import { Button } from '@/components/ui/Button'
@@ -98,6 +98,17 @@ export default function OrgSettingsPage() {
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Organization Settings</h1>
           <p className="text-sm text-slate-600 dark:text-slate-400">{org.slug}</p>
         </div>
+      </div>
+
+      {/* Quick Links */}
+      <div className="flex items-center gap-2 mb-6">
+        <Button size="sm" variant="secondary" onClick={() => router.push(`/orgs/${org.slug}/audit`)}>
+          <Shield className="h-4 w-4 mr-2" />
+          Audit Log
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => router.push(`/orgs/${org.slug}/analytics`)}>
+          Analytics
+        </Button>
       </div>
 
       {/* Name */}

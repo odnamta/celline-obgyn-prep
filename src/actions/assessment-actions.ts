@@ -12,6 +12,7 @@ import { createAssessmentSchema, submitAnswerSchema } from '@/lib/validations'
 import { hasMinimumRole } from '@/lib/org-authorization'
 import type { ActionResultV2 } from '@/types/actions'
 import { notifyOrgCandidates } from '@/actions/notification-actions'
+import { logAuditEvent } from '@/actions/audit-actions'
 import type {
   Assessment,
   AssessmentSession,
@@ -110,6 +111,10 @@ export async function createAssessment(
       return { ok: false, error: error.message }
     }
 
+    logAuditEvent(supabase, org.id, user.id, 'assessment.created', {
+      targetType: 'assessment', targetId: assessment.id, metadata: { title: input.title },
+    })
+
     revalidatePath('/assessments')
     return { ok: true, data: assessment as Assessment }
   })
@@ -194,7 +199,7 @@ export async function getAssessment(
 export async function publishAssessment(
   assessmentId: string
 ): Promise<ActionResultV2<void>> {
-  return withOrgUser(async ({ supabase, org, role }) => {
+  return withOrgUser(async ({ user, supabase, org, role }) => {
     if (!hasMinimumRole(role, 'creator')) {
       return { ok: false, error: 'Insufficient permissions' }
     }
@@ -223,6 +228,10 @@ export async function publishAssessment(
       return { ok: false, error: error.message }
     }
 
+    logAuditEvent(supabase, org.id, user.id, 'assessment.published', {
+      targetType: 'assessment', targetId: assessmentId, metadata: { title: assessment.title },
+    })
+
     // Notify org members about the new assessment
     notifyOrgCandidates(
       'New Assessment Available',
@@ -242,7 +251,7 @@ export async function publishAssessment(
 export async function archiveAssessment(
   assessmentId: string
 ): Promise<ActionResultV2<void>> {
-  return withOrgUser(async ({ supabase, org, role }) => {
+  return withOrgUser(async ({ user, supabase, org, role }) => {
     if (!hasMinimumRole(role, 'creator')) {
       return { ok: false, error: 'Insufficient permissions' }
     }
@@ -258,6 +267,10 @@ export async function archiveAssessment(
       return { ok: false, error: error.message }
     }
 
+    logAuditEvent(supabase, org.id, user.id, 'assessment.archived', {
+      targetType: 'assessment', targetId: assessmentId,
+    })
+
     revalidatePath('/assessments')
     return { ok: true }
   })
@@ -271,7 +284,7 @@ export async function archiveAssessment(
 export async function unpublishAssessment(
   assessmentId: string
 ): Promise<ActionResultV2<void>> {
-  return withOrgUser(async ({ supabase, org, role }) => {
+  return withOrgUser(async ({ user, supabase, org, role }) => {
     if (!hasMinimumRole(role, 'creator')) {
       return { ok: false, error: 'Insufficient permissions' }
     }
@@ -296,6 +309,10 @@ export async function unpublishAssessment(
       .eq('status', 'published')
 
     if (error) return { ok: false, error: error.message }
+
+    logAuditEvent(supabase, org.id, user.id, 'assessment.unpublished', {
+      targetType: 'assessment', targetId: assessmentId,
+    })
 
     revalidatePath('/assessments')
     return { ok: true }
@@ -363,7 +380,7 @@ export async function batchArchiveAssessments(
 export async function batchDeleteAssessments(
   assessmentIds: string[]
 ): Promise<ActionResultV2<{ deleted: number }>> {
-  return withOrgUser(async ({ supabase, org, role }) => {
+  return withOrgUser(async ({ user, supabase, org, role }) => {
     if (!hasMinimumRole(role, 'creator')) {
       return { ok: false, error: 'Insufficient permissions' }
     }
@@ -379,8 +396,15 @@ export async function batchDeleteAssessments(
 
     if (error) return { ok: false, error: error.message }
 
+    const deleted = data?.length ?? 0
+    if (deleted > 0) {
+      logAuditEvent(supabase, org.id, user.id, 'assessment.deleted', {
+        metadata: { count: deleted, ids: data?.map((d) => d.id) },
+      })
+    }
+
     revalidatePath('/assessments')
-    return { ok: true, data: { deleted: data?.length ?? 0 } }
+    return { ok: true, data: { deleted } }
   })
 }
 
@@ -1763,8 +1787,8 @@ export async function exportResultsCsv(
       .from('assessment_sessions')
       .select(`*, assessments!inner(org_id, title)`)
       .eq('assessment_id', assessmentId)
-      .eq('status', 'completed')
-      .order('completed_at', { ascending: false })
+      .in('status', ['completed', 'timed_out', 'in_progress'])
+      .order('started_at', { ascending: false })
 
     const orgSessions = (sessions ?? []).filter((s) => {
       const a = s.assessments as unknown as { org_id: string }
@@ -1785,15 +1809,18 @@ export async function exportResultsCsv(
     }
 
     // Build CSV
-    const header = 'Candidate,Score,Passed,Tab Switches,Completed At'
+    const header = 'Candidate,Status,Score,Passed,Tab Switches,Started At,Completed At'
     const rows = orgSessions.map((s) => {
       const email = emailMap.get(s.user_id) ?? `user-${s.user_id.slice(0, 8)}`
-      const score = s.score ?? 0
-      const passed = s.passed ? 'Yes' : 'No'
-      const tabSwitches = s.tab_switch_count ?? 0
-      const completedAt = s.completed_at ? new Date(s.completed_at).toISOString() : ''
-      // Escape email in case it contains commas
-      return `"${email}",${score},${passed},${tabSwitches},${completedAt}`
+      return [
+        `"${email}"`,
+        s.status,
+        s.score ?? '',
+        s.passed ? 'Yes' : s.passed === false ? 'No' : '',
+        s.tab_switch_count ?? 0,
+        s.started_at,
+        s.completed_at ?? '',
+      ].join(',')
     })
 
     const csv = [header, ...rows].join('\n')
@@ -2154,7 +2181,7 @@ export async function getActiveSessionsForAssessment(
 export async function resetCandidateAttempts(
   userId: string
 ): Promise<ActionResultV2<{ deleted: number }>> {
-  return withOrgUser(async ({ supabase, org, role }) => {
+  return withOrgUser(async ({ user, supabase, org, role }) => {
     if (!hasMinimumRole(role, 'creator')) {
       return { ok: false, error: 'Insufficient permissions' }
     }
@@ -2211,6 +2238,10 @@ export async function resetCandidateAttempts(
     if (error) {
       return { ok: false, error: error.message }
     }
+
+    logAuditEvent(supabase, org.id, user.id, 'candidate.attempts_reset', {
+      targetType: 'user', targetId: userId, metadata: { sessionsDeleted: sessions.length },
+    })
 
     return { ok: true, data: { deleted: sessions.length } }
   })
@@ -2326,5 +2357,131 @@ export async function exportCandidateProfile(
         sessions,
       },
     }
+  })
+}
+
+/**
+ * Import candidates from CSV data.
+ * Expects rows with: email (required), name (optional), role (optional, defaults to 'candidate').
+ * Creates profiles if needed, adds as org members. Creator+ only.
+ */
+export async function importCandidatesCsv(
+  csvText: string
+): Promise<ActionResultV2<{ imported: number; skipped: number; errors: string[] }>> {
+  return withOrgUser(async ({ user, supabase, org, role }) => {
+    if (!hasMinimumRole(role, 'creator')) {
+      return { ok: false, error: 'Insufficient permissions' }
+    }
+
+    const lines = csvText.trim().split('\n')
+    if (lines.length < 2) {
+      return { ok: false, error: 'CSV must have a header row and at least one data row' }
+    }
+
+    // Parse header
+    const header = lines[0].toLowerCase().split(',').map((h) => h.trim())
+    const emailIdx = header.indexOf('email')
+    if (emailIdx === -1) {
+      return { ok: false, error: 'CSV must have an "email" column' }
+    }
+    const nameIdx = header.indexOf('name')
+    const roleIdx = header.indexOf('role')
+
+    // Get existing members
+    const { data: existingMembers } = await supabase
+      .from('organization_members')
+      .select('user_id')
+      .eq('org_id', org.id)
+
+    // Get existing profiles by email
+    const existingUserIds = new Set((existingMembers ?? []).map((m) => m.user_id))
+
+    let imported = 0
+    let skipped = 0
+    const errors: string[] = []
+
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(',').map((c) => c.trim())
+      const email = cols[emailIdx]?.toLowerCase()
+
+      if (!email || !email.includes('@')) {
+        errors.push(`Row ${i + 1}: invalid email "${cols[emailIdx] ?? ''}"`)
+        continue
+      }
+
+      const name = nameIdx >= 0 ? cols[nameIdx] || null : null
+      const memberRole = roleIdx >= 0 && cols[roleIdx] ? cols[roleIdx].toLowerCase() : 'candidate'
+
+      if (!['candidate', 'creator', 'admin'].includes(memberRole)) {
+        errors.push(`Row ${i + 1}: invalid role "${memberRole}" — using candidate`)
+      }
+      const validRole = ['candidate', 'creator', 'admin'].includes(memberRole) ? memberRole : 'candidate'
+
+      // Check if user with this email exists in profiles
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle()
+
+      if (existingProfile) {
+        // User exists — check if already a member
+        if (existingUserIds.has(existingProfile.id)) {
+          skipped++
+          continue
+        }
+
+        // Add as member
+        const { error: memberError } = await supabase
+          .from('organization_members')
+          .insert({
+            org_id: org.id,
+            user_id: existingProfile.id,
+            role: validRole,
+          })
+
+        if (memberError) {
+          errors.push(`Row ${i + 1}: ${memberError.message}`)
+        } else {
+          imported++
+          existingUserIds.add(existingProfile.id)
+        }
+      } else {
+        // User doesn't exist — create an invitation instead
+        const token = crypto.randomUUID()
+        const expires = new Date()
+        expires.setDate(expires.getDate() + 30)
+
+        const { error: inviteError } = await supabase
+          .from('invitations')
+          .insert({
+            org_id: org.id,
+            email,
+            role: validRole,
+            invited_by: user.id,
+            token,
+            expires_at: expires.toISOString(),
+          })
+
+        if (inviteError) {
+          // Might be duplicate invitation
+          if (inviteError.message.includes('duplicate') || inviteError.message.includes('unique')) {
+            skipped++
+          } else {
+            errors.push(`Row ${i + 1}: ${inviteError.message}`)
+          }
+        } else {
+          imported++
+        }
+      }
+    }
+
+    if (imported > 0) {
+      logAuditEvent(supabase, org.id, user.id, 'candidate.imported', {
+        metadata: { imported, skipped, errorCount: errors.length },
+      })
+    }
+
+    return { ok: true, data: { imported, skipped, errors } }
   })
 }

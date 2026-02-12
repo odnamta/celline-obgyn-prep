@@ -101,6 +101,41 @@ export interface Invitation {
 }
 
 // ============================================
+// Audit Log Types (V16 - Admin Intelligence)
+// ============================================
+
+export type AuditAction =
+  | 'assessment.published'
+  | 'assessment.archived'
+  | 'assessment.deleted'
+  | 'assessment.created'
+  | 'assessment.unpublished'
+  | 'candidate.attempts_reset'
+  | 'candidate.imported'
+  | 'member.invited'
+  | 'member.removed'
+  | 'member.role_changed'
+  | 'member.joined'
+  | 'settings.updated'
+  | 'notification.sent'
+
+export interface AuditLog {
+  id: string
+  org_id: string
+  actor_id: string
+  action: AuditAction
+  target_type: string | null
+  target_id: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+}
+
+export interface AuditLogWithActor extends AuditLog {
+  actor_email: string
+  actor_name: string | null
+}
+
+// ============================================
 // Assessment Types (V13 - Assessment Engine)
 // ============================================
 

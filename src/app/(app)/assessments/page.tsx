@@ -12,7 +12,7 @@ import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Plus, Play, Eye, BarChart3, Clock, Target, CheckCircle2, XCircle,
-  Pencil, Send, Archive, CalendarDays, Copy, ChevronDown, Search, Database, Users, Bell, Link2, Trash2, RotateCcw, AlarmClock,
+  Pencil, Send, Archive, CalendarDays, Copy, ChevronDown, Search, Database, Users, Bell, Link2, Trash2, RotateCcw, AlarmClock, UserPlus,
 } from 'lucide-react'
 import { useOrg } from '@/components/providers/OrgProvider'
 import {
@@ -26,7 +26,7 @@ import {
   batchDeleteAssessments,
   unpublishAssessment,
 } from '@/actions/assessment-actions'
-import { sendAssessmentReminder, sendDeadlineReminders } from '@/actions/notification-actions'
+import { sendAssessmentReminder, sendDeadlineReminders, assignAssessmentToAll } from '@/actions/notification-actions'
 import { hasMinimumRole } from '@/lib/org-authorization'
 import { useToast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/Button'
@@ -205,6 +205,23 @@ export default function AssessmentsPage() {
         } else {
           showToast(`Deadline reminders sent to ${notified} candidate(s) for ${count} assessment(s)`, 'success')
         }
+      } else if (!result.ok) {
+        showToast(result.error, 'error')
+      }
+    })
+  }
+
+  function handleAssign(assessmentId: string) {
+    startTransition(async () => {
+      const result = await assignAssessmentToAll(assessmentId)
+      if (result.ok && result.data) {
+        const count = result.data.notified
+        showToast(
+          count > 0
+            ? `Assigned to ${count} candidate${count !== 1 ? 's' : ''} who haven't started`
+            : 'All candidates have already started this assessment',
+          'success'
+        )
       } else if (!result.ok) {
         showToast(result.error, 'error')
       }
@@ -481,6 +498,19 @@ export default function AssessmentsPage() {
                       >
                         <Send className="h-4 w-4 mr-1" />
                         Publish
+                      </Button>
+                    )}
+
+                    {/* Creator: Assign to all candidates (published only) */}
+                    {isCreator && assessment.status === 'published' && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleAssign(assessment.id)}
+                        disabled={isPending}
+                        title="Assign to candidates who haven't started"
+                      >
+                        <UserPlus className="h-4 w-4" />
                       </Button>
                     )}
 
