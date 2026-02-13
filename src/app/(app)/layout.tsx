@@ -13,6 +13,7 @@ import { OrgSwitcher } from '@/components/navigation/OrgSwitcher'
 import { NotificationBell } from '@/components/navigation/NotificationBell'
 import { CommandPalette } from '@/components/navigation/CommandPalette'
 import { DesktopNavLinks } from '@/components/navigation/DesktopNavLinks'
+import { OfflineIndicator } from '@/components/ui/OfflineIndicator'
 
 export default async function AppLayout({
   children,
@@ -77,6 +78,7 @@ export default async function AppLayout({
             </Suspense>
           </main>
           <MobileNavBar />
+          <OfflineIndicator />
         </div>
       </OrgProvider>
     </ToastProvider>

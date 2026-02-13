@@ -398,3 +398,68 @@ export async function assignAssessmentToAll(
     return { ok: true, data: { notified: pending.length } }
   })
 }
+
+/**
+ * Bulk assign an assessment to specific candidates by user ID.
+ * Sends 'assessment_assigned' notifications only to candidates who haven't started. Creator+ only.
+ */
+export async function bulkAssignAssessment(
+  assessmentId: string,
+  candidateUserIds: string[]
+): Promise<ActionResultV2<{ notified: number; alreadyStarted: number }>> {
+  return withOrgUser(async ({ supabase, org, role }) => {
+    if (!hasMinimumRole(role, 'creator')) {
+      return { ok: false, error: 'Insufficient permissions' }
+    }
+
+    if (candidateUserIds.length === 0) {
+      return { ok: true, data: { notified: 0, alreadyStarted: 0 } }
+    }
+
+    // Verify assessment exists and is published
+    const { data: assessment } = await supabase
+      .from('assessments')
+      .select('id, title, status')
+      .eq('id', assessmentId)
+      .eq('org_id', org.id)
+      .single()
+
+    if (!assessment) {
+      return { ok: false, error: 'Assessment not found' }
+    }
+
+    if (assessment.status !== 'published') {
+      return { ok: false, error: 'Can only assign published assessments' }
+    }
+
+    // Check which candidates already have sessions
+    const { data: existingSessions } = await supabase
+      .from('assessment_sessions')
+      .select('user_id')
+      .eq('assessment_id', assessmentId)
+      .in('user_id', candidateUserIds)
+
+    const startedIds = new Set((existingSessions ?? []).map((s) => s.user_id))
+    const pending = candidateUserIds.filter((id) => !startedIds.has(id))
+
+    if (pending.length === 0) {
+      return { ok: true, data: { notified: 0, alreadyStarted: candidateUserIds.length } }
+    }
+
+    const rows = pending.map((userId) => ({
+      user_id: userId,
+      org_id: org.id,
+      type: 'assessment_assigned',
+      title: 'Assessment Assigned',
+      body: `You have been assigned "${assessment.title}". Please complete it.`,
+      link: `/assessments/${assessment.id}/take`,
+    }))
+
+    const { error } = await supabase.from('notifications').insert(rows)
+    if (error) {
+      return { ok: false, error: error.message }
+    }
+
+    return { ok: true, data: { notified: pending.length, alreadyStarted: startedIds.size } }
+  })
+}

@@ -8,6 +8,7 @@
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { withOrgUser } from '@/actions/_helpers'
+import { RATE_LIMITS } from '@/lib/rate-limit'
 import { createAssessmentSchema, submitAnswerSchema } from '@/lib/validations'
 import { hasMinimumRole } from '@/lib/org-authorization'
 import type { ActionResultV2 } from '@/types/actions'
@@ -344,7 +345,7 @@ export async function batchPublishAssessments(
 
     revalidatePath('/assessments')
     return { ok: true, data: { published: data?.length ?? 0 } }
-  })
+  }, undefined, RATE_LIMITS.bulk)
 }
 
 /**
@@ -371,7 +372,7 @@ export async function batchArchiveAssessments(
 
     revalidatePath('/assessments')
     return { ok: true, data: { archived: data?.length ?? 0 } }
-  })
+  }, undefined, RATE_LIMITS.bulk)
 }
 
 /**
@@ -406,7 +407,7 @@ export async function batchDeleteAssessments(
 
     revalidatePath('/assessments')
     return { ok: true, data: { deleted } }
-  })
+  }, undefined, RATE_LIMITS.bulk)
 }
 
 /**
@@ -657,7 +658,7 @@ export async function startAssessmentSession(
     await supabase.from('assessment_answers').insert(answerRows)
 
     return { ok: true, data: session as AssessmentSession }
-  })
+  }, undefined, RATE_LIMITS.sensitive)
 }
 
 /**

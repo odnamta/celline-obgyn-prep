@@ -1,18 +1,19 @@
 'use client'
 
 /**
- * V13 Phase 10: Candidate List Page
+ * V20: Candidate List Page with Bulk Assignment
  *
  * Admin/creator view listing all org candidates with assessment stats.
- * Links to individual candidate progress pages.
+ * Checkbox multi-select + assign assessment to selected candidates.
  */
 
 import { useState, useEffect, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Users, Search, TrendingUp, Target, Clock, Download, Upload } from 'lucide-react'
+import { ArrowLeft, Users, Search, TrendingUp, Target, Clock, Download, Upload, CheckSquare, X, Send } from 'lucide-react'
 import { useOrg } from '@/components/providers/OrgProvider'
 import { hasMinimumRole } from '@/lib/org-authorization'
-import { getOrgCandidateList, exportCandidatesCsv, importCandidatesCsv } from '@/actions/assessment-actions'
+import { getOrgCandidateList, getOrgAssessments, exportCandidatesCsv, importCandidatesCsv } from '@/actions/assessment-actions'
+import { bulkAssignAssessment } from '@/actions/notification-actions'
 import { useToast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/Button'
 
@@ -23,6 +24,11 @@ type Candidate = {
   totalCompleted: number
   avgScore: number
   lastActiveAt: string | null
+}
+
+type AssessmentOption = {
+  id: string
+  title: string
 }
 
 export default function CandidateListPage() {
@@ -39,6 +45,13 @@ export default function CandidateListPage() {
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [showAssignModal, setShowAssignModal] = useState(false)
+  const [publishedAssessments, setPublishedAssessments] = useState<AssessmentOption[]>([])
+  const [selectedAssessmentId, setSelectedAssessmentId] = useState('')
+  const [assigning, setAssigning] = useState(false)
+
   useEffect(() => {
     if (!isCreator) return
     getOrgCandidateList().then((result) => {
@@ -48,6 +61,57 @@ export default function CandidateListPage() {
       setLoading(false)
     })
   }, [isCreator])
+
+  function toggleSelect(userId: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(userId)) next.delete(userId)
+      else next.add(userId)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    const visibleIds = filtered.slice(0, displayLimit).map((c) => c.userId)
+    const allSelected = visibleIds.every((id) => selectedIds.has(id))
+    if (allSelected) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(visibleIds))
+    }
+  }
+
+  async function openAssignModal() {
+    setShowAssignModal(true)
+    if (publishedAssessments.length === 0) {
+      const result = await getOrgAssessments()
+      if (result.ok && result.data) {
+        const published = result.data
+          .filter((a) => a.status === 'published')
+          .map((a) => ({ id: a.id, title: a.title }))
+        setPublishedAssessments(published)
+        if (published.length > 0) setSelectedAssessmentId(published[0].id)
+      }
+    }
+  }
+
+  async function handleAssign() {
+    if (!selectedAssessmentId || selectedIds.size === 0) return
+    setAssigning(true)
+    const result = await bulkAssignAssessment(selectedAssessmentId, Array.from(selectedIds))
+    setAssigning(false)
+    if (result.ok && result.data) {
+      const { notified, alreadyStarted } = result.data
+      showToast(
+        `Assigned to ${notified} candidate${notified !== 1 ? 's' : ''}${alreadyStarted > 0 ? ` (${alreadyStarted} already started)` : ''}`,
+        'success'
+      )
+      setShowAssignModal(false)
+      setSelectedIds(new Set())
+    } else if (!result.ok) {
+      showToast(result.error, 'error')
+    }
+  }
 
   function handleCsvImport(file: File) {
     const reader = new FileReader()
@@ -62,7 +126,6 @@ export default function CandidateListPage() {
             `Imported ${result.data.imported}, skipped ${result.data.skipped}${result.data.errors.length ? `, ${result.data.errors.length} error(s)` : ''}`,
             result.data.errors.length > 0 ? 'error' : 'success'
           )
-          // Reload candidates
           const fresh = await getOrgCandidateList()
           if (fresh.ok && fresh.data) setCandidates(fresh.data)
         } else if (!result.ok) {
@@ -86,6 +149,9 @@ export default function CandidateListPage() {
     const q = searchQuery.toLowerCase()
     return c.email.toLowerCase().includes(q) || (c.fullName?.toLowerCase().includes(q) ?? false)
   })
+
+  const visibleIds = filtered.slice(0, displayLimit).map((c) => c.userId)
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id))
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
@@ -154,6 +220,27 @@ export default function CandidateListPage() {
         </div>
       </div>
 
+      {/* Selection toolbar */}
+      {selectedIds.size > 0 && (
+        <div className="mb-4 p-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 flex items-center justify-between">
+          <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+            {selectedIds.size} candidate{selectedIds.size !== 1 ? 's' : ''} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={openAssignModal}>
+              <Send className="h-4 w-4 mr-1" />
+              Assign Assessment
+            </Button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Search */}
       <div className="relative mb-4">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -205,42 +292,86 @@ export default function CandidateListPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.slice(0, displayLimit).map((c) => (
+          {/* Select all toggle */}
+          <div className="flex items-center gap-2 px-1 mb-1">
             <button
-              key={c.userId}
-              onClick={() => router.push(`/assessments/candidates/${c.userId}`)}
-              className="w-full text-left p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+              onClick={toggleSelectAll}
+              className="flex items-center gap-2 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
             >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
-                    {c.fullName || c.email}
-                  </p>
-                  {c.fullName && (
-                    <p className="text-xs text-slate-500 truncate">{c.email}</p>
-                  )}
-                </div>
-                <div className="flex items-center gap-4 text-xs text-slate-500 flex-shrink-0">
-                  <span className="inline-flex items-center gap-1">
-                    <TrendingUp className="h-3 w-3" />
-                    {c.totalCompleted} exams
-                  </span>
-                  {c.totalCompleted > 0 && (
-                    <span className="inline-flex items-center gap-1">
-                      <Target className="h-3 w-3" />
-                      <span className="font-medium text-slate-700 dark:text-slate-300">{c.avgScore}%</span> avg
-                    </span>
-                  )}
-                  {c.lastActiveAt && (
-                    <span className="inline-flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {new Date(c.lastActiveAt).toLocaleDateString()}
-                    </span>
-                  )}
-                </div>
+              <div className={`h-4 w-4 rounded border flex items-center justify-center transition-colors ${
+                allVisibleSelected
+                  ? 'bg-blue-500 border-blue-500 text-white'
+                  : 'border-slate-300 dark:border-slate-600'
+              }`}>
+                {allVisibleSelected && <CheckSquare className="h-3 w-3" />}
               </div>
+              {allVisibleSelected ? 'Deselect all' : 'Select all'}
             </button>
-          ))}
+          </div>
+
+          {filtered.slice(0, displayLimit).map((c) => {
+            const isSelected = selectedIds.has(c.userId)
+            return (
+              <div
+                key={c.userId}
+                className={`flex items-center gap-3 p-4 rounded-lg border transition-colors ${
+                  isSelected
+                    ? 'border-blue-300 dark:border-blue-700 bg-blue-50/50 dark:bg-blue-900/10'
+                    : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50'
+                }`}
+              >
+                {/* Checkbox */}
+                <button
+                  onClick={() => toggleSelect(c.userId)}
+                  className="shrink-0"
+                  aria-label={`Select ${c.fullName || c.email}`}
+                >
+                  <div className={`h-5 w-5 rounded border flex items-center justify-center transition-colors ${
+                    isSelected
+                      ? 'bg-blue-500 border-blue-500 text-white'
+                      : 'border-slate-300 dark:border-slate-600 hover:border-blue-400'
+                  }`}>
+                    {isSelected && <CheckSquare className="h-3.5 w-3.5" />}
+                  </div>
+                </button>
+
+                {/* Candidate info — clicking navigates */}
+                <button
+                  onClick={() => router.push(`/assessments/candidates/${c.userId}`)}
+                  className="flex-1 text-left min-w-0"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
+                        {c.fullName || c.email}
+                      </p>
+                      {c.fullName && (
+                        <p className="text-xs text-slate-500 truncate">{c.email}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-slate-500 flex-shrink-0">
+                      <span className="inline-flex items-center gap-1">
+                        <TrendingUp className="h-3 w-3" />
+                        {c.totalCompleted} exams
+                      </span>
+                      {c.totalCompleted > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <Target className="h-3 w-3" />
+                          <span className="font-medium text-slate-700 dark:text-slate-300">{c.avgScore}%</span> avg
+                        </span>
+                      )}
+                      {c.lastActiveAt && (
+                        <span className="inline-flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {new Date(c.lastActiveAt).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              </div>
+            )
+          })}
           {filtered.length > displayLimit && (
             <button
               onClick={() => setDisplayLimit((l) => l + 30)}
@@ -249,6 +380,68 @@ export default function CandidateListPage() {
               Show more ({filtered.length - displayLimit} remaining)
             </button>
           )}
+        </div>
+      )}
+
+      {/* Assign Assessment Modal */}
+      {showAssignModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                Assign Assessment
+              </h2>
+              <button
+                onClick={() => setShowAssignModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+              Assign to {selectedIds.size} selected candidate{selectedIds.size !== 1 ? 's' : ''}.
+              Candidates who already started will be skipped.
+            </p>
+
+            {publishedAssessments.length === 0 ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400 py-4 text-center">
+                No published assessments available.
+              </p>
+            ) : (
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Select Assessment
+                </label>
+                <select
+                  value={selectedAssessmentId}
+                  onChange={(e) => setSelectedAssessmentId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {publishedAssessments.map((a) => (
+                    <option key={a.id} value={a.id}>{a.title}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowAssignModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleAssign}
+                disabled={assigning || !selectedAssessmentId || publishedAssessments.length === 0}
+              >
+                {assigning ? 'Assigning...' : 'Assign'}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -429,6 +429,63 @@ export default function AssessmentAnalyticsPage() {
         </div>
       )}
 
+      {/* Time per Question Analysis */}
+      {questionStats.length > 0 && questionStats.some((q) => q.avgTimeSeconds != null) && (() => {
+        const withTime = questionStats.filter((q) => q.avgTimeSeconds != null) as (QuestionStat & { avgTimeSeconds: number })[]
+        if (withTime.length === 0) return null
+        const avgOverall = Math.round(withTime.reduce((s, q) => s + q.avgTimeSeconds, 0) / withTime.length)
+        const slowThreshold = avgOverall * 1.5
+        const maxTime = Math.max(...withTime.map((q) => q.avgTimeSeconds), 1)
+        const sorted = [...withTime].sort((a, b) => b.avgTimeSeconds - a.avgTimeSeconds)
+        return (
+          <div className="mb-8">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">
+              <Clock className="inline h-5 w-5 mr-1 text-blue-500" />
+              Time per Question
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+              Average: <strong>{avgOverall}s</strong> per question.
+              Questions taking &gt;{Math.round(slowThreshold)}s are flagged as slow.
+            </p>
+            <div className="space-y-1.5">
+              {sorted.slice(0, 15).map((q, idx) => {
+                const isSlow = q.avgTimeSeconds > slowThreshold
+                const barWidth = (q.avgTimeSeconds / maxTime) * 100
+                return (
+                  <div key={q.cardTemplateId} className="flex items-center gap-2">
+                    <span className="text-[10px] text-slate-400 w-5 text-right flex-shrink-0">{idx + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className="text-xs text-slate-700 dark:text-slate-300 truncate flex-1">{q.stem}</p>
+                        {isSlow && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 flex-shrink-0">
+                            Slow
+                          </span>
+                        )}
+                      </div>
+                      <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            isSlow ? 'bg-amber-500' : 'bg-blue-500'
+                          }`}
+                          style={{ width: `${barWidth}%` }}
+                        />
+                      </div>
+                    </div>
+                    <span className={`text-xs font-medium w-10 text-right flex-shrink-0 ${isSlow ? 'text-amber-600' : 'text-slate-500'}`}>
+                      {q.avgTimeSeconds}s
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+            {sorted.length > 15 && (
+              <p className="text-xs text-slate-400 text-center mt-2">Showing top 15 by time</p>
+            )}
+          </div>
+        )
+      })()}
+
       {summary && summary.totalCompleted === 0 && (
         <div className="text-center py-12 text-slate-500 dark:text-slate-400">
           <BarChart3 className="h-10 w-10 mx-auto mb-2 opacity-50" />

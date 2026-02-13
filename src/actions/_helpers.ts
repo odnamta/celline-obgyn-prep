@@ -10,6 +10,7 @@ import type { User } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Organization, OrgRole } from '@/types/database'
 import { createSupabaseServerClient, getUser } from '@/lib/supabase/server'
+import { checkRateLimit, RATE_LIMITS, type RateLimitConfig } from '@/lib/rate-limit'
 
 /**
  * Auth context for user-level actions (no org required).
@@ -41,17 +42,35 @@ export type AuthError = { ok: false; error: 'AUTH_REQUIRED' }
 export type NoOrgError = { ok: false; error: 'NO_ORGANIZATION' }
 
 /**
+ * Error when rate limit is exceeded.
+ */
+export type RateLimitError = { ok: false; error: 'RATE_LIMIT_EXCEEDED' }
+
+/**
  * Wraps a server action with user authentication.
  * Use this for user-level actions that don't need org context
  * (e.g., profile settings, org selection, creating a new org).
+ *
+ * @param fn - Callback receiving AuthContext
+ * @param rateLimit - Optional rate limit config (defaults to standard)
  */
 export async function withUser<T>(
-  fn: (ctx: AuthContext) => Promise<T>
-): Promise<T | AuthError> {
+  fn: (ctx: AuthContext) => Promise<T>,
+  rateLimit?: RateLimitConfig,
+): Promise<T | AuthError | RateLimitError> {
   const user = await getUser()
   if (!user) {
     return { ok: false, error: 'AUTH_REQUIRED' }
   }
+
+  // Rate limit check (keyed by user ID)
+  if (rateLimit) {
+    const result = checkRateLimit(`user:${user.id}`, rateLimit)
+    if (!result.allowed) {
+      return { ok: false, error: 'RATE_LIMIT_EXCEEDED' }
+    }
+  }
+
   const supabase = await createSupabaseServerClient()
   return fn({ user, supabase })
 }
@@ -67,15 +86,26 @@ export async function withUser<T>(
  *
  * @param fn - Callback receiving OrgAuthContext
  * @param orgId - Optional specific org ID (defaults to user's first org)
+ * @param rateLimit - Optional rate limit config
  */
 export async function withOrgUser<T>(
   fn: (ctx: OrgAuthContext) => Promise<T>,
-  orgId?: string
-): Promise<T | AuthError | NoOrgError> {
+  orgId?: string,
+  rateLimit?: RateLimitConfig,
+): Promise<T | AuthError | NoOrgError | RateLimitError> {
   const user = await getUser()
   if (!user) {
     return { ok: false, error: 'AUTH_REQUIRED' }
   }
+
+  // Rate limit check (keyed by user ID + action context)
+  if (rateLimit) {
+    const result = checkRateLimit(`org:${user.id}`, rateLimit)
+    if (!result.allowed) {
+      return { ok: false, error: 'RATE_LIMIT_EXCEEDED' }
+    }
+  }
+
   const supabase = await createSupabaseServerClient()
 
   // Resolve org membership

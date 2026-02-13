@@ -130,6 +130,95 @@ export default function OrgAnalyticsPage() {
         </section>
       )}
 
+      {/* Cohort Analytics */}
+      {data.cohort && data.completedSessions > 0 && (
+        <section className="mb-8">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-3">
+            Cohort Performance
+          </h2>
+
+          {/* Score Band Distribution */}
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <div className="p-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-center">
+              <div className="text-xl font-bold text-red-600 dark:text-red-400">{data.cohort.scoreDistribution.below40}</div>
+              <div className="text-xs text-red-500">&lt;40% (Struggling)</div>
+            </div>
+            <div className="p-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 text-center">
+              <div className="text-xl font-bold text-amber-600 dark:text-amber-400">{data.cohort.scoreDistribution.between40_70}</div>
+              <div className="text-xs text-amber-500">40-70% (Developing)</div>
+            </div>
+            <div className="p-3 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 text-center">
+              <div className="text-xl font-bold text-green-600 dark:text-green-400">{data.cohort.scoreDistribution.above70}</div>
+              <div className="text-xs text-green-500">&ge;70% (Proficient)</div>
+            </div>
+          </div>
+
+          {/* Pass Rate Trend */}
+          {data.cohort.passRateTrend.some((w) => w.passRate > 0) && (
+            <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 mb-4">
+              <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Pass Rate Trend</h3>
+              <div className="flex items-end gap-1 h-20">
+                {data.cohort.passRateTrend.map((w, i) => (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+                    {w.passRate > 0 && <span className="text-[9px] text-slate-400">{w.passRate}%</span>}
+                    <div
+                      className="w-full rounded-t bg-green-500/70 dark:bg-green-400/50"
+                      style={{ height: `${w.passRate}%`, minHeight: w.passRate > 0 ? '3px' : '0px' }}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-1 mt-1">
+                {data.cohort.passRateTrend.map((w, i) => (
+                  <div key={i} className="flex-1 text-center text-[10px] text-slate-400 truncate">{w.week}</div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Top & Bottom Performers */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {data.cohort.topPerformers.length > 0 && (
+              <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1">
+                  <TrendingUp className="h-4 w-4 text-green-500" />
+                  Top Performers
+                </h3>
+                <div className="space-y-1.5">
+                  {data.cohort.topPerformers.map((p, i) => (
+                    <div key={p.userId} className="flex items-center gap-2 text-sm">
+                      <span className="text-xs text-slate-400 w-4">{i + 1}.</span>
+                      <span className="text-slate-700 dark:text-slate-300 flex-1 truncate">{p.email}</span>
+                      <span className="font-medium text-green-600">{p.avgScore}%</span>
+                      <span className="text-xs text-slate-400">({p.assessmentsTaken})</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {data.cohort.bottomPerformers.length > 0 && (
+              <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1">
+                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  Need Attention
+                </h3>
+                <div className="space-y-1.5">
+                  {data.cohort.bottomPerformers.map((p, i) => (
+                    <div key={p.userId} className="flex items-center gap-2 text-sm">
+                      <span className="text-xs text-slate-400 w-4">{i + 1}.</span>
+                      <span className="text-slate-700 dark:text-slate-300 flex-1 truncate">{p.email}</span>
+                      <span className="font-medium text-amber-600">{p.avgScore}%</span>
+                      <span className="text-xs text-slate-400">({p.assessmentsTaken})</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
       {/* Per-Assessment Table */}
       {data.assessmentStats.length > 0 && (
         <section>

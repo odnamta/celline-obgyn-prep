@@ -35,6 +35,13 @@ export interface OrgAnalytics {
     avgScore: number
     completions: number
   }>
+  // Cohort analytics
+  cohort: {
+    topPerformers: Array<{ userId: string; email: string; avgScore: number; assessmentsTaken: number }>
+    bottomPerformers: Array<{ userId: string; email: string; avgScore: number; assessmentsTaken: number }>
+    passRateTrend: Array<{ week: string; passRate: number }>
+    scoreDistribution: { below40: number; between40_70: number; above70: number }
+  }
 }
 
 /**
@@ -66,6 +73,12 @@ export async function getOrgAnalytics(): Promise<ActionResultV2<OrgAnalytics>> {
           avgPassRate: 0,
           assessmentStats: [],
           weeklyTrend: [],
+          cohort: {
+            topPerformers: [],
+            bottomPerformers: [],
+            passRateTrend: [],
+            scoreDistribution: { below40: 0, between40_70: 0, above70: 0 },
+          },
         },
       }
     }
@@ -134,6 +147,69 @@ export async function getOrgAnalytics(): Promise<ActionResultV2<OrgAnalytics>> {
       })
     }
 
+    // Cohort analytics: per-candidate performance
+    const userScoreMap = new Map<string, { scores: number[]; email: string }>()
+    for (const s of completed) {
+      if (s.score == null) continue
+      const existing = userScoreMap.get(s.user_id)
+      if (existing) {
+        existing.scores.push(s.score)
+      } else {
+        userScoreMap.set(s.user_id, { scores: [s.score], email: '' })
+      }
+    }
+
+    // Fetch emails for candidates
+    if (userScoreMap.size > 0) {
+      const { data: profiles } = await supabase.auth.admin.listUsers({ perPage: 1000 })
+      if (profiles?.users) {
+        for (const u of profiles.users) {
+          const entry = userScoreMap.get(u.id)
+          if (entry) entry.email = u.email ?? 'Unknown'
+        }
+      }
+    }
+
+    const candidatePerf = Array.from(userScoreMap.entries())
+      .map(([userId, { scores, email }]) => ({
+        userId,
+        email,
+        avgScore: Math.round(scores.reduce((a, b) => a + b, 0) / scores.length),
+        assessmentsTaken: scores.length,
+      }))
+      .sort((a, b) => b.avgScore - a.avgScore)
+
+    const topPerformers = candidatePerf.slice(0, 5)
+    const bottomPerformers = candidatePerf.length > 5
+      ? candidatePerf.slice(-5).reverse()
+      : []
+
+    // Pass rate trend
+    const passRateTrend = weeklyTrend.map((w, i) => {
+      const weekStart = new Date(now)
+      weekStart.setDate(weekStart.getDate() - (11 - i) * 7)
+      weekStart.setHours(0, 0, 0, 0)
+      weekStart.setDate(weekStart.getDate() - weekStart.getDay())
+      const weekEnd = new Date(weekStart)
+      weekEnd.setDate(weekEnd.getDate() + 7)
+
+      const wCompleted = completed.filter((s) => {
+        if (!s.completed_at) return false
+        const d = new Date(s.completed_at)
+        return d >= weekStart && d < weekEnd
+      })
+      const wPassed = wCompleted.filter((s) => s.passed).length
+      return {
+        week: w.week,
+        passRate: wCompleted.length > 0 ? Math.round((wPassed / wCompleted.length) * 100) : 0,
+      }
+    })
+
+    // Score band distribution
+    const below40 = scores.filter((s) => s < 40).length
+    const between40_70 = scores.filter((s) => s >= 40 && s < 70).length
+    const above70 = scores.filter((s) => s >= 70).length
+
     return {
       ok: true,
       data: {
@@ -147,6 +223,12 @@ export async function getOrgAnalytics(): Promise<ActionResultV2<OrgAnalytics>> {
         avgPassRate,
         assessmentStats,
         weeklyTrend,
+        cohort: {
+          topPerformers,
+          bottomPerformers,
+          passRateTrend,
+          scoreDistribution: { below40, between40_70, above70 },
+        },
       },
     }
   })
