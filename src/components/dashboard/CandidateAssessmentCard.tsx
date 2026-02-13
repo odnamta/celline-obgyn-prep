@@ -9,7 +9,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Play, CheckCircle2, XCircle, Clock, Target, CalendarDays } from 'lucide-react'
+import { Play, CheckCircle2, XCircle, Clock, Target, CalendarDays, Bell, BookOpen } from 'lucide-react'
 import { useOrg } from '@/components/providers/OrgProvider'
 import { hasMinimumRole } from '@/lib/org-authorization'
 import { getOrgAssessments, getMyAssessmentSessions } from '@/actions/assessment-actions'
@@ -86,6 +86,24 @@ export function CandidateAssessmentCard() {
           </div>
           <div className="text-xs text-slate-500">Pass Rate</div>
         </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <button
+          onClick={() => router.push('/assessments')}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+        >
+          <BookOpen className="h-3.5 w-3.5" />
+          All Assessments
+        </button>
+        <button
+          onClick={() => router.push('/notifications')}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+        >
+          <Bell className="h-3.5 w-3.5" />
+          Notifications
+        </button>
       </div>
 
       {/* Upcoming Assessments */}

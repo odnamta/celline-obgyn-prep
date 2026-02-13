@@ -308,6 +308,59 @@ export default function AssessmentsPage() {
         )}
       </div>
 
+      {/* Schedule Timeline — shows assessments with dates */}
+      {isCreator && (() => {
+        const scheduled = assessments.filter(
+          (a) => a.status === 'published' && (a.start_date || a.end_date)
+        )
+        if (scheduled.length === 0) return null
+        const now = new Date()
+        const sorted = [...scheduled].sort((a, b) => {
+          const da = a.end_date || a.start_date || ''
+          const db = b.end_date || b.start_date || ''
+          return da.localeCompare(db)
+        })
+        return (
+          <div className="mb-4 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <div className="flex items-center gap-2 mb-2">
+              <CalendarDays className="h-4 w-4 text-slate-500" />
+              <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Schedule</span>
+            </div>
+            <div className="space-y-1.5">
+              {sorted.slice(0, 5).map((a) => {
+                const start = a.start_date ? new Date(a.start_date) : null
+                const end = a.end_date ? new Date(a.end_date) : null
+                const isActive = (!start || start <= now) && (!end || end >= now)
+                const isClosed = end && end < now
+                const isUpcoming = start && start > now
+                return (
+                  <div key={a.id} className="flex items-center gap-3 text-xs">
+                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                      isClosed ? 'bg-slate-300 dark:bg-slate-600' :
+                      isUpcoming ? 'bg-amber-400' :
+                      'bg-green-500'
+                    }`} />
+                    <span className="font-medium text-slate-800 dark:text-slate-200 truncate flex-1 min-w-0">{a.title}</span>
+                    <span className="text-slate-400 whitespace-nowrap">
+                      {start ? start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}
+                      {' → '}
+                      {end ? end.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}
+                    </span>
+                    <span className={`text-[10px] font-medium ${
+                      isClosed ? 'text-slate-400' :
+                      isUpcoming ? 'text-amber-600 dark:text-amber-400' :
+                      'text-green-600 dark:text-green-400'
+                    }`}>
+                      {isClosed ? 'Closed' : isUpcoming ? 'Upcoming' : 'Active'}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Batch Action Bar */}
       {isCreator && selectedIds.size > 0 && (
         <div className="flex items-center gap-3 mb-4 p-3 rounded-lg border border-blue-200 dark:border-blue-800/50 bg-blue-50/50 dark:bg-blue-900/10">

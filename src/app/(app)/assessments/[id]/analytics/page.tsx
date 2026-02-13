@@ -30,6 +30,7 @@ import {
   exportResultsCsv,
 } from '@/actions/assessment-actions'
 import { Button } from '@/components/ui/Button'
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import type { Assessment } from '@/types/database'
 
 type AnalyticsSummary = {
@@ -121,13 +122,11 @@ export default function AssessmentAnalyticsPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <button
-        onClick={() => router.push('/assessments')}
-        className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 mb-6"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to Assessments
-      </button>
+      <Breadcrumbs items={[
+        { label: 'Assessments', href: '/assessments' },
+        { label: assessment?.title ?? 'Assessment' },
+        { label: 'Analytics' },
+      ]} />
 
       <div className="flex items-start justify-between mb-1">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">

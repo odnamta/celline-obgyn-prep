@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, Library, User, BarChart3, ClipboardCheck } from 'lucide-react';
-import { ReactNode } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import { useOrg } from '@/components/providers/OrgProvider';
+import { getUnreadNotificationCount } from '@/actions/notification-actions';
 
 export interface NavItem {
   href: string;
@@ -60,6 +61,13 @@ export const GLASS_NAV_CLASSES = 'bg-white/80 backdrop-blur-lg border-t border-w
 export function MobileNavBar({ className = '' }: MobileNavBarProps) {
   const pathname = usePathname();
   const { org } = useOrg();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    getUnreadNotificationCount().then((r) => {
+      if (r.ok && r.data) setUnreadCount(r.data);
+    });
+  }, []);
 
   const items = [...NAV_ITEMS];
   if (org.settings?.features?.assessment_mode) {
@@ -87,7 +95,14 @@ export function MobileNavBar({ className = '' }: MobileNavBarProps) {
               className={getNavItemClasses(isActive)}
               aria-current={isActive ? 'page' : undefined}
             >
-              {item.icon}
+              <span className="relative">
+                {item.icon}
+                {item.href === '/dashboard' && unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1.5 min-w-[14px] h-[14px] flex items-center justify-center rounded-full bg-red-500 text-white text-[8px] font-bold px-0.5">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </span>
               <span className="text-xs mt-1">{item.label}</span>
             </Link>
           );

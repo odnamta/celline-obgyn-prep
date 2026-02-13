@@ -128,7 +128,7 @@ export function NotificationBell() {
             </div>
           ) : (
             <div>
-              {notifications.map((n) => (
+              {notifications.slice(0, 10).map((n) => (
                 <button
                   key={n.id}
                   onClick={() => handleClickNotification(n)}
@@ -156,6 +156,13 @@ export function NotificationBell() {
                   </div>
                 </button>
               ))}
+              <a
+                href="/notifications"
+                onClick={() => setOpen(false)}
+                className="block w-full text-center py-2.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-slate-50 dark:hover:bg-slate-700/50 border-t border-slate-100 dark:border-slate-700"
+              >
+                View all notifications
+              </a>
             </div>
           )}
         </div>

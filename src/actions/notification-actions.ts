@@ -62,6 +62,39 @@ export async function getUnreadNotificationCount(): Promise<ActionResultV2<numbe
 }
 
 /**
+ * Get paginated notifications with optional type filter.
+ */
+export async function getNotificationsPaginated(opts?: {
+  typeFilter?: string
+  limit?: number
+  offset?: number
+}): Promise<ActionResultV2<{ notifications: Notification[]; total: number }>> {
+  return withOrgUser(async ({ user, supabase, org }) => {
+    const limit = opts?.limit ?? 30
+    const offset = opts?.offset ?? 0
+
+    let query = supabase
+      .from('notifications')
+      .select('*', { count: 'exact' })
+      .eq('user_id', user.id)
+      .eq('org_id', org.id)
+      .order('created_at', { ascending: false })
+
+    if (opts?.typeFilter) {
+      query = query.eq('type', opts.typeFilter)
+    }
+
+    const { data, error, count } = await query.range(offset, offset + limit - 1)
+
+    if (error) {
+      return { ok: false, error: error.message }
+    }
+
+    return { ok: true, data: { notifications: (data ?? []) as Notification[], total: count ?? 0 } }
+  })
+}
+
+/**
  * Mark a notification as read.
  */
 export async function markNotificationRead(

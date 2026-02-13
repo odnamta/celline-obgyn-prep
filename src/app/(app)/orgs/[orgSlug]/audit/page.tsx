@@ -20,6 +20,7 @@ import { hasMinimumRole } from '@/lib/org-authorization'
 import { getAuditLogs } from '@/actions/audit-actions'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/badge'
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import type { AuditAction, AuditLogWithActor } from '@/types/database'
 
 const ACTION_LABELS: Record<string, { label: string; color: string }> = {
@@ -93,13 +94,10 @@ export default function AuditLogPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <button
-        onClick={() => router.push(`/orgs/${org.slug}/settings`)}
-        className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 mb-6"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to Settings
-      </button>
+      <Breadcrumbs items={[
+        { label: 'Settings', href: `/orgs/${org.slug}/settings` },
+        { label: 'Audit Log' },
+      ]} />
 
       <div className="flex items-center gap-3 mb-6">
         <Shield className="h-6 w-6 text-slate-500" />

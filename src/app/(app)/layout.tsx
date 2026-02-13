@@ -11,6 +11,8 @@ import { OnboardingWrapper } from '@/components/onboarding/OnboardingWrapper'
 import { OrgProvider } from '@/components/providers/OrgProvider'
 import { OrgSwitcher } from '@/components/navigation/OrgSwitcher'
 import { NotificationBell } from '@/components/navigation/NotificationBell'
+import { CommandPalette } from '@/components/navigation/CommandPalette'
+import { DesktopNavLinks } from '@/components/navigation/DesktopNavLinks'
 
 export default async function AppLayout({
   children,
@@ -46,30 +48,10 @@ export default async function AppLayout({
                 <a href="/dashboard" className="text-xl font-semibold text-slate-900 dark:text-slate-100">
                   GamaTest
                 </a>
-                <nav className="hidden sm:flex items-center gap-4">
-                  <a
-                    href="/library"
-                    className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
-                  >
-                    Library
-                  </a>
-                  <a
-                    href="/library/my"
-                    className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
-                  >
-                    My Library
-                  </a>
-                  {orgContext.org.settings?.features?.assessment_mode && (
-                    <a
-                      href="/assessments"
-                      className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
-                    >
-                      Assessments
-                    </a>
-                  )}
-                </nav>
+                <DesktopNavLinks />
               </div>
               <div className="flex items-center gap-2">
+                <CommandPalette />
                 <NotificationBell />
                 {/* V13: Org switcher */}
                 <OrgSwitcher />

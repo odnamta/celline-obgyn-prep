@@ -44,6 +44,7 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import type { Assessment, AssessmentSession } from '@/types/database'
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 
 type EnrichedAnswer = {
   id: string
@@ -512,13 +513,11 @@ function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <button
-        onClick={() => router.push('/assessments')}
-        className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 mb-6"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to Assessments
-      </button>
+      <Breadcrumbs items={[
+        { label: 'Assessments', href: '/assessments' },
+        { label: assessment?.title ?? 'Assessment', href: `/assessments/${assessmentId}/analytics` },
+        { label: 'Results' },
+      ]} />
 
       <div className="flex items-start justify-between mb-1">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">

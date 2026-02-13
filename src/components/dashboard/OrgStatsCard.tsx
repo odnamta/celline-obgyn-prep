@@ -9,7 +9,9 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Users, BarChart3, Target, TrendingUp, CheckCircle2, XCircle, Trophy, Activity } from 'lucide-react'
+import { Users, BarChart3, Target, TrendingUp, CheckCircle2, XCircle, Trophy, Activity, Shield, PieChart, UserCheck } from 'lucide-react'
+import { useOrg } from '@/components/providers/OrgProvider'
+import { hasMinimumRole } from '@/lib/org-authorization'
 import { getOrgDashboardStats } from '@/actions/assessment-actions'
 
 type OrgStats = {
@@ -30,6 +32,8 @@ type OrgStats = {
 
 export function OrgStatsCard() {
   const router = useRouter()
+  const { org, role } = useOrg()
+  const isAdmin = hasMinimumRole(role, 'admin')
   const [stats, setStats] = useState<OrgStats | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -110,6 +114,33 @@ export function OrgStatsCard() {
           </div>
           <div className="text-[10px] text-slate-500">Active (7d)</div>
         </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <button
+          onClick={() => router.push('/assessments/candidates')}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+        >
+          <UserCheck className="h-3.5 w-3.5" />
+          Candidates
+        </button>
+        <button
+          onClick={() => router.push(`/orgs/${org.slug}/analytics`)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+        >
+          <PieChart className="h-3.5 w-3.5" />
+          Org Analytics
+        </button>
+        {isAdmin && (
+          <button
+            onClick={() => router.push(`/orgs/${org.slug}/audit`)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+          >
+            <Shield className="h-3.5 w-3.5" />
+            Audit Log
+          </button>
+        )}
       </div>
 
       {/* Top Performers & Recent Activity */}
