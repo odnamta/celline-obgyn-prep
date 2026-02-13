@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Search, X } from 'lucide-react'
 import { CardListItem } from './CardListItem'
 import { BulkActionsBar } from './BulkActionsBar'
 import { BulkTagModal } from './BulkTagModal'
@@ -51,6 +51,8 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showDeckSelector, setShowDeckSelector] = useState(false)
   const [filterTagIds, setFilterTagIds] = useState<string[]>([])
+  // V22: Search query for filtering cards by stem text
+  const [searchQuery, setSearchQuery] = useState('')
   // V8.6: NeedsReview filter toggle
   const [showNeedsReviewOnly, setShowNeedsReviewOnly] = useState(false)
   // V9.1: Bulk tag modal state
@@ -184,9 +186,22 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
     if (showNeedsReviewOnly) {
       result = result.filter(hasNeedsReviewTag)
     }
-    
+
+    // V22: Apply text search filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      result = result.filter(card => {
+        const stemMatch = card.stem?.toLowerCase().includes(q)
+        const optionsMatch = Array.isArray(card.options) && card.options.some((o: string) => o?.toLowerCase().includes(q))
+        const explanationMatch = card.explanation?.toLowerCase().includes(q)
+        const frontMatch = card.front?.toLowerCase().includes(q)
+        const backMatch = card.back?.toLowerCase().includes(q)
+        return stemMatch || optionsMatch || explanationMatch || frontMatch || backMatch
+      })
+    }
+
     return result
-  }, [cards, filterTagIds, filterSourceIds, showNeedsReviewOnly, showUntaggedOnly, statusFilter])
+  }, [cards, filterTagIds, filterSourceIds, showNeedsReviewOnly, showUntaggedOnly, statusFilter, searchQuery])
   
   // V11.4: Reset selection when status filter changes
   useEffect(() => {
@@ -433,6 +448,26 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
 
   return (
     <>
+      {/* V22: In-deck card search */}
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search cards by stem, options, explanation..."
+          className="w-full pl-9 pr-8 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery('')}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700"
+          >
+            <X className="h-3.5 w-3.5 text-slate-400" />
+          </button>
+        )}
+      </div>
+
       {/* V11.4: Status filter chips for authors */}
       {isAuthor && (draftCount > 0 || publishedCount > 0) && (
         <StatusFilterChips
@@ -544,11 +579,13 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
       )}
 
       {/* No results message */}
-      {filteredCards.length === 0 && filterTagIds.length > 0 && (
+      {filteredCards.length === 0 && (filterTagIds.length > 0 || searchQuery.trim()) && (
         <div className="text-center py-8 bg-slate-100 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 rounded-lg">
-          <p className="text-slate-600 dark:text-slate-400">No cards match the selected tags</p>
+          <p className="text-slate-600 dark:text-slate-400">
+            {searchQuery.trim() ? `No cards match "${searchQuery}"` : 'No cards match the selected tags'}
+          </p>
           <button
-            onClick={() => setFilterTagIds([])}
+            onClick={() => { setFilterTagIds([]); setSearchQuery('') }}
             className="text-blue-600 dark:text-blue-400 text-sm mt-2 hover:underline"
           >
             Clear filters

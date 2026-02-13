@@ -68,6 +68,9 @@ export default function CertificatePage() {
     )
   }
 
+  const primaryColor = org.settings?.branding?.primary_color || '#3b82f6'
+  const logoUrl = org.settings?.branding?.logo_url || ''
+
   const completedDate = session.completed_at
     ? new Date(session.completed_at).toLocaleDateString('en-US', {
         year: 'numeric',
@@ -95,17 +98,25 @@ export default function CertificatePage() {
 
       {/* Certificate — printable */}
       <div className="max-w-3xl mx-auto px-4 py-8 print:px-0 print:py-0">
-        <div className="bg-white dark:bg-slate-800 rounded-xl border-2 border-slate-200 dark:border-slate-600 p-12 text-center print:border-4 print:border-slate-900 print:rounded-none print:shadow-none">
-          {/* Header ornament */}
+        <div
+          className="bg-white dark:bg-slate-800 rounded-xl border-2 p-12 text-center print:border-4 print:rounded-none print:shadow-none"
+          style={{ borderColor: primaryColor }}
+        >
+          {/* Header — logo or icon */}
           <div className="mb-6">
-            <Award className="h-16 w-16 mx-auto text-amber-500 print:text-amber-600" />
+            {logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logoUrl} alt={org.name} className="h-16 mx-auto object-contain" />
+            ) : (
+              <Award className="h-16 w-16 mx-auto" style={{ color: primaryColor }} />
+            )}
           </div>
 
           <h1 className="text-3xl font-bold tracking-wide text-slate-900 dark:text-slate-100 mb-2 uppercase print:text-black">
             Certificate of Completion
           </h1>
 
-          <div className="w-24 h-0.5 bg-amber-500 mx-auto my-6" />
+          <div className="w-24 h-0.5 mx-auto my-6" style={{ backgroundColor: primaryColor }} />
 
           <p className="text-slate-500 dark:text-slate-400 mb-1 print:text-slate-600">
             This is to certify that
@@ -125,7 +136,7 @@ export default function CertificatePage() {
 
           <div className="flex items-center justify-center gap-8 text-sm text-slate-600 dark:text-slate-400 mb-8 print:text-slate-700">
             <div>
-              <span className="block text-2xl font-bold text-green-600 print:text-green-700">
+              <span className="block text-2xl font-bold" style={{ color: primaryColor }}>
                 {session.score}%
               </span>
               <span>Score</span>
@@ -142,11 +153,17 @@ export default function CertificatePage() {
           <div className="w-24 h-0.5 bg-slate-200 dark:bg-slate-600 mx-auto my-6" />
 
           <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400 print:text-slate-600">
-            <div className="text-left">
-              <p className="font-medium text-slate-700 dark:text-slate-300 print:text-black">
-                {org.name}
-              </p>
-              <p>Issued on {completedDate}</p>
+            <div className="text-left flex items-center gap-3">
+              {logoUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={logoUrl} alt="" className="h-8 w-8 rounded object-contain print:block" />
+              )}
+              <div>
+                <p className="font-medium text-slate-700 dark:text-slate-300 print:text-black">
+                  {org.name}
+                </p>
+                <p>Issued on {completedDate}</p>
+              </div>
             </div>
             <div className="text-right">
               <p className="font-mono text-xs text-slate-400 print:text-slate-500">

@@ -4,6 +4,7 @@ import { ActivityChart } from '@/components/analytics/ActivityChart'
 import { FocusRecommendation } from '@/components/analytics/FocusRecommendation'
 import { TrainWeakestButton } from '@/components/analytics/TrainWeakestButton'
 import { BarChart3 } from 'lucide-react'
+import { ExportStudyDataButton } from '@/components/analytics/ExportStudyDataButton'
 
 export const metadata = {
   title: 'Stats | Specialize',
@@ -41,7 +42,8 @@ export default async function StatsPage() {
           <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
             <BarChart3 className="h-6 w-6 text-blue-600 dark:text-blue-400" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Analytics</h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 flex-1">Analytics</h1>
+          <ExportStudyDataButton />
         </div>
         <p className="text-slate-600 dark:text-slate-400">
           Track your performance and identify areas for improvement

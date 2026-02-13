@@ -123,6 +123,7 @@ export const updateOrgSettingsSchema = z.object({
     }).partial().optional(),
     branding: z.object({
       primary_color: z.string(),
+      logo_url: z.string().url().or(z.literal('')),
     }).partial().optional(),
     default_language: z.string().optional(),
   }).optional(),

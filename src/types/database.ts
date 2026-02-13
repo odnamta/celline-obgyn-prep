@@ -21,6 +21,7 @@ export interface OrgFeatures {
 
 export interface OrgBranding {
   primary_color: string
+  logo_url: string
 }
 
 export interface AssessmentDefaults {

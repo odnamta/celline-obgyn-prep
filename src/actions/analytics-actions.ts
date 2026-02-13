@@ -330,6 +330,54 @@ export async function getUserSubject(): Promise<SubjectResult> {
 
 
 // ============================================
+// V22: Study Data Export
+// ============================================
+
+export interface StudyExportResult {
+  success: boolean
+  csv: string
+  error?: string
+}
+
+/**
+ * Export study data as CSV: card stem, correct count, total attempts, accuracy, last reviewed.
+ */
+export async function exportStudyData(): Promise<StudyExportResult> {
+  const user = await getUser()
+  if (!user) {
+    return { success: false, csv: '', error: 'Authentication required' }
+  }
+
+  const supabase = await createSupabaseServerClient()
+
+  try {
+    const { data: progress, error } = await supabase
+      .from('user_card_progress')
+      .select('card_template_id, correct_count, total_attempts, last_reviewed, card_templates!inner(stem, deck_template_id, deck_templates!inner(title))')
+      .eq('user_id', user.id)
+      .order('last_reviewed', { ascending: false })
+
+    if (error) {
+      return { success: false, csv: '', error: error.message }
+    }
+
+    const rows: string[] = ['Deck,Question Stem,Correct,Attempts,Accuracy %,Last Reviewed']
+    for (const p of progress || []) {
+      const card = p.card_templates as unknown as { stem: string; deck_templates: { title: string } }
+      const acc = p.total_attempts > 0 ? Math.round((p.correct_count / p.total_attempts) * 100) : 0
+      const stem = (card?.stem || '').replace(/"/g, '""').slice(0, 200)
+      const deckTitle = (card?.deck_templates?.title || '').replace(/"/g, '""')
+      rows.push(`"${deckTitle}","${stem}",${p.correct_count},${p.total_attempts},${acc},${p.last_reviewed || ''}`)
+    }
+
+    return { success: true, csv: rows.join('\n') }
+  } catch (err) {
+    console.error('exportStudyData error:', err)
+    return { success: false, csv: '', error: 'Failed to export study data' }
+  }
+}
+
+// ============================================
 // V11.7: Dashboard Insights
 // ============================================
 

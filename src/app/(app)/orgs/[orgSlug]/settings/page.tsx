@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/Button'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
-import type { OrgFeatures, AssessmentDefaults } from '@/types/database'
+import type { OrgFeatures, OrgBranding, AssessmentDefaults } from '@/types/database'
 
 const FEATURE_LABELS: Record<keyof OrgFeatures, { label: string; description: string }> = {
   study_mode: { label: 'Study Mode', description: 'Spaced repetition and self-paced learning' },
@@ -44,6 +44,9 @@ export default function OrgSettingsPage() {
       flashcards: true,
       erp_integration: false,
     }
+  )
+  const [branding, setBranding] = useState<OrgBranding>(
+    org.settings?.branding ?? { primary_color: '#3b82f6', logo_url: '' }
   )
   const [assessmentDefaults, setAssessmentDefaults] = useState<AssessmentDefaults>(
     org.settings?.assessment_defaults ?? {
@@ -75,7 +78,7 @@ export default function OrgSettingsPage() {
     startTransition(async () => {
       const result = await updateOrgSettings(org.id, {
         name: name.trim() || org.name,
-        settings: { features, assessment_defaults: assessmentDefaults },
+        settings: { features, branding, assessment_defaults: assessmentDefaults },
       })
       if (result.ok) {
         setMessage({ type: 'success', text: 'Settings saved successfully' })
@@ -152,6 +155,70 @@ export default function OrgSettingsPage() {
             )
           )}
         </div>
+      </section>
+
+      {/* Branding */}
+      <Separator className="mb-8" />
+      <section className="space-y-4 mb-8">
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Branding</h2>
+        <p className="text-sm text-slate-600 dark:text-slate-400">
+          Customize your organization&apos;s appearance on certificates and public pages.
+        </p>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <Label htmlFor="primary-color">Primary Color</Label>
+            <div className="flex items-center gap-3">
+              <input
+                id="primary-color"
+                type="color"
+                value={branding.primary_color || '#3b82f6'}
+                onChange={(e) => setBranding(b => ({ ...b, primary_color: e.target.value }))}
+                className="h-10 w-14 rounded-lg border border-slate-300 dark:border-slate-600 cursor-pointer bg-white dark:bg-slate-800"
+              />
+              <input
+                type="text"
+                value={branding.primary_color || '#3b82f6'}
+                onChange={(e) => setBranding(b => ({ ...b, primary_color: e.target.value }))}
+                className="flex-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                maxLength={7}
+                placeholder="#3b82f6"
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="logo-url">Logo URL</Label>
+            <input
+              id="logo-url"
+              type="url"
+              value={branding.logo_url || ''}
+              onChange={(e) => setBranding(b => ({ ...b, logo_url: e.target.value }))}
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="https://example.com/logo.png"
+            />
+          </div>
+        </div>
+        {(branding.logo_url || branding.primary_color) && (
+          <div className="mt-4 p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Preview</p>
+            <div className="flex items-center gap-3">
+              {branding.logo_url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={branding.logo_url}
+                  alt="Org logo"
+                  className="h-10 w-10 rounded object-contain"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                />
+              )}
+              <span
+                className="text-lg font-bold"
+                style={{ color: branding.primary_color || '#3b82f6' }}
+              >
+                {name || org.name}
+              </span>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Assessment Defaults */}

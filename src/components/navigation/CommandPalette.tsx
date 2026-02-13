@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, FileText, BarChart3, Users, BookOpen, Bell, Settings, Shield, PieChart, User, Layout, GraduationCap } from 'lucide-react'
+import { Search, FileText, BarChart3, Users, BookOpen, Bell, Settings, Shield, PieChart, User, Layout, GraduationCap, Globe, Layers, ClipboardList, UserPlus, Download } from 'lucide-react'
 import { useOrg } from '@/components/providers/OrgProvider'
 import { hasMinimumRole } from '@/lib/org-authorization'
 
@@ -44,9 +44,16 @@ export function CommandPalette() {
       { id: 'candidates', label: 'Candidates', href: '/assessments/candidates', icon: <Users className="h-4 w-4" />, keywords: ['students', 'members'], minRole: 'creator' as const },
       { id: 'questions', label: 'Question Bank', href: '/assessments/questions', icon: <FileText className="h-4 w-4" />, keywords: ['mcq', 'manage questions'], minRole: 'creator' as const },
     ] : []),
-    { id: 'org-settings', label: 'Organization Settings', href: `/orgs/${org.slug}/settings`, icon: <Settings className="h-4 w-4" />, keywords: ['org', 'configuration'], minRole: 'admin' },
+    { id: 'custom-study', label: 'Custom Study', href: '/study/custom', icon: <Layers className="h-4 w-4" />, keywords: ['practice', 'tag study', 'filtered'] },
+    { id: 'global-study', label: 'Global Study', href: '/study/global', icon: <Globe className="h-4 w-4" />, keywords: ['all decks', 'cross-deck'] },
+    ...(isAssessmentMode ? [
+      { id: 'templates', label: 'Assessment Templates', href: '/assessments/templates', icon: <ClipboardList className="h-4 w-4" />, keywords: ['template', 'config', 'preset'], minRole: 'creator' as const },
+    ] : []),
+    { id: 'org-settings', label: 'Organization Settings', href: `/orgs/${org.slug}/settings`, icon: <Settings className="h-4 w-4" />, keywords: ['org', 'configuration', 'branding'], minRole: 'admin' },
+    { id: 'org-members', label: 'Members', href: `/orgs/${org.slug}/members`, icon: <UserPlus className="h-4 w-4" />, keywords: ['invite', 'team', 'roles'], minRole: 'admin' },
     { id: 'org-analytics', label: 'Organization Analytics', href: `/orgs/${org.slug}/analytics`, icon: <PieChart className="h-4 w-4" />, keywords: ['org stats', 'metrics'], minRole: 'creator' },
     { id: 'audit-log', label: 'Audit Log', href: `/orgs/${org.slug}/audit`, icon: <Shield className="h-4 w-4" />, keywords: ['history', 'activity'], minRole: 'admin' },
+    { id: 'export-data', label: 'Export Study Data', href: '/stats', icon: <Download className="h-4 w-4" />, keywords: ['csv', 'download', 'export'] },
   ]
 
   // Filter by role
