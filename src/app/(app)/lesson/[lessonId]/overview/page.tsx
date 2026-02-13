@@ -103,24 +103,45 @@ export default async function LessonOverviewPage({ params }: LessonOverviewPageP
             {lesson.title}
           </h1>
 
-          {/* Stats */}
+          {/* Progress Ring + Stats */}
           <div className="flex justify-center gap-8 my-6">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">
-                {itemCount ?? 0}
-              </div>
-              <div className="text-sm text-slate-500 dark:text-slate-400">
-                Questions
-              </div>
-            </div>
-
-            {bestScorePercent !== null && (
+            {bestScorePercent !== null ? (
               <div className="text-center">
-                <div className="text-3xl font-bold text-green-600 dark:text-green-400">
-                  {bestScorePercent}%
+                <div className="relative w-20 h-20 mx-auto mb-2">
+                  <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
+                    <circle cx="40" cy="40" r="34" fill="none" stroke="currentColor" strokeWidth="6" className="text-slate-200 dark:text-slate-700" />
+                    <circle
+                      cx="40" cy="40" r="34" fill="none" strokeWidth="6" strokeLinecap="round"
+                      className="text-green-500"
+                      strokeDasharray={`${2 * Math.PI * 34}`}
+                      strokeDashoffset={`${2 * Math.PI * 34 * (1 - bestScorePercent / 100)}`}
+                      style={{ transition: 'stroke-dashoffset 0.5s ease' }}
+                    />
+                  </svg>
+                  <span className="absolute inset-0 flex items-center justify-center text-lg font-bold text-green-600 dark:text-green-400">
+                    {bestScorePercent}%
+                  </span>
+                </div>
+                <div className="text-sm text-slate-500 dark:text-slate-400">Best Score</div>
+              </div>
+            ) : (
+              <div className="text-center">
+                <div className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">
+                  {itemCount ?? 0}
                 </div>
                 <div className="text-sm text-slate-500 dark:text-slate-400">
-                  Best Score
+                  Questions
+                </div>
+              </div>
+            )}
+
+            {bestScorePercent !== null && (
+              <div className="text-center flex flex-col justify-center">
+                <div className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">
+                  {itemCount ?? 0}
+                </div>
+                <div className="text-sm text-slate-500 dark:text-slate-400">
+                  Questions
                 </div>
               </div>
             )}

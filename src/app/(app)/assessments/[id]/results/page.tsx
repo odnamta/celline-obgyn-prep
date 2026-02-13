@@ -26,6 +26,8 @@ import {
   ChevronDown,
   BookOpen,
   FileText,
+  RotateCcw,
+  History,
 } from 'lucide-react'
 import { useOrg } from '@/components/providers/OrgProvider'
 import { hasMinimumRole } from '@/lib/org-authorization'
@@ -39,6 +41,7 @@ import {
   expireStaleSessions,
   getActiveSessionsForAssessment,
   getSessionPercentile,
+  getMyAttemptsForAssessment,
 } from '@/actions/assessment-actions'
 import { useToast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/Button'
@@ -109,16 +112,23 @@ function CandidateResultsView({ assessmentId, sessionId }: { assessmentId: strin
   const [answers, setAnswers] = useState<EnrichedAnswer[]>([])
   const [weakAreas, setWeakAreas] = useState<TopicBreakdown[]>([])
   const [percentile, setPercentile] = useState<{ percentile: number; rank: number; totalSessions: number } | null>(null)
+  const [attemptData, setAttemptData] = useState<{
+    attempts: Array<{ id: string; score: number | null; passed: boolean | null; status: string; completed_at: string | null; created_at: string }>
+    maxAttempts: number | null
+    canRetake: boolean
+    cooldownEndsAt: string | null
+  } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
-      const [aResult, sResult, wResult, pResult] = await Promise.all([
+      const [aResult, sResult, wResult, pResult, attResult] = await Promise.all([
         getAssessment(assessmentId),
         getSessionResults(sessionId),
         getSessionWeakAreas(sessionId),
         getSessionPercentile(sessionId),
+        getMyAttemptsForAssessment(assessmentId),
       ])
 
       if (aResult.ok && aResult.data) setAssessment(aResult.data)
@@ -133,6 +143,9 @@ function CandidateResultsView({ assessmentId, sessionId }: { assessmentId: strin
       }
       if (pResult.ok && pResult.data) {
         setPercentile(pResult.data)
+      }
+      if (attResult.ok && attResult.data) {
+        setAttemptData(attResult.data)
       }
       setLoading(false)
     }
@@ -477,6 +490,81 @@ ${answers.map((a, i) => `<tr>
       {answers.length > 0 && assessment && !assessment.allow_review && (
         <div className="mt-6 p-4 rounded-lg bg-slate-50 dark:bg-slate-800 text-center text-sm text-slate-500 dark:text-slate-400">
           Answer review is not available for this assessment.
+        </div>
+      )}
+
+      {/* Attempt History & Retake */}
+      {attemptData && attemptData.attempts.length > 1 && (
+        <div className="mt-8">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-3 flex items-center gap-2">
+            <History className="h-5 w-5 text-slate-400" />
+            Your Attempts
+            {attemptData.maxAttempts && (
+              <span className="text-sm font-normal text-slate-500">
+                ({attemptData.attempts.filter((a) => a.status === 'completed' || a.status === 'timed_out').length}/{attemptData.maxAttempts})
+              </span>
+            )}
+          </h2>
+          <div className="space-y-2">
+            {attemptData.attempts.map((att, idx) => {
+              const isCurrent = att.id === sessionId
+              return (
+                <div
+                  key={att.id}
+                  className={`flex items-center gap-3 p-3 rounded-lg border ${
+                    isCurrent
+                      ? 'border-blue-300 dark:border-blue-700 bg-blue-50/50 dark:bg-blue-900/10'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'
+                  }`}
+                >
+                  <span className="text-xs font-medium text-slate-400 w-6 text-right">
+                    #{attemptData.attempts.length - idx}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm text-slate-700 dark:text-slate-300">
+                      {att.completed_at ? new Date(att.completed_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'In progress'}
+                    </span>
+                    {isCurrent && (
+                      <span className="ml-2 text-xs text-blue-600 dark:text-blue-400 font-medium">Current</span>
+                    )}
+                  </div>
+                  {att.score !== null ? (
+                    <span className={`text-sm font-bold ${att.passed ? 'text-green-600' : 'text-red-500'}`}>
+                      {att.score}%
+                    </span>
+                  ) : (
+                    <span className="text-xs text-slate-400">—</span>
+                  )}
+                  {!isCurrent && att.status !== 'in_progress' && (
+                    <button
+                      onClick={() => router.push(`/assessments/${assessmentId}/results?sessionId=${att.id}`)}
+                      className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      View
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Retake Button */}
+      {attemptData?.canRetake && (
+        <div className="mt-6 text-center">
+          <Button onClick={() => router.push(`/assessments/${assessmentId}/take`)}>
+            <RotateCcw className="h-4 w-4 mr-2" />
+            Retake Assessment
+          </Button>
+        </div>
+      )}
+
+      {attemptData && !attemptData.canRetake && attemptData.cooldownEndsAt && (
+        <div className="mt-6 text-center">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Retake available after {new Date(attemptData.cooldownEndsAt).toLocaleString()}
+          </p>
         </div>
       )}
 

@@ -57,6 +57,10 @@ export async function createBookSource(
     .limit(1)
     .single()
 
+  if (!membership?.org_id) {
+    return { success: false, error: 'No active organization found' }
+  }
+
   const { title, edition, specialty } = validation.data
 
   // V13: Insert book source with org_id
@@ -64,7 +68,7 @@ export async function createBookSource(
     .from('book_sources')
     .insert({
       author_id: user.id,
-      org_id: membership?.org_id ?? null,
+      org_id: membership.org_id,
       title,
       edition: edition ?? null,
       specialty: specialty ?? null,

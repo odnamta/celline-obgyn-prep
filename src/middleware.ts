@@ -64,6 +64,16 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // Security headers
+  supabaseResponse.headers.set('X-Frame-Options', 'DENY')
+  supabaseResponse.headers.set('X-Content-Type-Options', 'nosniff')
+  supabaseResponse.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+  supabaseResponse.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+
+  // Request ID for tracing
+  const requestId = crypto.randomUUID()
+  supabaseResponse.headers.set('X-Request-Id', requestId)
+
   return supabaseResponse
 }
 

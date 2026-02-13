@@ -27,6 +27,14 @@ export interface CourseMapProps {
 }
 
 export function CourseMap({ course, units }: CourseMapProps) {
+  // Overall course progress
+  const totalLessons = units.reduce((sum, u) => sum + u.lessons.length, 0)
+  const completedLessons = units.reduce(
+    (sum, u) => sum + u.lessons.filter((l) => l.status === 'completed').length,
+    0
+  )
+  const overallPercent = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0
+
   return (
     <div className="w-full max-w-2xl mx-auto px-4 py-6">
       {/* Course Header */}
@@ -38,6 +46,20 @@ export function CourseMap({ course, units }: CourseMapProps) {
           <p className="mt-2 text-slate-600 dark:text-slate-400">
             {course.description}
           </p>
+        )}
+        {totalLessons > 0 && (
+          <div className="mt-4 max-w-xs mx-auto">
+            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+              <span>{completedLessons} of {totalLessons} lessons complete</span>
+              <span className="font-medium">{overallPercent}%</span>
+            </div>
+            <div className="h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-indigo-500 dark:bg-indigo-400 rounded-full transition-all duration-500"
+                style={{ width: `${overallPercent}%` }}
+              />
+            </div>
+          </div>
         )}
       </div>
 

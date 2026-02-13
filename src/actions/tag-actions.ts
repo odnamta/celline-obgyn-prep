@@ -527,7 +527,10 @@ export async function autoTagCards(
     .order('joined_at', { ascending: true })
     .limit(1)
     .single()
-  const activeOrgId = orgMembership?.org_id ?? null
+  if (!orgMembership?.org_id) {
+    return { ok: false, error: 'No active organization found' }
+  }
+  const activeOrgId = orgMembership.org_id
 
   // Fetch card templates with their deck info for authorization
   const { data: cardTemplates, error: fetchError } = await supabase

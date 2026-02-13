@@ -49,10 +49,14 @@ export async function createDeckAction(
     .limit(1)
     .single()
 
+  if (!membership?.org_id) {
+    return { success: false, error: 'No active organization found. Please join an organization first.' }
+  }
+
   // V8.0/V9.1/V13: Create deck_template with subject and org_id
   const { data: deckTemplate, error: createError } = await supabase
     .from('deck_templates')
-    .insert({ title, author_id: user.id, visibility: 'private', subject, org_id: membership?.org_id ?? null })
+    .insert({ title, author_id: user.id, visibility: 'private', subject, org_id: membership.org_id })
     .select()
     .single()
 
@@ -330,6 +334,10 @@ export async function createDeckTemplateAction(
     .limit(1)
     .single()
 
+  if (!membership?.org_id) {
+    return { success: false, error: 'No active organization found' }
+  }
+
   // V13: Create deck_template with org_id
   const { data: deckTemplate, error: createError } = await supabase
     .from('deck_templates')
@@ -337,7 +345,7 @@ export async function createDeckTemplateAction(
       title,
       author_id: user.id,
       visibility: 'private',
-      org_id: membership?.org_id ?? null,
+      org_id: membership.org_id,
     })
     .select()
     .single()

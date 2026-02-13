@@ -945,6 +945,77 @@ export async function getMyAssessmentSessions(): Promise<ActionResultV2<SessionW
 }
 
 /**
+ * Get current user's past attempts for a specific assessment.
+ * Returns sessions + assessment metadata for retake eligibility.
+ */
+export async function getMyAttemptsForAssessment(
+  assessmentId: string
+): Promise<ActionResultV2<{
+  attempts: Array<{ id: string; score: number | null; passed: boolean | null; status: string; completed_at: string | null; created_at: string }>
+  maxAttempts: number | null
+  cooldownMinutes: number | null
+  canRetake: boolean
+  cooldownEndsAt: string | null
+}>> {
+  return withOrgUser(async ({ user, supabase, org }) => {
+    const { data: assessment } = await supabase
+      .from('assessments')
+      .select('id, max_attempts, cooldown_minutes, status')
+      .eq('id', assessmentId)
+      .eq('org_id', org.id)
+      .single()
+
+    if (!assessment) return { ok: false, error: 'Assessment not found' }
+
+    const { data: sessions } = await supabase
+      .from('assessment_sessions')
+      .select('id, score, passed, status, completed_at, created_at')
+      .eq('assessment_id', assessmentId)
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+
+    const attempts = (sessions ?? []).map((s) => ({
+      id: s.id,
+      score: s.score,
+      passed: s.passed,
+      status: s.status,
+      completed_at: s.completed_at,
+      created_at: s.created_at,
+    }))
+
+    const completedCount = attempts.filter((a) => a.status === 'completed' || a.status === 'timed_out').length
+    const maxReached = assessment.max_attempts ? completedCount >= assessment.max_attempts : false
+
+    let cooldownEndsAt: string | null = null
+    let inCooldown = false
+    if (assessment.cooldown_minutes && attempts.length > 0) {
+      const last = attempts.find((a) => a.completed_at)
+      if (last?.completed_at) {
+        const end = new Date(last.completed_at)
+        end.setMinutes(end.getMinutes() + assessment.cooldown_minutes)
+        if (new Date() < end) {
+          inCooldown = true
+          cooldownEndsAt = end.toISOString()
+        }
+      }
+    }
+
+    const canRetake = assessment.status === 'published' && !maxReached && !inCooldown
+
+    return {
+      ok: true,
+      data: {
+        attempts,
+        maxAttempts: assessment.max_attempts,
+        cooldownMinutes: assessment.cooldown_minutes,
+        canRetake,
+        cooldownEndsAt,
+      },
+    }
+  })
+}
+
+/**
  * Get questions for an active session (stems + options only, no correct answers).
  * Used by the take page to display questions during the exam.
  */
