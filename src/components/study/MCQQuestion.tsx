@@ -129,6 +129,11 @@ export function MCQQuestion({
                 <span className="flex-1 pt-1">
                   <MarkdownContent content={option} />
                 </span>
+                {!isAnswered && !disabled && (
+                  <kbd className="hidden sm:inline-flex flex-shrink-0 items-center justify-center w-6 h-6 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-xs text-slate-500 dark:text-slate-400 font-mono self-center">
+                    {index + 1}
+                  </kbd>
+                )}
               </div>
             </button>
           ))}

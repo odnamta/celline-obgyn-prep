@@ -16,6 +16,7 @@ import { getAssessment, updateAssessment, publishAssessment, getAssessmentPrevie
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/badge'
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import type { Assessment } from '@/types/database'
 
 export default function EditAssessmentPage() {
@@ -160,13 +161,11 @@ export default function EditAssessmentPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
-      <button
-        onClick={() => router.back()}
-        className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 mb-6"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back
-      </button>
+      <Breadcrumbs items={[
+        { label: 'Assessments', href: '/assessments' },
+        { label: assessment.title, href: `/assessments/${assessmentId}/analytics` },
+        { label: 'Edit' },
+      ]} />
 
       <div className="flex items-center gap-3 mb-6">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">

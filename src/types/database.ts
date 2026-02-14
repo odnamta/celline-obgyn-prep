@@ -119,6 +119,8 @@ export type AuditAction =
   | 'member.joined'
   | 'settings.updated'
   | 'notification.sent'
+  | 'ownership.transferred'
+  | 'org.deleted'
 
 export interface AuditLog {
   id: string

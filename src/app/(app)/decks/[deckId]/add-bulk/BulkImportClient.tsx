@@ -1,7 +1,6 @@
 'use client'
 
 import { useRef, useState, useCallback, useEffect } from 'react'
-import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { BulkImportStepper } from '@/components/cards/BulkImportStepper'
 import { TextSelectionToolbar, TargetField, getNextField } from '@/components/cards/TextSelectionToolbar'
@@ -42,6 +41,7 @@ import { AlertTriangle, RefreshCw } from 'lucide-react'
 // V11.3: Import session for draft/publish workflow
 import { useImportSession } from '@/hooks/use-import-session'
 import { SessionPanel } from '@/components/session/SessionPanel'
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 
 // Dynamic import PDFViewer to avoid SSR issues with react-pdf
 const PDFViewer = dynamic(
@@ -787,12 +787,11 @@ export default function BulkImportClient({ deckId, subject = 'Obstetrics & Gynec
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Header with navigation */}
       <div className="mb-6">
-        <Link 
-          href={`/decks/${deckId}`}
-          className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-300 transition-colors"
-        >
-          ← Back to Deck
-        </Link>
+        <Breadcrumbs items={[
+          { label: 'Decks', href: '/decks' },
+          { label: 'Deck', href: `/decks/${deckId}` },
+          { label: 'Bulk Import' },
+        ]} />
       </div>
 
       {/* Page title */}

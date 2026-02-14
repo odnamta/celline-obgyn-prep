@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import Link from 'next/link'
 import { MCQQuestion } from './MCQQuestion'
 import { Button } from '@/components/ui/Button'
 import { answerMCQAction } from '@/actions/mcq-actions'
+import { useHotkeys } from '@/hooks/use-hotkeys'
 import type { MCQCard } from '@/types/database'
 
 interface MCQStudySessionProps {
@@ -92,6 +93,22 @@ export function MCQStudySession({ initialCards, deckId }: MCQStudySessionProps) 
     }
   }
 
+  // Keyboard shortcuts: 1-5 for options, Enter for next
+  const handleKeyOption = useCallback((index: number) => {
+    if (!sessionState.isAnswered && !isLoading && index < currentCard.options.length) {
+      handleAnswer(index)
+    }
+  }, [sessionState.isAnswered, isLoading, currentCard?.options?.length])
+
+  useHotkeys([
+    { key: '1', handler: () => handleKeyOption(0), enabled: !sessionState.isComplete && !sessionState.isAnswered },
+    { key: '2', handler: () => handleKeyOption(1), enabled: !sessionState.isComplete && !sessionState.isAnswered },
+    { key: '3', handler: () => handleKeyOption(2), enabled: !sessionState.isComplete && !sessionState.isAnswered },
+    { key: '4', handler: () => handleKeyOption(3), enabled: !sessionState.isComplete && !sessionState.isAnswered },
+    { key: '5', handler: () => handleKeyOption(4), enabled: !sessionState.isComplete && !sessionState.isAnswered },
+    { key: 'Enter', handler: handleNextQuestion, enabled: sessionState.isAnswered && !sessionState.isComplete },
+  ])
+
   // Session complete - show summary
   if (sessionState.isComplete) {
     const scorePercent = Math.round((sessionState.correctCount / totalCards) * 100)
@@ -166,10 +183,13 @@ export function MCQStudySession({ initialCards, deckId }: MCQStudySessionProps) 
 
       {/* Next Question button (Requirement 2.8) */}
       {sessionState.isAnswered && (
-        <div className="mt-6 flex justify-center">
+        <div className="mt-6 flex flex-col items-center gap-2">
           <Button onClick={handleNextQuestion} size="lg">
             {sessionState.currentIndex + 1 >= totalCards ? 'Finish Session' : 'Next Question'}
           </Button>
+          <span className="hidden sm:flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
+            Press <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 font-mono text-[10px]">Enter</kbd> to continue
+          </span>
         </div>
       )}
 

@@ -8,11 +8,11 @@
  */
 
 import { useState, useEffect, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
-import { ArrowLeft, Shield, UserMinus, Crown, Mail, Send, X, Copy, Check } from 'lucide-react'
+import { Shield, UserMinus, Crown, Mail, Send, X, Copy, Check } from 'lucide-react'
 import { useOrg } from '@/components/providers/OrgProvider'
-import { getOrgMembers, updateMemberRole, removeMember } from '@/actions/org-actions'
+import { getOrgMembers, updateMemberRole, removeMember, getOrgMemberActivity } from '@/actions/org-actions'
 import { inviteMember, getOrgInvitations, revokeInvitation } from '@/actions/invitation-actions'
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/badge'
@@ -49,7 +49,6 @@ const ROLE_COLORS: Record<OrgRole, string> = {
 
 export default function OrgMembersPage() {
   const { org, role } = useOrg()
-  const router = useRouter()
   const [members, setMembers] = useState<OrganizationMemberWithProfile[]>([])
   const [invitations, setInvitations] = useState<Invitation[]>([])
   const [loading, setLoading] = useState(true)
@@ -64,6 +63,7 @@ export default function OrgMembersPage() {
   const [inviting, setInviting] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [copiedJoinLink, setCopiedJoinLink] = useState(false)
+  const [activity, setActivity] = useState<Record<string, { completedSessions: number; lastActive: string | null }>>({})
 
   useEffect(() => {
     loadData()
@@ -71,12 +71,14 @@ export default function OrgMembersPage() {
 
   async function loadData() {
     setLoading(true)
-    const [mResult, iResult] = await Promise.all([
+    const [mResult, iResult, aResult] = await Promise.all([
       getOrgMembers(),
       getOrgInvitations(),
+      getOrgMemberActivity(),
     ])
     if (mResult.ok) setMembers(mResult.data ?? [])
     if (iResult.ok) setInvitations(iResult.data ?? [])
+    if (aResult.ok && aResult.data) setActivity(aResult.data)
     setLoading(false)
   }
 
@@ -159,17 +161,14 @@ export default function OrgMembersPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
-      <div className="flex items-center gap-3 mb-8">
-        <button
-          onClick={() => router.back()}
-          className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-        >
-          <ArrowLeft className="h-5 w-5 text-slate-600 dark:text-slate-400" />
-        </button>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Members</h1>
-          <p className="text-sm text-slate-600 dark:text-slate-400">{org.name}</p>
-        </div>
+      <Breadcrumbs items={[
+        { label: org.name, href: `/orgs/${org.slug}/settings` },
+        { label: 'Members' },
+      ]} />
+
+      <div className="mb-8 mt-4">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Members</h1>
+        <p className="text-sm text-slate-600 dark:text-slate-400">{org.name}</p>
       </div>
 
       {error && (
@@ -324,6 +323,16 @@ export default function OrgMembersPage() {
                   <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                     {member.full_name ? member.email : `Joined ${new Date(member.joined_at).toLocaleDateString()}`}
                   </p>
+                  {(() => {
+                    const a = activity[member.user_id]
+                    if (!a) return null
+                    return (
+                      <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                        {a.completedSessions} exam{a.completedSessions !== 1 ? 's' : ''} completed
+                        {a.lastActive && <> &middot; Last active {new Date(a.lastActive).toLocaleDateString()}</>}
+                      </p>
+                    )
+                  })()}
                 </div>
               </div>
 

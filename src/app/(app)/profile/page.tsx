@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { SPECIALTIES } from '@/components/onboarding/OnboardingModal'
 import { enrollInStarterPack } from '@/actions/onboarding-actions'
 import { getMyAssessmentSessions } from '@/actions/assessment-actions'
-import { User, Mail, Stethoscope, LogOut, Trophy, Clock, Bell, BellOff, Globe } from 'lucide-react'
+import { User, Mail, Stethoscope, LogOut, Trophy, Clock, Bell, BellOff, Globe, Lock } from 'lucide-react'
 import type { SessionWithAssessment } from '@/types/database'
 
 const COMMON_TIMEZONES = [
@@ -135,6 +135,8 @@ export default function ProfilePage() {
       <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-6">
         Profile Settings
       </h1>
+
+      {/* Profile-level messages */}
 
       <Card variant="elevated" padding="lg" className="mb-6">
         {error && (
@@ -275,6 +277,9 @@ export default function ProfilePage() {
         </div>
       </Card>
 
+      {/* Change Password */}
+      <ChangePasswordCard />
+
       {/* Exam History Summary */}
       {completedSessions.length > 0 && (
         <Card variant="elevated" padding="lg" className="mb-6">
@@ -337,5 +342,85 @@ export default function ProfilePage() {
         Sign Out
       </button>
     </div>
+  )
+}
+
+function ChangePasswordCard() {
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  async function handleChangePassword() {
+    setMessage(null)
+    if (newPassword.length < 8) {
+      setMessage({ type: 'error', text: 'Password must be at least 8 characters' })
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setMessage({ type: 'error', text: 'Passwords do not match' })
+      return
+    }
+    setSaving(true)
+    try {
+      const supabase = createSupabaseBrowserClient()
+      const { error } = await supabase.auth.updateUser({ password: newPassword })
+      if (error) {
+        setMessage({ type: 'error', text: error.message })
+      } else {
+        setMessage({ type: 'success', text: 'Password updated successfully' })
+        setNewPassword('')
+        setConfirmPassword('')
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to update password' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Card variant="elevated" padding="lg" className="mb-6">
+      <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3 flex items-center gap-2">
+        <Lock className="h-4 w-4 text-slate-500" />
+        Change Password
+      </h2>
+      {message && (
+        <div className={`mb-3 p-2.5 rounded-lg text-sm ${
+          message.type === 'success'
+            ? 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-700'
+            : 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700'
+        }`}>
+          {message.text}
+        </div>
+      )}
+      <div className="space-y-3">
+        <div>
+          <label htmlFor="new-pw" className="block text-sm text-slate-700 dark:text-slate-300 mb-1">New Password</label>
+          <input
+            id="new-pw"
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="Minimum 8 characters"
+            className="w-full p-3 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div>
+          <label htmlFor="confirm-pw" className="block text-sm text-slate-700 dark:text-slate-300 mb-1">Confirm Password</label>
+          <input
+            id="confirm-pw"
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Re-enter new password"
+            className="w-full p-3 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+      <Button onClick={handleChangePassword} loading={saving} variant="secondary" className="w-full mt-4">
+        Update Password
+      </Button>
+    </Card>
   )
 }

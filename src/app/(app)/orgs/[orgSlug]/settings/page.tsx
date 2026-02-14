@@ -8,9 +8,10 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Save, Shield } from 'lucide-react'
+import { ArrowLeft, Save, Shield, AlertTriangle, Trash2, ArrowRightLeft } from 'lucide-react'
 import { useOrg } from '@/components/providers/OrgProvider'
-import { updateOrgSettings } from '@/actions/org-actions'
+import { updateOrgSettings, transferOwnership, deleteOrganization, getOrgMembers } from '@/actions/org-actions'
+import type { OrganizationMemberWithProfile } from '@/types/database'
 import { Button } from '@/components/ui/Button'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
@@ -321,6 +322,157 @@ export default function OrgSettingsPage() {
         <Save className="h-4 w-4 mr-2" />
         Save Settings
       </Button>
+
+      {/* Danger Zone — Owner only */}
+      {role === 'owner' && (
+        <>
+          <Separator className="my-8" />
+          <DangerZone orgId={org.id} orgName={org.name} />
+        </>
+      )}
     </div>
+  )
+}
+
+function DangerZone({ orgId, orgName }: { orgId: string; orgName: string }) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+  const [members, setMembers] = useState<OrganizationMemberWithProfile[]>([])
+  const [transferTarget, setTransferTarget] = useState('')
+  const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [showTransfer, setShowTransfer] = useState(false)
+  const [showDelete, setShowDelete] = useState(false)
+
+  function loadMembers() {
+    if (members.length > 0) return
+    startTransition(async () => {
+      const result = await getOrgMembers()
+      if (result.ok && result.data) {
+        setMembers(result.data.filter(m => m.role !== 'owner'))
+      }
+    })
+  }
+
+  function handleTransfer() {
+    if (!transferTarget) return
+    setMessage(null)
+    startTransition(async () => {
+      const result = await transferOwnership(transferTarget)
+      if (!result.ok) {
+        setMessage({ type: 'error', text: result.error })
+      } else {
+        setMessage({ type: 'success', text: 'Ownership transferred. You are now an admin.' })
+        setShowTransfer(false)
+        router.refresh()
+      }
+    })
+  }
+
+  function handleDelete() {
+    if (deleteConfirm !== orgName) return
+    setMessage(null)
+    startTransition(async () => {
+      const result = await deleteOrganization()
+      if (!result.ok) {
+        setMessage({ type: 'error', text: result.error })
+      } else {
+        router.push('/orgs/create')
+      }
+    })
+  }
+
+  return (
+    <section className="space-y-4">
+      <h2 className="text-lg font-semibold text-red-600 dark:text-red-400 flex items-center gap-2">
+        <AlertTriangle className="h-5 w-5" />
+        Danger Zone
+      </h2>
+
+      {message && (
+        <p className={`text-sm ${message.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+          {message.text}
+        </p>
+      )}
+
+      {/* Transfer Ownership */}
+      <div className="p-4 rounded-xl border border-red-200 dark:border-red-800/50">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-medium text-slate-900 dark:text-slate-100">Transfer Ownership</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Hand over ownership to another member. You will become an admin.</p>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => { setShowTransfer(!showTransfer); loadMembers() }}
+          >
+            <ArrowRightLeft className="h-4 w-4 mr-1" />
+            Transfer
+          </Button>
+        </div>
+        {showTransfer && (
+          <div className="mt-4 space-y-3">
+            <select
+              value={transferTarget}
+              onChange={(e) => setTransferTarget(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select a member...</option>
+              {members.map(m => (
+                <option key={m.id} value={m.id}>
+                  {m.email || m.user_id} ({m.role})
+                </option>
+              ))}
+            </select>
+            <Button size="sm" onClick={handleTransfer} loading={isPending} disabled={!transferTarget}>
+              Confirm Transfer
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Delete Organization */}
+      <div className="p-4 rounded-xl border border-red-200 dark:border-red-800/50">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-medium text-slate-900 dark:text-slate-100">Delete Organization</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Permanently delete this organization and all its data. This cannot be undone.</p>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setShowDelete(!showDelete)}
+            className="text-red-600 border-red-300 hover:bg-red-50 dark:text-red-400 dark:border-red-700 dark:hover:bg-red-900/20"
+          >
+            <Trash2 className="h-4 w-4 mr-1" />
+            Delete
+          </Button>
+        </div>
+        {showDelete && (
+          <div className="mt-4 space-y-3">
+            <p className="text-sm text-red-600 dark:text-red-400">
+              Type <strong>{orgName}</strong> to confirm:
+            </p>
+            <input
+              type="text"
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              className="w-full rounded-lg border border-red-300 dark:border-red-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-red-500"
+              placeholder={orgName}
+            />
+            <Button
+              size="sm"
+              onClick={handleDelete}
+              loading={isPending}
+              disabled={deleteConfirm !== orgName}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Delete Organization Permanently
+            </Button>
+          </div>
+        )}
+      </div>
+    </section>
   )
 }

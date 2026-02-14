@@ -18,6 +18,7 @@ import type { AssessmentTemplate, AssessmentTemplateConfig } from '@/types/datab
 import { getAssessmentDefaults } from '@/actions/org-actions'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 
 export default function CreateAssessmentPage() {
   const { role } = useOrg()
@@ -154,13 +155,10 @@ export default function CreateAssessmentPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
-      <button
-        onClick={() => router.back()}
-        className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 mb-6"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back
-      </button>
+      <Breadcrumbs items={[
+        { label: 'Assessments', href: '/assessments' },
+        { label: 'Create Assessment' },
+      ]} />
 
       <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-6">
         Create Assessment

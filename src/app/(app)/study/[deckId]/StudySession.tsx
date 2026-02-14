@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import Link from 'next/link'
 import { Flashcard } from '@/components/study/Flashcard'
 import { RatingButtons } from '@/components/study/RatingButtons'
 import { SessionSummary } from '@/components/study/SessionSummary'
 import { rateCardAction } from '@/actions/study-actions'
 import type { Card, UserStats } from '@/types/database'
+import { useHotkeys } from '@/hooks/use-hotkeys'
 import type { SessionState } from '@/types/session'
 
 interface StudySessionProps {
@@ -83,6 +84,15 @@ export function StudySession({ initialCards, deckId, userStats }: StudySessionPr
       setRemainingCount(0)
     }
   }
+
+  // Keyboard shortcuts: Space to reveal, 1-4 for rating
+  useHotkeys([
+    { key: ' ', handler: handleReveal, enabled: !isRevealed && !isComplete && !!currentCard },
+    { key: '1', handler: () => handleRate(1), enabled: isRevealed && !isComplete },
+    { key: '2', handler: () => handleRate(2), enabled: isRevealed && !isComplete },
+    { key: '3', handler: () => handleRate(3), enabled: isRevealed && !isComplete },
+    { key: '4', handler: () => handleRate(4), enabled: isRevealed && !isComplete },
+  ])
 
   // Session complete state - Requirements: 3.1
   if (isComplete || !currentCard) {

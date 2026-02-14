@@ -101,10 +101,13 @@ export function Flashcard({
 
       {/* Reveal button - only when not revealed (Requirement 5.2) */}
       {!isRevealed && (
-        <div className="mt-6 flex justify-center">
+        <div className="mt-6 flex flex-col items-center gap-2">
           <Button onClick={onReveal} size="lg">
             Reveal Answer
           </Button>
+          <span className="hidden sm:flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
+            Press <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 font-mono text-[10px]">Space</kbd> to reveal
+          </span>
         </div>
       )}
 

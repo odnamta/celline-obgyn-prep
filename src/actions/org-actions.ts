@@ -194,6 +194,37 @@ export async function updateOrgSettings(
 }
 
 /**
+ * Get activity summary for org members: completed session count per user.
+ */
+export async function getOrgMemberActivity(): Promise<ActionResultV2<Record<string, { completedSessions: number; lastActive: string | null }>>> {
+  return withOrgUser(async ({ supabase, org, role }) => {
+    if (role !== 'owner' && role !== 'admin') {
+      return { ok: false, error: 'Insufficient permissions' }
+    }
+
+    // Fetch completed assessment sessions for org members
+    const { data: sessions } = await supabase
+      .from('assessment_sessions')
+      .select('user_id, status, completed_at')
+      .eq('org_id', org.id)
+      .eq('status', 'completed')
+
+    const activity: Record<string, { completedSessions: number; lastActive: string | null }> = {}
+    for (const s of sessions || []) {
+      if (!activity[s.user_id]) {
+        activity[s.user_id] = { completedSessions: 0, lastActive: null }
+      }
+      activity[s.user_id].completedSessions++
+      if (!activity[s.user_id].lastActive || (s.completed_at && s.completed_at > activity[s.user_id].lastActive!)) {
+        activity[s.user_id].lastActive = s.completed_at
+      }
+    }
+
+    return { ok: true, data: activity }
+  })
+}
+
+/**
  * Update a member's role within the organization.
  * Requires 'owner' or 'admin' role. Cannot change own role or demote owners.
  */
@@ -370,6 +401,88 @@ export async function switchOrganization(
       maxAge: 60 * 60 * 24 * 365,
       sameSite: 'lax',
     })
+
+    revalidatePath('/', 'layout')
+    return { ok: true }
+  })
+}
+
+/**
+ * Transfer ownership to another member. Owner only.
+ * Demotes current owner to admin.
+ */
+export async function transferOwnership(
+  targetMemberId: string
+): Promise<ActionResultV2<void>> {
+  return withOrgUser(async ({ user, supabase, org, role }) => {
+    if (role !== 'owner') {
+      return { ok: false, error: 'Only the owner can transfer ownership' }
+    }
+
+    // Fetch target member
+    const { data: target } = await supabase
+      .from('organization_members')
+      .select('*')
+      .eq('id', targetMemberId)
+      .eq('org_id', org.id)
+      .single()
+
+    if (!target) return { ok: false, error: 'Member not found' }
+    if (target.user_id === user.id) return { ok: false, error: 'Already the owner' }
+
+    // Promote target to owner
+    const { error: promoteErr } = await supabase
+      .from('organization_members')
+      .update({ role: 'owner' })
+      .eq('id', targetMemberId)
+
+    if (promoteErr) return { ok: false, error: promoteErr.message }
+
+    // Demote self to admin
+    const { error: demoteErr } = await supabase
+      .from('organization_members')
+      .update({ role: 'admin' })
+      .eq('org_id', org.id)
+      .eq('user_id', user.id)
+
+    if (demoteErr) return { ok: false, error: demoteErr.message }
+
+    logAuditEvent(supabase, org.id, user.id, 'ownership.transferred', {
+      targetType: 'user', targetId: target.user_id,
+    })
+
+    revalidatePath('/', 'layout')
+    return { ok: true }
+  })
+}
+
+/**
+ * Delete an organization. Owner only.
+ * Removes all members, then deletes the org.
+ */
+export async function deleteOrganization(): Promise<ActionResultV2<void>> {
+  return withOrgUser(async ({ user, supabase, org, role }) => {
+    if (role !== 'owner') {
+      return { ok: false, error: 'Only the owner can delete the organization' }
+    }
+
+    // Delete all members first (cascading would handle this but be explicit)
+    await supabase
+      .from('organization_members')
+      .delete()
+      .eq('org_id', org.id)
+
+    // Delete the org
+    const { error } = await supabase
+      .from('organizations')
+      .delete()
+      .eq('id', org.id)
+
+    if (error) return { ok: false, error: error.message }
+
+    // Clear active org cookie
+    const cookieStore = await cookies()
+    cookieStore.delete(ACTIVE_ORG_COOKIE)
 
     revalidatePath('/', 'layout')
     return { ok: true }

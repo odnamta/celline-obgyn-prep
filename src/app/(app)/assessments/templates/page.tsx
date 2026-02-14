@@ -8,8 +8,7 @@
  */
 
 import { useState, useEffect, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
-import { ArrowLeft, Plus, Trash2, Clock, Target, Shuffle, RotateCcw } from 'lucide-react'
+import { Plus, Trash2, Clock, Target, Shuffle, RotateCcw } from 'lucide-react'
 import { useOrg } from '@/components/providers/OrgProvider'
 import {
   getAssessmentTemplates,
@@ -17,6 +16,7 @@ import {
   deleteAssessmentTemplate,
 } from '@/actions/assessment-actions'
 import { hasMinimumRole } from '@/lib/org-authorization'
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { Button } from '@/components/ui/Button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -36,7 +36,6 @@ const DEFAULT_CONFIG: AssessmentTemplateConfig = {
 
 export default function AssessmentTemplatesPage() {
   const { role } = useOrg()
-  const router = useRouter()
   const [templates, setTemplates] = useState<AssessmentTemplate[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
@@ -102,14 +101,13 @@ export default function AssessmentTemplatesPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      <div className="flex items-center gap-3 mb-8">
-        <button
-          onClick={() => router.push('/assessments')}
-          className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-        >
-          <ArrowLeft className="h-5 w-5 text-slate-600 dark:text-slate-400" />
-        </button>
-        <div className="flex-1">
+      <Breadcrumbs items={[
+        { label: 'Assessments', href: '/assessments' },
+        { label: 'Templates' },
+      ]} />
+
+      <div className="flex items-center justify-between mb-8 mt-4">
+        <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Assessment Templates</h1>
           <p className="text-sm text-slate-600 dark:text-slate-400">Reusable assessment configurations</p>
         </div>
