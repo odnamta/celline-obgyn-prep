@@ -152,7 +152,7 @@ export function MCQStudySession({ initialCards, deckId }: MCQStudySessionProps) 
   return (
     <div>
       {/* Progress indicator (Requirement 2.7) */}
-      <div className="mb-6 text-center">
+      <div className="mb-6 text-center" aria-live="polite">
         <span className="text-sm text-slate-600 dark:text-slate-400">
           Question {sessionState.currentIndex + 1} of {totalCards}
         </span>

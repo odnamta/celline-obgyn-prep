@@ -7,6 +7,7 @@ import { LessonStudy, MistakeRecord } from '@/components/study/LessonStudy'
 import { LessonSummary } from '@/components/study/LessonSummary'
 import { completeLessonAction, getLessonItems, LessonItemWithCard } from '@/actions/course-actions'
 import type { Lesson, LessonProgress } from '@/types/database'
+import { usePageTitle } from '@/hooks/use-page-title'
 
 interface LessonStudyPageProps {
   params: Promise<{ lessonId: string }>
@@ -26,6 +27,7 @@ interface LessonData {
  * Requirements: 5.1
  */
 export default function LessonStudyPage({ params }: LessonStudyPageProps) {
+  usePageTitle('Lesson')
   const router = useRouter()
   const [lessonId, setLessonId] = useState<string | null>(null)
   const [lessonData, setLessonData] = useState<LessonData | null>(null)

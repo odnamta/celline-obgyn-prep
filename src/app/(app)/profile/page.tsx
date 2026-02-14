@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import { usePageTitle } from '@/hooks/use-page-title'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { SPECIALTIES } from '@/components/onboarding/OnboardingModal'
@@ -24,6 +25,7 @@ const COMMON_TIMEZONES = [
  * Allows users to view/update profile, timezone, notification prefs, and exam history.
  */
 export default function ProfilePage() {
+  usePageTitle('Profile')
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)

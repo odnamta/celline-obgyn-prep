@@ -14,8 +14,10 @@ import { useOrg } from '@/components/providers/OrgProvider'
 import { getAssessment, getSessionResults } from '@/actions/assessment-actions'
 import { Button } from '@/components/ui/Button'
 import type { Assessment, AssessmentSession } from '@/types/database'
+import { usePageTitle } from '@/hooks/use-page-title'
 
 export default function CertificatePage() {
+  usePageTitle('Certificate')
   const { org } = useOrg()
   const router = useRouter()
   const params = useParams()

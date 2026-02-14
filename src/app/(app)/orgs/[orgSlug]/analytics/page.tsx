@@ -23,8 +23,10 @@ import { useOrg } from '@/components/providers/OrgProvider'
 import { hasMinimumRole } from '@/lib/org-authorization'
 import { getOrgAnalytics, type OrgAnalytics } from '@/actions/org-analytics-actions'
 import { Badge } from '@/components/ui/badge'
+import { usePageTitle } from '@/hooks/use-page-title'
 
 export default function OrgAnalyticsPage() {
+  usePageTitle('Organization Analytics')
   const { org, role } = useOrg()
   const router = useRouter()
   const isCreator = hasMinimumRole(role, 'creator')

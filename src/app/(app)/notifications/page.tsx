@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { usePageTitle } from '@/hooks/use-page-title'
 import {
   Bell,
   CheckCheck,
@@ -41,6 +42,7 @@ const ALL_TYPES = [
 const PAGE_SIZE = 20
 
 export default function NotificationsPage() {
+  usePageTitle('Notifications')
   const router = useRouter()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [total, setTotal] = useState(0)

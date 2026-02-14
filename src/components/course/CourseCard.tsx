@@ -1,10 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import { useTransition } from 'react'
+import { memo, useState, useTransition } from 'react'
 import { deleteCourseAction } from '@/actions/course-actions'
 import { Button } from '@/components/ui/Button'
 import { BookOpen, CheckCircle, Lock } from 'lucide-react'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import type { Course } from '@/types/database'
 
 export interface CourseWithProgress extends Course {
@@ -25,15 +26,19 @@ interface CourseCardProps {
  * 
  * Requirements: 6.1
  */
-export function CourseCard({ course }: CourseCardProps) {
+export const CourseCard = memo(function CourseCard({ course }: CourseCardProps) {
   const [isPending, startTransition] = useTransition()
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const handleDelete = () => {
-    if (confirm('Are you sure you want to delete this course? All units, lessons, and progress will be removed.')) {
-      startTransition(() => {
-        deleteCourseAction(course.id)
-      })
-    }
+    setShowDeleteConfirm(true)
+  }
+
+  const confirmDelete = () => {
+    setShowDeleteConfirm(false)
+    startTransition(() => {
+      deleteCourseAction(course.id)
+    })
   }
 
   const progressPercent = course.totalLessons > 0 
@@ -125,6 +130,15 @@ export function CourseCard({ course }: CourseCardProps) {
           </Link>
         </div>
       )}
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title="Delete Course"
+        description="Are you sure you want to delete this course? All units, lessons, and progress will be removed."
+        confirmLabel="Delete"
+        onConfirm={confirmDelete}
+      />
     </div>
   )
-}
+})

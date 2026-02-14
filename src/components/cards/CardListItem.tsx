@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 import Link from 'next/link'
 import { Pencil, Trash2, Copy } from 'lucide-react'
 import { TagBadge } from '@/components/tags/TagBadge'
@@ -34,7 +35,7 @@ interface CardListItemProps {
  * CardListItem - Displays a single card with Edit/Delete actions
  * Requirements: FR-1
  */
-export function CardListItem({ card, deckId, tags = [], onDelete, onDuplicate, isSelected, onToggleSelect, isAuthor = true, onEdit }: CardListItemProps) {
+export const CardListItem = memo(function CardListItem({ card, deckId, tags = [], onDelete, onDuplicate, isSelected, onToggleSelect, isAuthor = true, onEdit }: CardListItemProps) {
   const isMCQ = card.card_type === 'mcq'
   const preview = isMCQ ? card.stem : card.front
   const typeLabel = isMCQ ? 'MCQ' : 'Flashcard'
@@ -164,4 +165,4 @@ export function CardListItem({ card, deckId, tags = [], onDelete, onDuplicate, i
       </div>
     </div>
   )
-}
+})

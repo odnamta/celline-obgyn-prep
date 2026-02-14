@@ -29,6 +29,9 @@ export interface SearchResult {
   snippet: string
   deckTitle: string
   deckTemplateId: string
+  type: 'card' | 'deck' | 'assessment'
+  /** For deck results: href to navigate to */
+  href?: string
 }
 
 export interface SearchCardsResult {
@@ -266,10 +269,80 @@ export async function searchCards(query: string): Promise<SearchCardsResult> {
       snippet,
       deckTitle: deckTemplate.title,
       deckTemplateId: card.deck_template_id,
+      type: 'card' as const,
     }
   })
 
   return { success: true, results }
+}
+
+/**
+ * Global search across cards, decks, and assessments.
+ */
+export async function globalSearch(query: string): Promise<SearchCardsResult> {
+  const user = await getUser()
+  if (!user) return { success: false, results: [], error: 'Authentication required' }
+  if (!query || query.trim().length === 0) return { success: true, results: [] }
+
+  const supabase = await createSupabaseServerClient()
+  const searchTerm = `%${query.trim()}%`
+
+  // Run card search + deck search + assessment search in parallel
+  const [cardResult, deckResult, assessmentResult] = await Promise.all([
+    searchCards(query),
+    (async () => {
+      const { data: decks } = await supabase
+        .from('deck_templates')
+        .select('id, title, subject, description')
+        .eq('author_id', user.id)
+        .or(`title.ilike.${searchTerm},subject.ilike.${searchTerm}`)
+        .limit(5)
+      return decks || []
+    })(),
+    (async () => {
+      const { data: assessments } = await supabase
+        .from('assessments')
+        .select('id, title, description')
+        .ilike('title', searchTerm)
+        .limit(5)
+      return assessments || []
+    })(),
+  ])
+
+  const results: SearchResult[] = []
+
+  // Add deck results first
+  for (const deck of deckResult) {
+    results.push({
+      id: deck.id,
+      stem: deck.title,
+      snippet: deck.subject || deck.description || '',
+      deckTitle: '',
+      deckTemplateId: deck.id,
+      type: 'deck',
+      href: `/decks/${deck.id}`,
+    })
+  }
+
+  // Add assessment results
+  for (const a of assessmentResult) {
+    results.push({
+      id: a.id,
+      stem: a.title,
+      snippet: a.description || '',
+      deckTitle: '',
+      deckTemplateId: '',
+      type: 'assessment',
+      href: `/assessments`,
+    })
+  }
+
+  // Add card results (already typed)
+  if (cardResult.success) {
+    results.push(...cardResult.results)
+  }
+
+  return { success: true, results: results.slice(0, 15) }
 }
 
 // ============================================

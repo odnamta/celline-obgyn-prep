@@ -13,6 +13,7 @@ import { CardEditorPanel } from './CardEditorPanel'
 import { FilterBar } from '@/components/tags/FilterBar'
 import { TagSelector } from '@/components/tags/TagSelector'
 import { AutoTagProgressModal } from '@/components/tags/AutoTagProgressModal'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { deleteCard, duplicateCard, bulkDeleteCards, bulkMoveCards, getAllCardIdsInDeck, bulkPublishCards } from '@/actions/card-actions'
 import { useAutoTag } from '@/hooks/use-auto-tag'
 import { useToast } from '@/components/ui/Toast'
@@ -75,6 +76,9 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
   const [isAllSelected, setIsAllSelected] = useState(false)
   // V11.4: CardEditorPanel state
   const [showEditorPanel, setShowEditorPanel] = useState(false)
+  // V24: Confirm dialog state
+  const [deleteConfirm, setDeleteConfirm] = useState<{ cardId: string; preview: string; type: string } | null>(null)
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
   const [editingCardIndex, setEditingCardIndex] = useState(0)
   
   // V11.4: Calculate counts for status filter chips
@@ -277,9 +281,13 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
 
   // Single card handlers
   const handleDelete = async (cardId: string, preview: string, type: string) => {
-    const truncatedPreview = preview.length > 80 ? preview.substring(0, 80) + '...' : preview
-    const confirmed = window.confirm(`Delete this ${type}?\n\n"${truncatedPreview}"`)
-    if (!confirmed) return
+    setDeleteConfirm({ cardId, preview, type })
+  }
+
+  const confirmDeleteCard = async () => {
+    if (!deleteConfirm) return
+    const { cardId } = deleteConfirm
+    setDeleteConfirm(null)
 
     const result = await deleteCard(cardId)
     if (result.ok) {
@@ -302,10 +310,11 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
 
   // Bulk handlers
   const handleBulkDelete = async () => {
-    const count = selectedIds.size
-    const confirmed = window.confirm(`Delete ${count} card${count !== 1 ? 's' : ''}?`)
-    if (!confirmed) return
+    setBulkDeleteConfirm(true)
+  }
 
+  const confirmBulkDelete = async () => {
+    setBulkDeleteConfirm(false)
     const result = await bulkDeleteCards([...selectedIds])
     if (result.ok) {
       showToast(`${result.count} card${result.count !== 1 ? 's' : ''} deleted`, 'success')
@@ -661,6 +670,24 @@ export function CardList({ cards, deckId, deckTitle = 'deck', allTags = [], isAu
         onSaveSuccess={handleEditorSaveSuccess}
         deckId={deckId}
         getCardById={getCardById}
+      />
+
+      {/* V24: Delete confirmation dialogs */}
+      <ConfirmDialog
+        open={!!deleteConfirm}
+        onOpenChange={() => setDeleteConfirm(null)}
+        title={`Delete ${deleteConfirm?.type || 'card'}`}
+        description={deleteConfirm ? `"${deleteConfirm.preview.length > 80 ? deleteConfirm.preview.substring(0, 80) + '...' : deleteConfirm.preview}"` : ''}
+        confirmLabel="Delete"
+        onConfirm={confirmDeleteCard}
+      />
+      <ConfirmDialog
+        open={bulkDeleteConfirm}
+        onOpenChange={setBulkDeleteConfirm}
+        title="Delete cards"
+        description={`Delete ${selectedIds.size} card${selectedIds.size !== 1 ? 's' : ''}? This cannot be undone.`}
+        confirmLabel="Delete"
+        onConfirm={confirmBulkDelete}
       />
     </>
   )

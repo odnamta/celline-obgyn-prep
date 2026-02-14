@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { usePageTitle } from '@/hooks/use-page-title'
 import {
   Plus, Play, Eye, BarChart3, Clock, Target, CheckCircle2, XCircle,
   Pencil, Send, Archive, CalendarDays, Copy, ChevronDown, Search, Database, Users, Bell, Link2, Trash2, RotateCcw, AlarmClock, UserPlus,
@@ -35,6 +36,7 @@ import { Separator } from '@/components/ui/separator'
 import type { AssessmentWithDeck, SessionWithAssessment } from '@/types/database'
 
 export default function AssessmentsPage() {
+  usePageTitle('Assessments')
   const { org, role } = useOrg()
   const router = useRouter()
   const [assessments, setAssessments] = useState<AssessmentWithDeck[]>([])

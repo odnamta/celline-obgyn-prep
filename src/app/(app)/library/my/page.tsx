@@ -1,3 +1,5 @@
+export const metadata = { title: 'My Library' }
+
 import Link from 'next/link'
 import { getUserSubscribedDecks } from '@/actions/library-actions'
 import { MyLibraryGrid } from '@/components/library/MyLibraryGrid'

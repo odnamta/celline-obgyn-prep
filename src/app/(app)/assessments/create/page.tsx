@@ -19,8 +19,10 @@ import { getAssessmentDefaults } from '@/actions/org-actions'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
+import { usePageTitle } from '@/hooks/use-page-title'
 
 export default function CreateAssessmentPage() {
+  usePageTitle('Create Assessment')
   const { role } = useOrg()
   const router = useRouter()
   const isCreator = hasMinimumRole(role, 'creator')

@@ -27,6 +27,7 @@ import {
 import { useOrg } from '@/components/providers/OrgProvider'
 import { Button } from '@/components/ui/Button'
 import type { Assessment, AssessmentSession } from '@/types/database'
+import { usePageTitle } from '@/hooks/use-page-title'
 
 type QuestionData = {
   cardTemplateId: string
@@ -60,6 +61,7 @@ function seededShuffle(seed: string, length: number): number[] {
 }
 
 export default function TakeAssessmentPage() {
+  usePageTitle('Take Assessment')
   const router = useRouter()
   const params = useParams()
   const { org } = useOrg()

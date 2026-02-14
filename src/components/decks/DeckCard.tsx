@@ -2,11 +2,12 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useTransition } from 'react'
+import { memo, useState, useTransition } from 'react'
 import { deleteDeckAction } from '@/actions/deck-actions'
 import { Button } from '@/components/ui/Button'
 import type { DeckWithDueCount } from '@/types/database'
 import { FileEdit } from 'lucide-react'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 
 /**
  * V11.5: Extended deck type with draft count for authors
@@ -25,16 +26,20 @@ interface DeckCardProps {
  * V11.5: Added draft count badge for authors
  * **Validates: Requirements 10.2, 10.3, 10.4**
  */
-export function DeckCard({ deck }: DeckCardProps) {
+export const DeckCard = memo(function DeckCard({ deck }: DeckCardProps) {
   const [isPending, startTransition] = useTransition()
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const router = useRouter()
 
   const handleDelete = () => {
-    if (confirm('Are you sure you want to delete this deck? All cards will be removed.')) {
-      startTransition(() => {
-        deleteDeckAction(deck.id)
-      })
-    }
+    setShowDeleteConfirm(true)
+  }
+
+  const confirmDelete = () => {
+    setShowDeleteConfirm(false)
+    startTransition(() => {
+      deleteDeckAction(deck.id)
+    })
   }
 
   // V11.5: Only show draft badge if user is author and has drafts
@@ -88,6 +93,15 @@ export function DeckCard({ deck }: DeckCardProps) {
           {isPending ? '...' : 'Delete'}
         </Button>
       </div>
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title="Delete Deck"
+        description="Are you sure you want to delete this deck? All cards will be removed."
+        confirmLabel="Delete"
+        onConfirm={confirmDelete}
+      />
     </div>
   )
-}
+})

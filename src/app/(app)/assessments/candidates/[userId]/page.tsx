@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/Toast'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
+import { usePageTitle } from '@/hooks/use-page-title'
 
 type SessionRow = {
   assessmentTitle: string
@@ -40,6 +41,7 @@ type SessionRow = {
 }
 
 export default function CandidateProgressPage() {
+  usePageTitle('Candidate Details')
   const { role } = useOrg()
   const router = useRouter()
   const params = useParams()

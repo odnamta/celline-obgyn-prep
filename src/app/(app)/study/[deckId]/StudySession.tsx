@@ -121,7 +121,7 @@ export function StudySession({ initialCards, deckId, userStats }: StudySessionPr
   return (
     <div>
       {/* Progress indicator */}
-      <div className="mb-6 text-center">
+      <div className="mb-6 text-center" aria-live="polite">
         <span className="text-sm text-slate-600 dark:text-slate-400">
           {remainingCount} {remainingCount === 1 ? 'card' : 'cards'} remaining
         </span>

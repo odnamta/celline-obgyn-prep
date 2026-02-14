@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/Button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import type { AssessmentTemplate, AssessmentTemplateConfig } from '@/types/database'
+import { usePageTitle } from '@/hooks/use-page-title'
 
 const DEFAULT_CONFIG: AssessmentTemplateConfig = {
   time_limit_minutes: 60,
@@ -35,6 +36,7 @@ const DEFAULT_CONFIG: AssessmentTemplateConfig = {
 }
 
 export default function AssessmentTemplatesPage() {
+  usePageTitle('Assessment Templates')
   const { role } = useOrg()
   const [templates, setTemplates] = useState<AssessmentTemplate[]>([])
   const [loading, setLoading] = useState(true)

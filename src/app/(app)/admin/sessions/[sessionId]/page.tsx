@@ -1,3 +1,5 @@
+export const metadata = { title: 'Session Review' }
+
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getUser } from '@/lib/supabase/server'

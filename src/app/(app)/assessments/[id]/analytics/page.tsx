@@ -32,6 +32,7 @@ import {
 import { Button } from '@/components/ui/Button'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import type { Assessment } from '@/types/database'
+import { usePageTitle } from '@/hooks/use-page-title'
 
 type AnalyticsSummary = {
   scoreDistribution: number[]
@@ -57,6 +58,7 @@ type QuestionStat = {
 }
 
 export default function AssessmentAnalyticsPage() {
+  usePageTitle('Assessment Analytics')
   const { role } = useOrg()
   const router = useRouter()
   const params = useParams()

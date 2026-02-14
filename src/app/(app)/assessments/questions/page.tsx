@@ -14,6 +14,7 @@ import { useOrg } from '@/components/providers/OrgProvider'
 import { hasMinimumRole } from '@/lib/org-authorization'
 import { getOrgQuestionBank } from '@/actions/assessment-actions'
 import { Badge } from '@/components/ui/badge'
+import { usePageTitle } from '@/hooks/use-page-title'
 
 type QuestionItem = {
   cardTemplateId: string
@@ -26,6 +27,7 @@ type QuestionItem = {
 }
 
 export default function QuestionBankPage() {
+  usePageTitle('Question Bank')
   const { role } = useOrg()
   const router = useRouter()
   const isCreator = hasMinimumRole(role, 'creator')

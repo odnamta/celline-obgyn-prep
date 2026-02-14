@@ -17,6 +17,7 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import type { OrgFeatures, OrgBranding, AssessmentDefaults } from '@/types/database'
+import { usePageTitle } from '@/hooks/use-page-title'
 
 const FEATURE_LABELS: Record<keyof OrgFeatures, { label: string; description: string }> = {
   study_mode: { label: 'Study Mode', description: 'Spaced repetition and self-paced learning' },
@@ -30,6 +31,7 @@ const FEATURE_LABELS: Record<keyof OrgFeatures, { label: string; description: st
 }
 
 export default function OrgSettingsPage() {
+  usePageTitle('Organization Settings')
   const { org, role } = useOrg()
   const router = useRouter()
   const [isPending, startTransition] = useTransition()

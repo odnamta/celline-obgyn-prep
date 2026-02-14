@@ -15,9 +15,23 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GamaTest",
+  title: {
+    default: "GamaTest",
+    template: "%s - GamaTest",
+  },
   description: "Assessment and study platform for organizations",
   manifest: "/manifest.json",
+  openGraph: {
+    type: "website",
+    siteName: "GamaTest",
+    title: "GamaTest",
+    description: "Assessment and study platform for organizations",
+  },
+  twitter: {
+    card: "summary",
+    title: "GamaTest",
+    description: "Assessment and study platform for organizations",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

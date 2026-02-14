@@ -1,3 +1,5 @@
+export const metadata = { title: 'Tag Manager' }
+
 import { TagManager } from '@/components/tags/TagManager'
 
 /**

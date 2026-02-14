@@ -1,3 +1,5 @@
+export const metadata = { title: 'Bulk Import' }
+
 import { notFound, redirect } from 'next/navigation'
 import { createSupabaseServerClient, getUser } from '@/lib/supabase/server'
 import { resolveDeckId } from '@/lib/legacy-redirect'

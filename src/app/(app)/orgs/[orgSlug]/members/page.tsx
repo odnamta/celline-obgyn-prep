@@ -32,6 +32,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import type { OrganizationMemberWithProfile, OrgRole, Invitation } from '@/types/database'
+import { usePageTitle } from '@/hooks/use-page-title'
 
 const ROLE_LABELS: Record<OrgRole, string> = {
   owner: 'Owner',
@@ -48,6 +49,7 @@ const ROLE_COLORS: Record<OrgRole, string> = {
 }
 
 export default function OrgMembersPage() {
+  usePageTitle('Members')
   const { org, role } = useOrg()
   const [members, setMembers] = useState<OrganizationMemberWithProfile[]>([])
   const [invitations, setInvitations] = useState<Invitation[]>([])

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Search, X, Loader2 } from 'lucide-react'
 import { useDebouncedCallback } from 'use-debounce'
-import { searchCards, type SearchResult } from '@/actions/notebook-actions'
+import { globalSearch, type SearchResult } from '@/actions/notebook-actions'
 import { SearchResults } from './SearchResults'
 
 export interface SearchBarProps {
@@ -63,7 +63,7 @@ export function SearchBar({ onResultClick }: SearchBarProps) {
     setIsLoading(true)
     setError(null)
 
-    const result = await searchCards(searchQuery)
+    const result = await globalSearch(searchQuery)
 
     if (result.success) {
       setResults(result.results)
@@ -112,9 +112,9 @@ export function SearchBar({ onResultClick }: SearchBarProps) {
           value={query}
           onChange={(e) => handleInputChange(e.target.value)}
           onFocus={() => query.trim() && results.length > 0 && setIsOpen(true)}
-          placeholder="Search cards..."
+          placeholder="Search cards, decks, assessments..."
           className="w-full pl-10 pr-10 py-2 text-sm bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-slate-400 dark:placeholder:text-slate-500 text-slate-900 dark:text-slate-100"
-          aria-label="Search cards"
+          aria-label="Search cards, decks, and assessments"
           aria-expanded={isOpen}
           aria-haspopup="listbox"
         />

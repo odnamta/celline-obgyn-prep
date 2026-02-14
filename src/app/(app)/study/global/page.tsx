@@ -1,3 +1,5 @@
+export const metadata = { title: 'Global Study' }
+
 import { redirect } from 'next/navigation'
 import { getUser } from '@/lib/supabase/server'
 import { getGlobalDueCards } from '@/actions/global-study-actions'

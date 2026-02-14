@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/badge'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import type { AuditAction, AuditLogWithActor } from '@/types/database'
+import { usePageTitle } from '@/hooks/use-page-title'
 
 const ACTION_LABELS: Record<string, { label: string; color: string }> = {
   'assessment.created': { label: 'Assessment Created', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
@@ -50,6 +51,7 @@ const ALL_ACTIONS: AuditAction[] = [
 const PAGE_SIZE = 30
 
 export default function AuditLogPage() {
+  usePageTitle('Audit Log')
   const { org, role } = useOrg()
   const router = useRouter()
   const isAdmin = hasMinimumRole(role, 'admin')

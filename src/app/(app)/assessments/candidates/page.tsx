@@ -16,6 +16,7 @@ import { getOrgCandidateList, getOrgAssessments, exportCandidatesCsv, importCand
 import { bulkAssignAssessment } from '@/actions/notification-actions'
 import { useToast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/Button'
+import { usePageTitle } from '@/hooks/use-page-title'
 
 type Candidate = {
   userId: string
@@ -32,6 +33,7 @@ type AssessmentOption = {
 }
 
 export default function CandidateListPage() {
+  usePageTitle('Candidates')
   const { role } = useOrg()
   const router = useRouter()
   const { showToast } = useToast()

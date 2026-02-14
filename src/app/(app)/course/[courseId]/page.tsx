@@ -1,3 +1,5 @@
+export const metadata = { title: 'Course' }
+
 import { redirect, notFound } from 'next/navigation';
 import { createSupabaseServerClient, getUser } from '@/lib/supabase/server';
 import { CourseMap, UnitWithLessons } from '@/components/course';

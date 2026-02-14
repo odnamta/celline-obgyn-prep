@@ -49,6 +49,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import type { Assessment, AssessmentSession } from '@/types/database'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
+import { usePageTitle } from '@/hooks/use-page-title'
 
 type EnrichedAnswer = {
   id: string
@@ -66,6 +67,7 @@ type EnrichedAnswer = {
 type SessionWithEmail = AssessmentSession & { user_email: string }
 
 export default function AssessmentResultsPage() {
+  usePageTitle('Assessment Results')
   const { role } = useOrg()
   const router = useRouter()
   const params = useParams()

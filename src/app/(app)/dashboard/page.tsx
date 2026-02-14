@@ -1,3 +1,5 @@
+export const metadata = { title: 'Dashboard' }
+
 import { createSupabaseServerClient, getUser } from '@/lib/supabase/server'
 import { DashboardHero } from '@/components/dashboard/DashboardHero'
 import { OrgStatsCard } from '@/components/dashboard/OrgStatsCard'

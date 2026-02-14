@@ -18,8 +18,10 @@ import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/badge'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import type { Assessment } from '@/types/database'
+import { usePageTitle } from '@/hooks/use-page-title'
 
 export default function EditAssessmentPage() {
+  usePageTitle('Edit Assessment')
   const { role } = useOrg()
   const router = useRouter()
   const params = useParams()
