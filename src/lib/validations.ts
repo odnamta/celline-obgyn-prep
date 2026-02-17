@@ -130,7 +130,7 @@ export const updateOrgSettingsSchema = z.object({
       erp_integration: z.boolean(),
     }).partial().optional(),
     branding: z.object({
-      primary_color: z.string(),
+      primary_color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Must be a valid hex color (e.g. #1e40af)'),
       logo_url: z.string().url().or(z.literal('')),
     }).partial().optional(),
     default_language: z.string().optional(),

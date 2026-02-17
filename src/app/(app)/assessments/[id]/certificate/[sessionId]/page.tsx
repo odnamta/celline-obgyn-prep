@@ -9,9 +9,11 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import Image from 'next/image'
 import { ArrowLeft, Printer, Award } from 'lucide-react'
 import { useOrg } from '@/components/providers/OrgProvider'
 import { getAssessment, getSessionResults } from '@/actions/assessment-actions'
+import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import type { Assessment, AssessmentSession } from '@/types/database'
 import { usePageTitle } from '@/hooks/use-page-title'
@@ -26,6 +28,7 @@ export default function CertificatePage() {
 
   const [assessment, setAssessment] = useState<Assessment | null>(null)
   const [session, setSession] = useState<AssessmentSession | null>(null)
+  const [candidateName, setCandidateName] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -42,6 +45,17 @@ export default function CertificatePage() {
           setError('Certificate is only available for passed assessments')
         } else {
           setSession(sResult.data.session)
+
+          // Fetch candidate's profile name
+          const supabase = createSupabaseBrowserClient()
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name, email')
+            .eq('id', sResult.data.session.user_id)
+            .single()
+          if (profile) {
+            setCandidateName(profile.full_name || profile.email)
+          }
         }
       } else if (!sResult.ok) {
         setError(sResult.error)
@@ -107,8 +121,7 @@ export default function CertificatePage() {
           {/* Header — logo or icon */}
           <div className="mb-6">
             {logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt={org.name} className="h-16 mx-auto object-contain" />
+              <Image src={logoUrl} alt={org.name} width={160} height={64} className="h-16 w-auto mx-auto object-contain" />
             ) : (
               <Award className="h-16 w-16 mx-auto" style={{ color: primaryColor }} />
             )}
@@ -125,7 +138,7 @@ export default function CertificatePage() {
           </p>
 
           <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100 mb-6 print:text-black">
-            {org.name} Candidate
+            {candidateName ?? 'Candidate'}
           </p>
 
           <p className="text-slate-500 dark:text-slate-400 mb-1 print:text-slate-600">
@@ -157,8 +170,7 @@ export default function CertificatePage() {
           <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400 print:text-slate-600">
             <div className="text-left flex items-center gap-3">
               {logoUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={logoUrl} alt="" className="h-8 w-8 rounded object-contain print:block" />
+                <Image src={logoUrl} alt="" width={32} height={32} className="h-8 w-8 rounded object-contain print:block" />
               )}
               <div>
                 <p className="font-medium text-slate-700 dark:text-slate-300 print:text-black">
