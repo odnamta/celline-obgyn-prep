@@ -37,7 +37,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Protected routes that require authentication
-  const protectedRoutes = ['/dashboard', '/study', '/decks', '/library', '/stats', '/admin', '/profile', '/orgs']
+  const protectedRoutes = ['/dashboard', '/study', '/decks', '/library', '/stats', '/admin', '/profile', '/orgs', '/assessments', '/notifications']
   const isProtectedRoute = protectedRoutes.some((route) =>
     pathname.startsWith(route)
   )
@@ -69,6 +69,21 @@ export async function middleware(request: NextRequest) {
   supabaseResponse.headers.set('X-Content-Type-Options', 'nosniff')
   supabaseResponse.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
   supabaseResponse.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+
+  // Content Security Policy
+  const supabaseHost = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).host
+  const csp = [
+    "default-src 'self'",
+    `script-src 'self' 'unsafe-inline' 'unsafe-eval'`,
+    `style-src 'self' 'unsafe-inline'`,
+    `img-src 'self' data: blob: https:`,
+    `font-src 'self' data:`,
+    `connect-src 'self' https://${supabaseHost} wss://${supabaseHost}`,
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join('; ')
+  supabaseResponse.headers.set('Content-Security-Policy', csp)
 
   // Request ID for tracing
   const requestId = crypto.randomUUID()

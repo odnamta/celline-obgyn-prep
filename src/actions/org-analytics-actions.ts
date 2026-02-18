@@ -85,11 +85,14 @@ export async function getOrgAnalytics(): Promise<ActionResultV2<OrgAnalytics>> {
 
     const assessmentIds = assessments.map((a) => a.id)
 
-    // Get all sessions for these assessments
+    // Get sessions for these assessments (bounded to last 90 days for performance)
+    const ninetyDaysAgo = new Date()
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
     const { data: sessions } = await supabase
       .from('assessment_sessions')
       .select('id, assessment_id, user_id, status, score, passed, completed_at')
       .in('assessment_id', assessmentIds)
+      .gte('created_at', ninetyDaysAgo.toISOString())
 
     const allSessions = sessions ?? []
     const completed = allSessions.filter((s) => s.status === 'completed' || s.status === 'timed_out')

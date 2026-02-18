@@ -112,15 +112,22 @@ export async function getUserAnalytics(): Promise<AnalyticsResult> {
       })
     }
 
-    for (const deckId of deckTemplateIds) {
-      const { count } = await supabase
+    // Batch count cards per deck in a single query (avoids N+1)
+    if (deckTemplateIds.length > 0) {
+      const { data: allCards } = await supabase
         .from('card_templates')
-        .select('*', { count: 'exact', head: true })
-        .eq('deck_template_id', deckId)
+        .select('deck_template_id')
+        .in('deck_template_id', deckTemplateIds)
 
-      const existing = deckProgressMap.get(deckId)
-      if (existing) {
-        existing.totalCards = count || 0
+      const countMap = new Map<string, number>()
+      for (const card of allCards ?? []) {
+        countMap.set(card.deck_template_id, (countMap.get(card.deck_template_id) ?? 0) + 1)
+      }
+      for (const deckId of deckTemplateIds) {
+        const existing = deckProgressMap.get(deckId)
+        if (existing) {
+          existing.totalCards = countMap.get(deckId) ?? 0
+        }
       }
     }
 
