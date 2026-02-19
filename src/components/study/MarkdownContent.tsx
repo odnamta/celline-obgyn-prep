@@ -7,9 +7,11 @@ interface MarkdownContentProps {
 }
 
 /**
- * Sanitizes markdown content to prevent XSS attacks.
- * Removes script tags, javascript: URLs, and on* event handlers.
- * 
+ * Supplementary defense-in-depth sanitizer for markdown content.
+ * The primary XSS safety layer is react-markdown, which renders markdown
+ * to React elements without dangerouslySetInnerHTML. This regex sanitizer
+ * provides an additional safety net against malicious raw HTML in source content.
+ *
  * Requirements: 5.4
  */
 export function sanitizeMarkdown(content: string): string {

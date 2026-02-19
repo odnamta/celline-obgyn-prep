@@ -37,7 +37,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Protected routes that require authentication
-  const protectedRoutes = ['/dashboard', '/study', '/decks', '/library', '/stats', '/admin', '/profile', '/orgs', '/assessments', '/notifications']
+  const protectedRoutes = ['/dashboard', '/study', '/decks', '/library', '/stats', '/admin', '/profile', '/orgs', '/assessments', '/notifications', '/skills', '/lesson']
   const isProtectedRoute = protectedRoutes.some((route) =>
     pathname.startsWith(route)
   )
@@ -62,7 +62,7 @@ export async function middleware(request: NextRequest) {
   const supabaseHost = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).host
   const csp = [
     "default-src 'self'",
-    `script-src 'self' 'unsafe-inline' 'unsafe-eval'`,
+    `script-src 'self' 'unsafe-inline'`,
     `style-src 'self' 'unsafe-inline'`,
     `img-src 'self' data: blob: https:`,
     `font-src 'self' data:`,

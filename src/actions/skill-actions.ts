@@ -128,9 +128,33 @@ export async function linkDeckToSkill(
   deckTemplateId: string,
   skillDomainId: string
 ): Promise<ActionResultV2<null>> {
-  return withOrgUser(async ({ supabase, role }) => {
+  return withOrgUser(async ({ supabase, org, role }) => {
     if (!canLinkDeckToSkill(role)) {
       return { ok: false, error: 'Creator access required' }
+    }
+
+    // Verify deck template belongs to this org
+    const { data: deck } = await supabase
+      .from('deck_templates')
+      .select('id')
+      .eq('id', deckTemplateId)
+      .eq('org_id', org.id)
+      .single()
+
+    if (!deck) {
+      return { ok: false, error: 'Deck template not found in this organization' }
+    }
+
+    // Verify skill domain belongs to this org
+    const { data: skill } = await supabase
+      .from('skill_domains')
+      .select('id')
+      .eq('id', skillDomainId)
+      .eq('org_id', org.id)
+      .single()
+
+    if (!skill) {
+      return { ok: false, error: 'Skill domain not found in this organization' }
     }
 
     const { error } = await supabase

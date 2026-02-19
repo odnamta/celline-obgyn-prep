@@ -56,8 +56,8 @@ export async function getAuditLogs(opts?: {
       return { ok: false, error: 'Insufficient permissions — admin required' }
     }
 
-    const limit = opts?.limit ?? 50
-    const offset = opts?.offset ?? 0
+    const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 100)
+    const offset = Math.max(opts?.offset ?? 0, 0)
 
     // Build query
     let query = supabase

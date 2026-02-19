@@ -328,31 +328,42 @@ export async function getEmployeeRoleGapAnalysis(
       scoreMap.set(s.skill_domain_id, s.score)
     }
 
-    // For each role, get requirements and merge with actual scores
-    const roles = await Promise.all(
-      assignments.map(async (a) => {
-        const profile = a.role_profiles as unknown as RoleProfile
-
-        const { data: requirements } = await supabase
-          .from('role_skill_requirements')
-          .select('*, skill_domains!inner(name, color)')
-          .eq('role_profile_id', profile.id)
-
-        const mappedReqs = (requirements ?? []).map((r) => {
-          const domain = r.skill_domains as unknown as { name: string; color: string }
-          return {
-            skill_domain_id: r.skill_domain_id,
-            skill_name: domain.name,
-            skill_color: domain.color,
-            target_score: r.target_score,
-            priority: r.priority as SkillPriority,
-            actual_score: scoreMap.get(r.skill_domain_id) ?? null,
-          }
-        })
-
-        return { profile, requirements: mappedReqs }
-      })
+    // Batch-fetch all requirements for assigned roles in a single query
+    const roleProfileIds = assignments.map(
+      (a) => (a.role_profiles as unknown as RoleProfile).id
     )
+
+    const { data: allRequirements } = await supabase
+      .from('role_skill_requirements')
+      .select('*, skill_domains!inner(name, color)')
+      .in('role_profile_id', roleProfileIds)
+
+    // Group requirements by role_profile_id
+    const reqsByRole = new Map<string, typeof allRequirements>()
+    for (const r of allRequirements ?? []) {
+      const list = reqsByRole.get(r.role_profile_id) ?? []
+      list.push(r)
+      reqsByRole.set(r.role_profile_id, list)
+    }
+
+    const roles = assignments.map((a) => {
+      const profile = a.role_profiles as unknown as RoleProfile
+      const requirements = reqsByRole.get(profile.id) ?? []
+
+      const mappedReqs = requirements.map((r) => {
+        const domain = r.skill_domains as unknown as { name: string; color: string }
+        return {
+          skill_domain_id: r.skill_domain_id,
+          skill_name: domain.name,
+          skill_color: domain.color,
+          target_score: r.target_score,
+          priority: r.priority as SkillPriority,
+          actual_score: scoreMap.get(r.skill_domain_id) ?? null,
+        }
+      })
+
+      return { profile, requirements: mappedReqs }
+    })
 
     return { ok: true, data: { roles } }
   })

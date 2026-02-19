@@ -263,6 +263,7 @@ export async function updateMemberRole(
       .from('organization_members')
       .update({ role: newRole })
       .eq('id', memberId)
+      .eq('org_id', org.id)
 
     if (error) {
       return { ok: false, error: error.message }
@@ -305,6 +306,11 @@ export async function removeMember(
       return { ok: false, error: 'Insufficient permissions' }
     }
 
+    // Only owners can remove other owners
+    if (target.role === 'owner' && !isSelf && role !== 'owner') {
+      return { ok: false, error: 'Only owners can remove other owners' }
+    }
+
     // Cannot remove the last owner
     if (target.role === 'owner') {
       const { count } = await supabase
@@ -322,6 +328,7 @@ export async function removeMember(
       .from('organization_members')
       .delete()
       .eq('id', memberId)
+      .eq('org_id', org.id)
 
     if (error) {
       return { ok: false, error: error.message }
@@ -430,6 +437,7 @@ export async function transferOwnership(
       .from('organization_members')
       .update({ role: 'owner' })
       .eq('id', targetMemberId)
+      .eq('org_id', org.id)
 
     if (promoteErr) return { ok: false, error: promoteErr.message }
 
