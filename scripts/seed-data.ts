@@ -48,7 +48,7 @@ interface DeckConfig {
   title: string;
   subject: string;
   description: string;
-  cards: { front: string; back: string }[];
+  cards: { stem: string; options: string[]; correct_index: number; explanation: string }[];
 }
 
 const TENANTS: TenantConfig[] = [
@@ -64,40 +64,22 @@ const TENANTS: TenantConfig[] = [
         description: 'Safety protocols and procedures for heavy equipment operations',
         cards: [
           {
-            front: 'What are the 5 essential PPE items required before operating heavy equipment?',
-            back: `1. Hard hat (ANSI Z89.1 compliant)
-2. Safety glasses or goggles
-3. Steel-toed boots
-4. High-visibility vest
-5. Hearing protection (earplugs or earmuffs)
-
-Additional PPE may be required based on specific equipment and site conditions.`
+            stem: 'Which of the following is NOT one of the 5 essential PPE items required before operating heavy equipment?',
+            options: ['Hard hat', 'Safety glasses', 'Leather gloves', 'High-visibility vest'],
+            correct_index: 2,
+            explanation: 'The 5 essential PPE items are: hard hat, safety glasses, steel-toed boots, high-visibility vest, and hearing protection. Leather gloves may be required in some situations but are not part of the standard 5.',
           },
           {
-            front: 'What is the "Three Points of Contact" rule when mounting/dismounting equipment?',
-            back: `Always maintain three points of contact with the machine:
-- Two hands and one foot, OR
-- Two feet and one hand
-
-Rules:
-- Face the machine when climbing
-- Never jump off equipment
-- Use handrails and steps provided
-- Keep boots free of mud/grease to prevent slipping`
+            stem: 'The "Three Points of Contact" rule when mounting/dismounting equipment means you should maintain:',
+            options: ['Three feet on the machine at all times', 'Two hands and one foot, or two feet and one hand', 'Contact with three different parts of the machine', 'Three seconds of pause before each movement'],
+            correct_index: 1,
+            explanation: 'The Three Points of Contact rule requires maintaining two hands and one foot, or two feet and one hand on the machine at all times while climbing.',
           },
           {
-            front: 'What are the pre-operation inspection steps for a forklift (daily checklist)?',
-            back: `PRE-OPERATION CHECKLIST:
-1. Walk-around visual inspection (leaks, damage, tires)
-2. Check fluid levels (oil, hydraulic, coolant)
-3. Test horn, lights, and backup alarm
-4. Inspect forks for cracks or bends
-5. Check mast chains and hydraulic hoses
-6. Test brakes (service and parking)
-7. Verify seat belt functionality
-8. Check load backrest extension
-
-Report any defects before operating.`
+            stem: 'During a pre-operation forklift inspection, which of these should be checked FIRST?',
+            options: ['Test the horn and lights', 'Walk-around visual inspection', 'Check fluid levels', 'Test the brakes'],
+            correct_index: 1,
+            explanation: 'A walk-around visual inspection for leaks, damage, and tire condition should always be the first step before checking mechanical systems.',
           },
         ]
       },
@@ -107,46 +89,22 @@ Report any defects before operating.`
         description: 'Fundamentals of warehouse and logistics operations',
         cards: [
           {
-            front: 'What is FIFO and why is it important in warehouse management?',
-            back: `FIFO = First In, First Out
-
-Principle: Items received first should be shipped/used first.
-
-Importance:
-- Prevents product expiration/obsolescence
-- Ensures accurate inventory rotation
-- Reduces waste and spoilage
-- Required for perishable goods
-- Maintains product quality standards
-
-Implementation: Use date-coded labels and organize storage lanes to facilitate FIFO flow.`
+            stem: 'FIFO stands for:',
+            options: ['First In, First Out', 'Fast Inventory, Fast Output', 'Final Inspection, First Order', 'Freight In, Freight Out'],
+            correct_index: 0,
+            explanation: 'FIFO = First In, First Out. Items received first should be shipped/used first to prevent expiration and ensure proper inventory rotation.',
           },
           {
-            front: 'What are the key differences between cross-docking and traditional warehousing?',
-            back: `CROSS-DOCKING:
-- Products move directly from inbound to outbound
-- Minimal or no storage time (< 24 hours)
-- Reduces handling and storage costs
-- Requires precise coordination and timing
-
-TRADITIONAL WAREHOUSING:
-- Products are stored for extended periods
-- Inventory is picked, packed, and shipped as needed
-- Higher storage costs but more flexibility
-- Better for unpredictable demand patterns
-
-Use cross-docking for high-volume, predictable, time-sensitive goods.`
+            stem: 'What is a key characteristic of cross-docking compared to traditional warehousing?',
+            options: ['Products are stored for extended periods', 'Products move directly from inbound to outbound with minimal storage', 'It requires more warehouse space', 'It works best for unpredictable demand'],
+            correct_index: 1,
+            explanation: 'Cross-docking moves products directly from inbound to outbound with minimal or no storage time (< 24 hours), reducing handling and storage costs.',
           },
           {
-            front: 'What are the 5S principles in warehouse organization?',
-            back: `5S METHODOLOGY:
-1. Sort (Seiri) - Remove unnecessary items
-2. Set in Order (Seiton) - Organize remaining items logically
-3. Shine (Seiso) - Clean the workspace thoroughly
-4. Standardize (Seiketsu) - Create consistent procedures
-5. Sustain (Shitsuke) - Maintain and continuously improve
-
-Benefits: Improved safety, efficiency, quality, and morale.`
+            stem: 'In the 5S methodology, what does "Seiton" (Set in Order) mean?',
+            options: ['Remove unnecessary items', 'Organize remaining items logically', 'Clean the workspace thoroughly', 'Maintain and continuously improve'],
+            correct_index: 1,
+            explanation: '5S: Sort (Seiri), Set in Order (Seiton) = organize items logically, Shine (Seiso), Standardize (Seiketsu), Sustain (Shitsuke).',
           },
         ]
       },
@@ -156,28 +114,16 @@ Benefits: Improved safety, efficiency, quality, and morale.`
         description: 'Essential customer service and communication skills',
         cards: [
           {
-            front: 'What are the 5 key steps in handling a customer complaint?',
-            back: `1. LISTEN actively without interrupting
-2. ACKNOWLEDGE the customer\'s feelings and apologize
-3. INVESTIGATE the issue to understand root cause
-4. RESOLVE with a clear solution or next steps
-5. FOLLOW UP to ensure satisfaction
-
-Key principle: The customer wants to feel heard before they want a solution.`
+            stem: 'What is the FIRST step in handling a customer complaint?',
+            options: ['Offer a solution immediately', 'Listen actively without interrupting', 'Escalate to a manager', 'Document the complaint in the system'],
+            correct_index: 1,
+            explanation: 'The first step is to LISTEN actively without interrupting. The customer wants to feel heard before they want a solution.',
           },
           {
-            front: 'What is the difference between empathy and sympathy in customer service?',
-            back: `EMPATHY: Understanding and sharing the customer's feelings
-- "I understand how frustrating this must be for you"
-- Shows you relate to their experience
-- Builds trust and connection
-
-SYMPATHY: Feeling pity or sorrow for the customer
-- "I'm sorry that happened to you"
-- Can feel distant or condescending
-- Less effective at building rapport
-
-Best practice: Use empathy statements to validate, then move to problem-solving.`
+            stem: 'Which statement demonstrates EMPATHY rather than sympathy?',
+            options: ['"I\'m sorry that happened to you"', '"That\'s too bad"', '"I understand how frustrating this must be for you"', '"We\'ll get this sorted out"'],
+            correct_index: 2,
+            explanation: 'Empathy means understanding and sharing the customer\'s feelings. "I understand how frustrating this must be" shows you relate to their experience, while sympathy ("I\'m sorry that happened") can feel distant.',
           },
         ]
       },
@@ -195,54 +141,22 @@ Best practice: Use empathy statements to validate, then move to problem-solving.
         description: 'Core concepts in international freight forwarding',
         cards: [
           {
-            front: 'What are the key differences between FCL and LCL shipping?',
-            back: `FCL (Full Container Load):
-- Entire container used by one shipper
-- Sealed at origin, opened at destination
-- Lower per-unit cost for large volumes
-- Faster transit (no consolidation needed)
-
-LCL (Less than Container Load):
-- Container shared among multiple shippers
-- Cargo consolidated at CFS (Container Freight Station)
-- Higher per-unit cost but economical for small shipments
-- Longer transit due to consolidation/deconsolidation
-
-Decision factor: Generally, if cargo fills >60% of a container, FCL is more cost-effective.`
+            stem: 'When is FCL (Full Container Load) generally more cost-effective than LCL?',
+            options: ['When cargo fills less than 30% of a container', 'When cargo fills more than 60% of a container', 'When shipping perishable goods only', 'FCL is always cheaper than LCL'],
+            correct_index: 1,
+            explanation: 'Generally, if cargo fills >60% of a container, FCL is more cost-effective. FCL uses the entire container for one shipper with lower per-unit cost for large volumes.',
           },
           {
-            front: 'What are Incoterms and what do FOB and CIF mean?',
-            back: `INCOTERMS: International Commercial Terms (ICC rules defining buyer/seller responsibilities)
-
-FOB (Free On Board):
-- Seller delivers goods on board the vessel
-- Risk transfers when goods pass ship's rail
-- Buyer arranges and pays for ocean freight & insurance
-- Common in US trade
-
-CIF (Cost, Insurance & Freight):
-- Seller arranges and pays for freight + minimum insurance
-- Risk transfers when goods are on board at origin port
-- Buyer responsible from destination port onwards
-- Common in international trade
-
-Key difference: CIF includes freight and insurance in the seller's price; FOB does not.`
+            stem: 'Under CIF (Cost, Insurance & Freight) Incoterms, who arranges ocean freight and insurance?',
+            options: ['The buyer arranges both', 'The seller arranges both', 'The buyer arranges freight, seller arranges insurance', 'The freight forwarder arranges both'],
+            correct_index: 1,
+            explanation: 'Under CIF, the seller arranges and pays for freight + minimum insurance. Risk transfers when goods are on board at origin port. The buyer is responsible from destination port onwards.',
           },
           {
-            front: 'What documents are required for international sea freight shipment?',
-            back: `ESSENTIAL DOCUMENTS:
-1. Bill of Lading (B/L) - Title document for cargo
-2. Commercial Invoice - Value declaration for customs
-3. Packing List - Detailed contents description
-4. Certificate of Origin (COO) - Country of manufacture
-5. Customs Declaration - Import/export filing
-
-ADDITIONAL (as required):
-- Letter of Credit (L/C) - Payment guarantee
-- Insurance Certificate - Cargo coverage proof
-- Phytosanitary Certificate - For agricultural goods
-- Dangerous Goods Declaration - For hazmat cargo
-- Fumigation Certificate - Wooden packaging compliance`
+            stem: 'Which document serves as the title document for cargo in international sea freight?',
+            options: ['Commercial Invoice', 'Packing List', 'Bill of Lading (B/L)', 'Certificate of Origin'],
+            correct_index: 2,
+            explanation: 'The Bill of Lading (B/L) is the title document for cargo. It serves as a receipt of goods, a contract of carriage, and a document of title.',
           },
         ]
       },
@@ -252,35 +166,16 @@ ADDITIONAL (as required):
         description: 'Key concepts and techniques for sales professionals',
         cards: [
           {
-            front: 'What is the SPIN selling technique?',
-            back: `SPIN = Situation, Problem, Implication, Need-Payoff
-
-1. SITUATION Questions: Gather facts about buyer's current state
-   "How many shipments do you handle monthly?"
-
-2. PROBLEM Questions: Identify pain points
-   "What challenges do you face with transit times?"
-
-3. IMPLICATION Questions: Explore consequences of problems
-   "How do delays affect your customer relationships?"
-
-4. NEED-PAYOFF Questions: Guide buyer to see value of solution
-   "Would reducing transit time by 3 days help retain clients?"
-
-Key: Move from understanding to making the buyer articulate the value.`
+            stem: 'In the SPIN selling technique, what does the "I" stand for?',
+            options: ['Interest', 'Implication', 'Investigation', 'Implementation'],
+            correct_index: 1,
+            explanation: 'SPIN = Situation, Problem, Implication, Need-Payoff. Implication questions explore the consequences of problems, e.g., "How do delays affect your customer relationships?"',
           },
           {
-            front: 'What are the stages of a typical B2B sales pipeline?',
-            back: `B2B SALES PIPELINE STAGES:
-1. Prospecting - Identify potential customers
-2. Qualification - Assess fit (BANT: Budget, Authority, Need, Timeline)
-3. Discovery/Needs Analysis - Deep-dive into requirements
-4. Proposal/Presentation - Present tailored solution
-5. Negotiation - Discuss terms, pricing, conditions
-6. Closing - Finalize agreement and contract
-7. Onboarding - Deliver and ensure smooth start
-
-Key metrics: Conversion rate between stages, average deal size, sales cycle length.`
+            stem: 'In BANT qualification, what does the "A" stand for?',
+            options: ['Availability', 'Authority', 'Agreement', 'Assessment'],
+            correct_index: 1,
+            explanation: 'BANT = Budget, Authority, Need, Timeline. Authority means identifying whether the prospect has decision-making power to approve the purchase.',
           },
         ]
       },
@@ -290,58 +185,22 @@ Key metrics: Conversion rate between stages, average deal size, sales cycle leng
         description: 'Regulatory compliance for international trade operations',
         cards: [
           {
-            front: 'What is the HS Code system and why is it important?',
-            back: `HS CODE (Harmonized System):
-- International standardized system of names and numbers
-- Classifies traded products (maintained by WCO)
-- 6-digit base code used globally
-- Countries add digits for national specificity (e.g., 10-digit in US)
-
-IMPORTANCE:
-- Determines applicable tariff/duty rates
-- Controls import/export restrictions
-- Required for customs declarations worldwide
-- Enables trade statistics and analysis
-- Incorrect classification can result in penalties, delays, or seizure
-
-Example: 8471.30 = Portable digital automatic data processing machines (laptops)`
+            stem: 'The HS (Harmonized System) Code uses how many base digits recognized globally?',
+            options: ['4 digits', '6 digits', '8 digits', '10 digits'],
+            correct_index: 1,
+            explanation: 'The HS Code uses a 6-digit base code globally. Countries add additional digits for national specificity (e.g., 10-digit in the US).',
           },
           {
-            front: 'What are the key elements of a customs compliance program?',
-            back: `CUSTOMS COMPLIANCE PROGRAM ELEMENTS:
-1. Classification - Correct HS/tariff codes for all products
-2. Valuation - Accurate declaration of goods value (transaction value method)
-3. Country of Origin - Proper origin determination and marking
-4. Record Keeping - Maintain import/export records (typically 5 years)
-5. Licensing - Obtain required permits and licenses
-6. Denied Party Screening - Check against restricted entity lists
-7. Internal Audits - Regular self-assessment of compliance
-8. Training - Staff education on regulations and procedures
-
-Non-compliance risks: Fines, penalties, shipment seizure, loss of import privileges.`
+            stem: 'How long should import/export records typically be maintained in a customs compliance program?',
+            options: ['1 year', '3 years', '5 years', '10 years'],
+            correct_index: 2,
+            explanation: 'Record keeping in a customs compliance program typically requires maintaining import/export records for 5 years.',
           },
           {
-            front: 'What is an AEO (Authorized Economic Operator) and what are its benefits?',
-            back: `AEO = Authorized Economic Operator
-
-A customs certification program recognizing trusted traders who meet security and compliance standards.
-
-BENEFITS:
-- Fewer physical inspections of cargo
-- Priority processing at customs
-- Reduced documentation requirements
-- Mutual recognition with partner countries
-- Lower risk scores in customs systems
-- Faster clearance times
-
-REQUIREMENTS:
-- Proven compliance track record
-- Satisfactory record-keeping system
-- Financial solvency
-- Security and safety standards compliance
-- Staff training and awareness programs
-
-Based on WCO SAFE Framework; implemented differently per country.`
+            stem: 'What is the primary benefit of AEO (Authorized Economic Operator) certification?',
+            options: ['Tax exemptions on all imports', 'Fewer physical inspections and priority customs processing', 'Unlimited import quotas', 'Free insurance on all shipments'],
+            correct_index: 1,
+            explanation: 'AEO certification provides fewer physical inspections, priority processing, reduced documentation, mutual recognition with partner countries, and faster clearance times.',
           },
         ]
       },
@@ -481,12 +340,12 @@ async function seedDecks(orgId: string, userId: string, decks: DeckConfig[]) {
     }
 
     // Insert card templates
-    const cardsToInsert = deck.cards.map((card, i) => ({
+    const cardsToInsert = deck.cards.map((card) => ({
       deck_template_id: deckId,
-      card_type: 'flashcard' as const,
-      front: card.front,
-      back: card.back,
-      sort_order: i,
+      stem: card.stem,
+      options: card.options,
+      correct_index: card.correct_index,
+      explanation: card.explanation,
     }));
 
     const { error: cardsError } = await supabase
