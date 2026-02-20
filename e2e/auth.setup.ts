@@ -4,7 +4,7 @@ setup('authenticate', async ({ page }) => {
   await page.goto('/login')
   await page.fill('#email', 'admin@gis.cekatan.com')
   await page.fill('#password', 'password123')
-  await page.getByRole('button', { name: 'Sign In' }).click()
+  await page.locator('button[type="submit"]').click()
 
   // Wait for redirect to dashboard
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 15000 })

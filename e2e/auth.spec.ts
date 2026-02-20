@@ -13,14 +13,14 @@ test.describe('Authentication', () => {
     await page.goto('/login')
     await expect(page.locator('#email')).toBeVisible()
     await expect(page.locator('#password')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible()
+    await expect(page.locator('button[type="submit"]')).toBeVisible()
   })
 
   test('shows error for invalid credentials', async ({ page }) => {
     await page.goto('/login')
     await page.fill('#email', 'wrong@example.com')
     await page.fill('#password', 'wrongpassword')
-    await page.getByRole('button', { name: 'Sign In' }).click()
+    await page.locator('button[type="submit"]').click()
 
     // Error message should appear
     await expect(page.getByText(/invalid|error|incorrect/i)).toBeVisible({ timeout: 10000 })
@@ -30,7 +30,7 @@ test.describe('Authentication', () => {
     await page.goto('/login')
     await page.fill('#email', 'admin@gis.cekatan.com')
     await page.fill('#password', 'password123')
-    await page.getByRole('button', { name: 'Sign In' }).click()
+    await page.locator('button[type="submit"]').click()
 
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 15000 })
   })

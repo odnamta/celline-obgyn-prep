@@ -1,25 +1,26 @@
 import { test, expect } from '@playwright/test'
 
 test.describe('Dashboard', () => {
-  test('dashboard loads successfully', async ({ page }) => {
+  test.beforeEach(async ({ page }) => {
     await page.goto('/dashboard')
+    // Dismiss welcome modal if it appears
+    const getStarted = page.getByRole('button', { name: 'Get Started' })
+    if (await getStarted.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await getStarted.click()
+    }
+  })
+
+  test('dashboard loads successfully', async ({ page }) => {
     await expect(page).toHaveURL(/\/dashboard/)
-    // Page should have content (not a blank page or error)
     await expect(page.locator('body')).not.toBeEmpty()
   })
 
   test('navigation elements are visible', async ({ page }) => {
-    await page.goto('/dashboard')
-    // Logout button or link should exist
-    await expect(page.getByRole('button', { name: /logout|sign out/i }).or(
-      page.getByRole('link', { name: /logout|sign out/i })
-    )).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('button', { name: /logout/i })).toBeVisible({ timeout: 10000 })
   })
 
   test('can navigate to /library', async ({ page }) => {
-    await page.goto('/dashboard')
-    // Find and click a link to library
-    await page.getByRole('link', { name: /library/i }).click()
+    await page.getByRole('link', { name: 'Library', exact: true }).click()
     await expect(page).toHaveURL(/\/library/)
   })
 })
