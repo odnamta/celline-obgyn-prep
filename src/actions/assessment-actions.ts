@@ -122,7 +122,7 @@ export async function createAssessment(
 
     revalidatePath('/assessments')
     return { ok: true, data: assessment as Assessment }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 /**
@@ -247,7 +247,7 @@ export async function publishAssessment(
 
     revalidatePath('/assessments')
     return { ok: true }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 /**
@@ -279,7 +279,7 @@ export async function archiveAssessment(
 
     revalidatePath('/assessments')
     return { ok: true }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 /**
@@ -322,7 +322,7 @@ export async function unpublishAssessment(
 
     revalidatePath('/assessments')
     return { ok: true }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 /**
@@ -535,7 +535,7 @@ export async function updateAssessment(
 
     revalidatePath('/assessments')
     return { ok: true, data: data as Assessment }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 // ============================================
@@ -749,7 +749,7 @@ export async function submitAnswer(
     }
 
     return { ok: true, data: { isCorrect } }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 /**
@@ -851,7 +851,7 @@ export async function completeSession(
 
     revalidatePath('/assessments')
     return { ok: true, data: { score, passed, total, correct } }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 /**
@@ -1577,7 +1577,7 @@ export async function reportTabSwitch(
       .eq('id', sessionId)
 
     return { ok: true }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 /**
@@ -2270,7 +2270,7 @@ export async function expireStaleSessions(): Promise<ActionResultV2<{ expired: n
     }
 
     return { ok: true, data: { expired: expiredCount } }
-  })
+  }, undefined, RATE_LIMITS.bulk)
 }
 
 /**
@@ -2439,7 +2439,7 @@ export async function resetCandidateAttempts(
     })
 
     return { ok: true, data: { deleted: sessions.length } }
-  })
+  }, undefined, RATE_LIMITS.sensitive)
 }
 
 /**
@@ -2678,7 +2678,7 @@ export async function importCandidatesCsv(
     }
 
     return { ok: true, data: { imported, skipped, errors } }
-  })
+  }, undefined, RATE_LIMITS.bulk)
 }
 
 // ── Assessment Templates ───────────────────────────────────────────────────
@@ -2708,7 +2708,7 @@ export async function saveAssessmentTemplate(
 
     if (error) return { ok: false, error: error.message }
     return { ok: true, data: data as AssessmentTemplate }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 /**
@@ -2746,7 +2746,7 @@ export async function deleteAssessmentTemplate(
 
     if (error) return { ok: false, error: error.message }
     return { ok: true, data: undefined }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 // ============================================

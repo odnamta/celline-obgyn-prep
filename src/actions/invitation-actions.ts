@@ -7,6 +7,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { withUser, withOrgUser } from '@/actions/_helpers'
+import { RATE_LIMITS } from '@/lib/rate-limit'
 import { createSupabaseServiceClient } from '@/lib/supabase/server'
 import { inviteMemberSchema } from '@/lib/validations'
 import type { ActionResultV2 } from '@/types/actions'
@@ -86,7 +87,7 @@ export async function inviteMember(
     }
 
     return { ok: true, data: invitation as Invitation }
-  })
+  }, undefined, RATE_LIMITS.sensitive)
 }
 
 /**
@@ -183,7 +184,7 @@ export async function acceptInvitation(
 
     revalidatePath('/dashboard')
     return { ok: true }
-  })
+  }, RATE_LIMITS.standard)
 }
 
 /**
@@ -209,5 +210,5 @@ export async function revokeInvitation(
     }
 
     return { ok: true }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }

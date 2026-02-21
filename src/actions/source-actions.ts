@@ -40,7 +40,8 @@
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient, getUser } from '@/lib/supabase/server'
 import { validatePdfFile, createSourceSchema } from '@/lib/pdf-validation'
-import type { ActionResult } from '@/types/actions'
+import { formatZodErrors } from '@/lib/zod-utils'
+import type { ActionResultV2 } from '@/types/actions'
 import type { Source } from '@/types/database'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -185,12 +186,12 @@ async function resolveDeckTemplateId(
  */
 export async function uploadSourceAction(
   formData: FormData
-): Promise<ActionResult & { sourceId?: string }> {
+): Promise<ActionResultV2<{ source: Source; sourceId: string }>> {
   try {
     // Get authenticated user
     const user = await getUser()
     if (!user) {
-      return { success: false, error: 'Authentication required' }
+      return { ok: false, error: 'Authentication required' }
     }
 
     // Extract form data
@@ -200,13 +201,13 @@ export async function uploadSourceAction(
 
     // Validate file exists
     if (!file || !(file instanceof File)) {
-      return { success: false, error: 'No file provided' }
+      return { ok: false, error: 'No file provided' }
     }
 
     // Validate PDF file
     const fileValidation = validatePdfFile(file.name, file.type, file.size)
     if (!fileValidation.valid) {
-      return { success: false, error: fileValidation.error || 'Invalid file' }
+      return { ok: false, error: fileValidation.error || 'Invalid file' }
     }
 
     // Validate other fields
@@ -216,15 +217,7 @@ export async function uploadSourceAction(
     })
 
     if (!validationResult.success) {
-      const fieldErrors: Record<string, string[]> = {}
-      for (const issue of validationResult.error.issues) {
-        const field = issue.path[0] as string
-        if (!fieldErrors[field]) {
-          fieldErrors[field] = []
-        }
-        fieldErrors[field].push(issue.message)
-      }
-      return { success: false, error: 'Validation failed', fieldErrors }
+      return { ok: false, error: formatZodErrors(validationResult.error) }
     }
 
     const { title: validatedTitle, deckId: validatedDeckId } = validationResult.data
@@ -237,13 +230,13 @@ export async function uploadSourceAction(
       
       if (!resolved) {
         console.warn('[uploadSourceAction] Deck not found after 4-step lookup:', validatedDeckId, 'User:', user.id)
-        return { success: false, error: 'Deck not found. Please verify the deck exists or create a new one.' }
+        return { ok: false, error: 'Deck not found. Please verify the deck exists or create a new one.' }
       }
 
       // Only authors can upload PDFs to a deck
       if (resolved.authorId !== user.id) {
         console.warn('[uploadSourceAction] Author mismatch:', { templateAuthor: resolved.authorId, currentUser: user.id })
-        return { success: false, error: 'Only the deck author can upload source materials' }
+        return { ok: false, error: 'Only the deck author can upload source materials' }
       }
       
       resolvedTemplateId = resolved.templateId
@@ -276,18 +269,18 @@ export async function uploadSourceAction(
       // Check for common error cases and provide helpful messages
       const errorMsg = uploadError.message || String(uploadError)
       if (errorMsg.includes('not found') || errorMsg.includes('does not exist') || errorMsg.includes('Bucket not found')) {
-        return { 
-          success: false, 
-          error: `Storage bucket '${STORAGE_BUCKET}' does not exist. Please create it in Supabase Dashboard → Storage.` 
+        return {
+          ok: false,
+          error: `Storage bucket '${STORAGE_BUCKET}' does not exist. Please create it in Supabase Dashboard → Storage.`
         }
       }
       if (errorMsg.includes('policy') || errorMsg.includes('permission') || errorMsg.includes('Unauthorized') || errorMsg.includes('row-level security')) {
-        return { 
-          success: false, 
-          error: `Storage Permission Error: Check RLS policies for the '${STORAGE_BUCKET}' bucket.` 
+        return {
+          ok: false,
+          error: `Storage Permission Error: Check RLS policies for the '${STORAGE_BUCKET}' bucket.`
         }
       }
-      return { success: false, error: `Upload failed: ${errorMsg}` }
+      return { ok: false, error: `Upload failed: ${errorMsg}` }
     }
 
     // Get public URL for the uploaded file
@@ -323,9 +316,9 @@ export async function uploadSourceAction(
       // Check for table not found error
       const errorMsg = sourceError.message || String(sourceError)
       if (errorMsg.includes('sources') && (errorMsg.includes('not found') || errorMsg.includes('does not exist'))) {
-        return { success: false, error: "Database table 'sources' does not exist. Please run the V2 migration SQL." }
+        return { ok: false, error: "Database table 'sources' does not exist. Please run the V2 migration SQL." }
       }
-      return { success: false, error: `Failed to create source: ${errorMsg}` }
+      return { ok: false, error: `Failed to create source: ${errorMsg}` }
     }
 
     // Optionally link to deck (Requirements: 9.3)
@@ -355,12 +348,12 @@ export async function uploadSourceAction(
     }
     revalidatePath('/dashboard')
 
-    return { success: true, data: source, sourceId: source.id }
+    return { ok: true, data: { source: source as Source, sourceId: source.id } }
   } catch (error) {
     // Catch any unexpected errors and return a proper response
     console.error('uploadSourceAction unexpected error:', error)
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred during upload'
-    return { success: false, error: errorMessage }
+    return { ok: false, error: errorMessage }
   }
 }
 
@@ -415,16 +408,16 @@ export async function getSourcesForDeck(deckId: string): Promise<Source[]> {
 export async function linkSourceToDeckAction(
   sourceId: string,
   deckId: string
-): Promise<ActionResult> {
+): Promise<ActionResultV2> {
   const user = await getUser()
   if (!user) {
-    return { success: false, error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   // Validate UUIDs
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   if (!uuidRegex.test(sourceId) || !uuidRegex.test(deckId)) {
-    return { success: false, error: 'Invalid source or deck ID' }
+    return { ok: false, error: 'Invalid source or deck ID' }
   }
 
   const supabase = await createSupabaseServerClient()
@@ -437,20 +430,20 @@ export async function linkSourceToDeckAction(
     .single()
 
   if (sourceError || !source) {
-    return { success: false, error: 'Source not found or access denied' }
+    return { ok: false, error: 'Source not found or access denied' }
   }
 
   // V8.2.3: Robust ID resolution with 3-step lookup
   const resolved = await resolveDeckTemplateId(supabase, deckId, user.id)
-  
+
   if (!resolved) {
     console.warn('[linkSourceToDeckAction] Deck not found after 4-step lookup:', deckId, 'User:', user.id)
-    return { success: false, error: 'Deck not found. Please verify the deck exists or create a new one.' }
+    return { ok: false, error: 'Deck not found. Please verify the deck exists or create a new one.' }
   }
 
   if (resolved.authorId !== user.id) {
     console.warn('[linkSourceToDeckAction] Author mismatch:', { templateAuthor: resolved.authorId, currentUser: user.id })
-    return { success: false, error: 'Only the deck author can link source materials' }
+    return { ok: false, error: 'Only the deck author can link source materials' }
   }
 
   // Create the link using resolved template ID
@@ -464,9 +457,9 @@ export async function linkSourceToDeckAction(
   if (linkError) {
     // Check if it's a duplicate
     if (linkError.code === '23505') {
-      return { success: false, error: 'Source is already linked to this deck' }
+      return { ok: false, error: 'Source is already linked to this deck' }
     }
-    return { success: false, error: `Failed to link source: ${linkError.message}` }
+    return { ok: false, error: `Failed to link source: ${linkError.message}` }
   }
 
   revalidatePath(`/decks/${deckId}`)
@@ -476,7 +469,7 @@ export async function linkSourceToDeckAction(
     revalidatePath(`/decks/${resolved.templateId}/add-bulk`)
   }
 
-  return { success: true }
+  return { ok: true }
 }
 
 /**
@@ -485,16 +478,16 @@ export async function linkSourceToDeckAction(
 export async function unlinkSourceFromDeckAction(
   sourceId: string,
   deckId: string
-): Promise<ActionResult> {
+): Promise<ActionResultV2> {
   const user = await getUser()
   if (!user) {
-    return { success: false, error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   // Validate UUIDs
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   if (!uuidRegex.test(sourceId) || !uuidRegex.test(deckId)) {
-    return { success: false, error: 'Invalid source or deck ID' }
+    return { ok: false, error: 'Invalid source or deck ID' }
   }
 
   const supabase = await createSupabaseServerClient()
@@ -507,11 +500,11 @@ export async function unlinkSourceFromDeckAction(
     .eq('source_id', sourceId)
 
   if (error) {
-    return { success: false, error: `Failed to unlink source: ${error.message}` }
+    return { ok: false, error: `Failed to unlink source: ${error.message}` }
   }
 
   revalidatePath(`/decks/${deckId}`)
   revalidatePath(`/decks/${deckId}/add-bulk`)
 
-  return { success: true }
+  return { ok: true }
 }

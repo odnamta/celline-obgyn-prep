@@ -190,7 +190,7 @@ export async function updateOrgSettings(
 
     revalidatePath('/dashboard')
     return { ok: true }
-  }, orgId)
+  }, orgId, RATE_LIMITS.standard)
 }
 
 /**
@@ -282,7 +282,7 @@ export async function updateMemberRole(
 
     revalidatePath('/dashboard')
     return { ok: true }
-  })
+  }, undefined, RATE_LIMITS.sensitive)
 }
 
 /**
@@ -347,7 +347,7 @@ export async function removeMember(
 
     revalidatePath('/dashboard')
     return { ok: true }
-  })
+  }, undefined, RATE_LIMITS.sensitive)
 }
 
 /**
@@ -412,7 +412,7 @@ export async function switchOrganization(
 
     revalidatePath('/', 'layout')
     return { ok: true }
-  })
+  }, RATE_LIMITS.standard)
 }
 
 /**
@@ -462,7 +462,7 @@ export async function transferOwnership(
 
     revalidatePath('/', 'layout')
     return { ok: true }
-  })
+  }, undefined, RATE_LIMITS.sensitive)
 }
 
 /**
@@ -491,7 +491,7 @@ export async function deleteOrganization(): Promise<ActionResultV2<void>> {
 
     revalidatePath('/', 'layout')
     return { ok: true }
-  })
+  }, undefined, RATE_LIMITS.sensitive)
 }
 
 /**

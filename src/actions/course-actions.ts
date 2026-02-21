@@ -14,7 +14,8 @@ import {
   addLessonItemSchema,
   reorderLessonItemsSchema,
 } from '@/lib/validations'
-import type { ActionResult, ActionResultV2 } from '@/types/actions'
+import { formatZodErrors } from '@/lib/zod-utils'
+import type { ActionResultV2 } from '@/types/actions'
 import type { Card, Lesson, LessonItem, LessonProgress } from '@/types/database'
 
 // ============================================
@@ -28,31 +29,23 @@ import type { Card, Lesson, LessonItem, LessonProgress } from '@/types/database'
  * Requirements: 4.1
  */
 export async function createCourseAction(
-  prevState: ActionResult,
+  prevState: ActionResultV2,
   formData: FormData
-): Promise<ActionResult> {
+): Promise<ActionResultV2> {
   const rawData = {
     title: formData.get('title'),
     description: formData.get('description') || undefined,
   }
 
   const validationResult = createCourseSchema.safeParse(rawData)
-  
+
   if (!validationResult.success) {
-    const fieldErrors: Record<string, string[]> = {}
-    for (const issue of validationResult.error.issues) {
-      const field = issue.path[0] as string
-      if (!fieldErrors[field]) {
-        fieldErrors[field] = []
-      }
-      fieldErrors[field].push(issue.message)
-    }
-    return { success: false, error: 'Validation failed', fieldErrors }
+    return { ok: false, error: formatZodErrors(validationResult.error) }
   }
 
   const user = await getUser()
   if (!user) {
-    return { success: false, error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   const { title, description } = validationResult.data
@@ -69,12 +62,12 @@ export async function createCourseAction(
     .single()
 
   if (error) {
-    return { success: false, error: error.message }
+    return { ok: false, error: error.message }
   }
 
   revalidatePath('/dashboard')
 
-  return { success: true, data }
+  return { ok: true, data }
 }
 
 
@@ -87,24 +80,16 @@ export async function createCourseAction(
 export async function updateCourseAction(
   courseId: string,
   data: { title?: string; description?: string }
-): Promise<ActionResult> {
+): Promise<ActionResultV2> {
   const validationResult = updateCourseSchema.safeParse({ courseId, ...data })
-  
+
   if (!validationResult.success) {
-    const fieldErrors: Record<string, string[]> = {}
-    for (const issue of validationResult.error.issues) {
-      const field = issue.path[0] as string
-      if (!fieldErrors[field]) {
-        fieldErrors[field] = []
-      }
-      fieldErrors[field].push(issue.message)
-    }
-    return { success: false, error: 'Validation failed', fieldErrors }
+    return { ok: false, error: formatZodErrors(validationResult.error) }
   }
 
   const user = await getUser()
   if (!user) {
-    return { success: false, error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   const supabase = await createSupabaseServerClient()
@@ -114,7 +99,7 @@ export async function updateCourseAction(
   if (data.description !== undefined) updateData.description = data.description
 
   if (Object.keys(updateData).length === 0) {
-    return { success: false, error: 'No fields to update' }
+    return { ok: false, error: 'No fields to update' }
   }
 
   const { data: updatedCourse, error } = await supabase
@@ -125,13 +110,13 @@ export async function updateCourseAction(
     .single()
 
   if (error) {
-    return { success: false, error: error.message }
+    return { ok: false, error: error.message }
   }
 
   revalidatePath('/dashboard')
   revalidatePath(`/course/${courseId}`)
 
-  return { success: true, data: updatedCourse }
+  return { ok: true, data: updatedCourse }
 }
 
 /**
@@ -140,14 +125,14 @@ export async function updateCourseAction(
  * RLS enforces user ownership.
  * Requirements: 4.1, 4.6
  */
-export async function deleteCourseAction(courseId: string): Promise<ActionResult> {
+export async function deleteCourseAction(courseId: string): Promise<ActionResultV2> {
   if (!courseId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(courseId)) {
-    return { success: false, error: 'Invalid course ID' }
+    return { ok: false, error: 'Invalid course ID' }
   }
 
   const user = await getUser()
   if (!user) {
-    return { success: false, error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   const supabase = await createSupabaseServerClient()
@@ -158,12 +143,12 @@ export async function deleteCourseAction(courseId: string): Promise<ActionResult
     .eq('id', courseId)
 
   if (error) {
-    return { success: false, error: error.message }
+    return { ok: false, error: error.message }
   }
 
   revalidatePath('/dashboard')
 
-  return { success: true }
+  return { ok: true }
 }
 
 // ============================================
@@ -176,9 +161,9 @@ export async function deleteCourseAction(courseId: string): Promise<ActionResult
  * Requirements: 4.2
  */
 export async function createUnitAction(
-  prevState: ActionResult,
+  prevState: ActionResultV2,
   formData: FormData
-): Promise<ActionResult> {
+): Promise<ActionResultV2> {
   const rawData = {
     courseId: formData.get('courseId'),
     title: formData.get('title'),
@@ -186,22 +171,14 @@ export async function createUnitAction(
   }
 
   const validationResult = createUnitSchema.safeParse(rawData)
-  
+
   if (!validationResult.success) {
-    const fieldErrors: Record<string, string[]> = {}
-    for (const issue of validationResult.error.issues) {
-      const field = issue.path[0] as string
-      if (!fieldErrors[field]) {
-        fieldErrors[field] = []
-      }
-      fieldErrors[field].push(issue.message)
-    }
-    return { success: false, error: 'Validation failed', fieldErrors }
+    return { ok: false, error: formatZodErrors(validationResult.error) }
   }
 
   const user = await getUser()
   if (!user) {
-    return { success: false, error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   const { courseId, title, orderIndex } = validationResult.data
@@ -217,8 +194,8 @@ export async function createUnitAction(
       .order('order_index', { ascending: false })
       .limit(1)
 
-    finalOrderIndex = existingUnits && existingUnits.length > 0 
-      ? existingUnits[0].order_index + 1 
+    finalOrderIndex = existingUnits && existingUnits.length > 0
+      ? existingUnits[0].order_index + 1
       : 0
   }
 
@@ -233,12 +210,12 @@ export async function createUnitAction(
     .single()
 
   if (error) {
-    return { success: false, error: error.message }
+    return { ok: false, error: error.message }
   }
 
   revalidatePath(`/course/${courseId}`)
 
-  return { success: true, data }
+  return { ok: true, data }
 }
 
 
@@ -250,24 +227,16 @@ export async function createUnitAction(
 export async function updateUnitAction(
   unitId: string,
   data: { title?: string; orderIndex?: number }
-): Promise<ActionResult> {
+): Promise<ActionResultV2> {
   const validationResult = updateUnitSchema.safeParse({ unitId, ...data })
-  
+
   if (!validationResult.success) {
-    const fieldErrors: Record<string, string[]> = {}
-    for (const issue of validationResult.error.issues) {
-      const field = issue.path[0] as string
-      if (!fieldErrors[field]) {
-        fieldErrors[field] = []
-      }
-      fieldErrors[field].push(issue.message)
-    }
-    return { success: false, error: 'Validation failed', fieldErrors }
+    return { ok: false, error: formatZodErrors(validationResult.error) }
   }
 
   const user = await getUser()
   if (!user) {
-    return { success: false, error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   const supabase = await createSupabaseServerClient()
@@ -277,7 +246,7 @@ export async function updateUnitAction(
   if (data.orderIndex !== undefined) updateData.order_index = data.orderIndex
 
   if (Object.keys(updateData).length === 0) {
-    return { success: false, error: 'No fields to update' }
+    return { ok: false, error: 'No fields to update' }
   }
 
   const { data: updatedUnit, error } = await supabase
@@ -288,7 +257,7 @@ export async function updateUnitAction(
     .single()
 
   if (error) {
-    return { success: false, error: error.message }
+    return { ok: false, error: error.message }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -297,7 +266,7 @@ export async function updateUnitAction(
     revalidatePath(`/course/${courseId}`)
   }
 
-  return { success: true, data: updatedUnit }
+  return { ok: true, data: updatedUnit }
 }
 
 /**
@@ -306,14 +275,14 @@ export async function updateUnitAction(
  * RLS enforces course ownership.
  * Requirements: 4.2, 4.5
  */
-export async function deleteUnitAction(unitId: string): Promise<ActionResult> {
+export async function deleteUnitAction(unitId: string): Promise<ActionResultV2> {
   if (!unitId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(unitId)) {
-    return { success: false, error: 'Invalid unit ID' }
+    return { ok: false, error: 'Invalid unit ID' }
   }
 
   const user = await getUser()
   if (!user) {
-    return { success: false, error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   const supabase = await createSupabaseServerClient()
@@ -331,14 +300,14 @@ export async function deleteUnitAction(unitId: string): Promise<ActionResult> {
     .eq('id', unitId)
 
   if (error) {
-    return { success: false, error: error.message }
+    return { ok: false, error: error.message }
   }
 
   if (unit?.course_id) {
     revalidatePath(`/course/${unit.course_id}`)
   }
 
-  return { success: true }
+  return { ok: true }
 }
 
 // ============================================
@@ -351,9 +320,9 @@ export async function deleteUnitAction(unitId: string): Promise<ActionResult> {
  * Requirements: 4.3
  */
 export async function createLessonAction(
-  prevState: ActionResult,
+  prevState: ActionResultV2,
   formData: FormData
-): Promise<ActionResult> {
+): Promise<ActionResultV2> {
   const rawData = {
     unitId: formData.get('unitId'),
     title: formData.get('title'),
@@ -362,22 +331,14 @@ export async function createLessonAction(
   }
 
   const validationResult = createLessonSchema.safeParse(rawData)
-  
+
   if (!validationResult.success) {
-    const fieldErrors: Record<string, string[]> = {}
-    for (const issue of validationResult.error.issues) {
-      const field = issue.path[0] as string
-      if (!fieldErrors[field]) {
-        fieldErrors[field] = []
-      }
-      fieldErrors[field].push(issue.message)
-    }
-    return { success: false, error: 'Validation failed', fieldErrors }
+    return { ok: false, error: formatZodErrors(validationResult.error) }
   }
 
   const user = await getUser()
   if (!user) {
-    return { success: false, error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   const { unitId, title, orderIndex, targetItemCount } = validationResult.data
@@ -393,8 +354,8 @@ export async function createLessonAction(
       .order('order_index', { ascending: false })
       .limit(1)
 
-    finalOrderIndex = existingLessons && existingLessons.length > 0 
-      ? existingLessons[0].order_index + 1 
+    finalOrderIndex = existingLessons && existingLessons.length > 0
+      ? existingLessons[0].order_index + 1
       : 0
   }
 
@@ -410,7 +371,7 @@ export async function createLessonAction(
     .single()
 
   if (error) {
-    return { success: false, error: error.message }
+    return { ok: false, error: error.message }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -419,7 +380,7 @@ export async function createLessonAction(
     revalidatePath(`/course/${courseId}`)
   }
 
-  return { success: true, data }
+  return { ok: true, data }
 }
 
 
@@ -431,24 +392,16 @@ export async function createLessonAction(
 export async function updateLessonAction(
   lessonId: string,
   data: { title?: string; orderIndex?: number; targetItemCount?: number }
-): Promise<ActionResult> {
+): Promise<ActionResultV2> {
   const validationResult = updateLessonSchema.safeParse({ lessonId, ...data })
-  
+
   if (!validationResult.success) {
-    const fieldErrors: Record<string, string[]> = {}
-    for (const issue of validationResult.error.issues) {
-      const field = issue.path[0] as string
-      if (!fieldErrors[field]) {
-        fieldErrors[field] = []
-      }
-      fieldErrors[field].push(issue.message)
-    }
-    return { success: false, error: 'Validation failed', fieldErrors }
+    return { ok: false, error: formatZodErrors(validationResult.error) }
   }
 
   const user = await getUser()
   if (!user) {
-    return { success: false, error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   const supabase = await createSupabaseServerClient()
@@ -459,7 +412,7 @@ export async function updateLessonAction(
   if (data.targetItemCount !== undefined) updateData.target_item_count = data.targetItemCount
 
   if (Object.keys(updateData).length === 0) {
-    return { success: false, error: 'No fields to update' }
+    return { ok: false, error: 'No fields to update' }
   }
 
   const { data: updatedLesson, error } = await supabase
@@ -470,7 +423,7 @@ export async function updateLessonAction(
     .single()
 
   if (error) {
-    return { success: false, error: error.message }
+    return { ok: false, error: error.message }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -480,7 +433,7 @@ export async function updateLessonAction(
   }
   revalidatePath(`/lesson/${lessonId}`)
 
-  return { success: true, data: updatedLesson }
+  return { ok: true, data: updatedLesson }
 }
 
 /**
@@ -489,14 +442,14 @@ export async function updateLessonAction(
  * RLS enforces unit/course ownership.
  * Requirements: 4.3
  */
-export async function deleteLessonAction(lessonId: string): Promise<ActionResult> {
+export async function deleteLessonAction(lessonId: string): Promise<ActionResultV2> {
   if (!lessonId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(lessonId)) {
-    return { success: false, error: 'Invalid lesson ID' }
+    return { ok: false, error: 'Invalid lesson ID' }
   }
 
   const user = await getUser()
   if (!user) {
-    return { success: false, error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   const supabase = await createSupabaseServerClient()
@@ -514,7 +467,7 @@ export async function deleteLessonAction(lessonId: string): Promise<ActionResult
     .eq('id', lessonId)
 
   if (error) {
-    return { success: false, error: error.message }
+    return { ok: false, error: error.message }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -523,7 +476,7 @@ export async function deleteLessonAction(lessonId: string): Promise<ActionResult
     revalidatePath(`/course/${courseId}`)
   }
 
-  return { success: true }
+  return { ok: true }
 }
 
 // ============================================
@@ -540,24 +493,16 @@ export async function addLessonItemAction(
   itemType: 'mcq' | 'card',
   itemId: string,
   orderIndex?: number
-): Promise<ActionResult> {
+): Promise<ActionResultV2> {
   const validationResult = addLessonItemSchema.safeParse({ lessonId, itemType, itemId, orderIndex })
-  
+
   if (!validationResult.success) {
-    const fieldErrors: Record<string, string[]> = {}
-    for (const issue of validationResult.error.issues) {
-      const field = issue.path[0] as string
-      if (!fieldErrors[field]) {
-        fieldErrors[field] = []
-      }
-      fieldErrors[field].push(issue.message)
-    }
-    return { success: false, error: 'Validation failed', fieldErrors }
+    return { ok: false, error: formatZodErrors(validationResult.error) }
   }
 
   const user = await getUser()
   if (!user) {
-    return { success: false, error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   const supabase = await createSupabaseServerClient()
@@ -570,7 +515,7 @@ export async function addLessonItemAction(
     .single()
 
   if (cardError || !card) {
-    return { success: false, error: 'Item not found or access denied' }
+    return { ok: false, error: 'Item not found or access denied' }
   }
 
   // If no orderIndex provided, get the next available index
@@ -583,8 +528,8 @@ export async function addLessonItemAction(
       .order('order_index', { ascending: false })
       .limit(1)
 
-    finalOrderIndex = existingItems && existingItems.length > 0 
-      ? existingItems[0].order_index + 1 
+    finalOrderIndex = existingItems && existingItems.length > 0
+      ? existingItems[0].order_index + 1
       : 0
   }
 
@@ -600,12 +545,12 @@ export async function addLessonItemAction(
     .single()
 
   if (error) {
-    return { success: false, error: error.message }
+    return { ok: false, error: error.message }
   }
 
   revalidatePath(`/lesson/${lessonId}`)
 
-  return { success: true, data }
+  return { ok: true, data }
 }
 
 
@@ -614,14 +559,14 @@ export async function addLessonItemAction(
  * Validates lesson ownership.
  * Requirements: 4.4
  */
-export async function removeLessonItemAction(lessonItemId: string): Promise<ActionResult> {
+export async function removeLessonItemAction(lessonItemId: string): Promise<ActionResultV2> {
   if (!lessonItemId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(lessonItemId)) {
-    return { success: false, error: 'Invalid lesson item ID' }
+    return { ok: false, error: 'Invalid lesson item ID' }
   }
 
   const user = await getUser()
   if (!user) {
-    return { success: false, error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   const supabase = await createSupabaseServerClient()
@@ -639,14 +584,14 @@ export async function removeLessonItemAction(lessonItemId: string): Promise<Acti
     .eq('id', lessonItemId)
 
   if (error) {
-    return { success: false, error: error.message }
+    return { ok: false, error: error.message }
   }
 
   if (lessonItem?.lesson_id) {
     revalidatePath(`/lesson/${lessonItem.lesson_id}`)
   }
 
-  return { success: true }
+  return { ok: true }
 }
 
 /**
@@ -657,30 +602,22 @@ export async function removeLessonItemAction(lessonItemId: string): Promise<Acti
 export async function reorderLessonItemsAction(
   lessonId: string,
   itemIds: string[]
-): Promise<ActionResult> {
+): Promise<ActionResultV2> {
   const validationResult = reorderLessonItemsSchema.safeParse({ lessonId, itemIds })
-  
+
   if (!validationResult.success) {
-    const fieldErrors: Record<string, string[]> = {}
-    for (const issue of validationResult.error.issues) {
-      const field = issue.path[0] as string
-      if (!fieldErrors[field]) {
-        fieldErrors[field] = []
-      }
-      fieldErrors[field].push(issue.message)
-    }
-    return { success: false, error: 'Validation failed', fieldErrors }
+    return { ok: false, error: formatZodErrors(validationResult.error) }
   }
 
   const user = await getUser()
   if (!user) {
-    return { success: false, error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   const supabase = await createSupabaseServerClient()
 
   // Update each item's order_index
-  const updates = itemIds.map((itemId, index) => 
+  const updates = itemIds.map((itemId, index) =>
     supabase
       .from('lesson_items')
       .update({ order_index: index })
@@ -689,15 +626,15 @@ export async function reorderLessonItemsAction(
   )
 
   const results = await Promise.all(updates)
-  
+
   const errors = results.filter(r => r.error)
   if (errors.length > 0) {
-    return { success: false, error: 'Failed to reorder some items' }
+    return { ok: false, error: 'Failed to reorder some items' }
   }
 
   revalidatePath(`/lesson/${lessonId}`)
 
-  return { success: true }
+  return { ok: true }
 }
 
 // ============================================
@@ -714,18 +651,14 @@ export interface LessonItemWithCard {
  * Returns array of { item, card } objects.
  * Requirements: 5.1
  */
-export async function getLessonItems(lessonId: string): Promise<{
-  success: boolean;
-  data?: LessonItemWithCard[];
-  error?: string;
-}> {
+export async function getLessonItems(lessonId: string): Promise<ActionResultV2<LessonItemWithCard[]>> {
   if (!lessonId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(lessonId)) {
-    return { success: false, error: 'Invalid lesson ID' }
+    return { ok: false, error: 'Invalid lesson ID' }
   }
 
   const user = await getUser()
   if (!user) {
-    return { success: false, error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   const supabase = await createSupabaseServerClient()
@@ -738,11 +671,11 @@ export async function getLessonItems(lessonId: string): Promise<{
     .order('order_index', { ascending: true })
 
   if (itemsError) {
-    return { success: false, error: itemsError.message }
+    return { ok: false, error: itemsError.message }
   }
 
   if (!lessonItems || lessonItems.length === 0) {
-    return { success: true, data: [] }
+    return { ok: true, data: [] }
   }
 
   // Fetch all cards for the lesson items
@@ -753,7 +686,7 @@ export async function getLessonItems(lessonId: string): Promise<{
     .in('id', itemIds)
 
   if (cardsError) {
-    return { success: false, error: cardsError.message }
+    return { ok: false, error: cardsError.message }
   }
 
   // Create a map of card id to card for efficient lookup
@@ -776,7 +709,7 @@ export async function getLessonItems(lessonId: string): Promise<{
     }
   }
 
-  return { success: true, data: result }
+  return { ok: true, data: result }
 }
 
 
@@ -912,17 +845,6 @@ export async function getLessonDetail(
 
 import { calculateStreak, updateLongestStreak, incrementTotalReviews } from '@/lib/streak'
 
-export interface CompleteLessonResult {
-  success: boolean
-  data?: {
-    lessonProgressId: string
-    score: number
-    bestScore: number
-    isNewBest: boolean
-  }
-  error?: string
-}
-
 /**
  * Server Action for completing a lesson.
  * Records completion in lesson_progress (upsert), updates best_score if higher,
@@ -933,19 +855,19 @@ export async function completeLessonAction(
   lessonId: string,
   score: number,
   totalItems: number
-): Promise<CompleteLessonResult> {
+): Promise<ActionResultV2<{ xpEarned: number; newTotalXp: number; newStreak: number; longestStreak: number }>> {
   // Validate inputs
   if (!lessonId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(lessonId)) {
-    return { success: false, error: 'Invalid lesson ID' }
+    return { ok: false, error: 'Invalid lesson ID' }
   }
 
   if (score < 0 || score > totalItems) {
-    return { success: false, error: 'Invalid score' }
+    return { ok: false, error: 'Invalid score' }
   }
 
   const user = await getUser()
   if (!user) {
-    return { success: false, error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   const supabase = await createSupabaseServerClient()
@@ -958,7 +880,7 @@ export async function completeLessonAction(
     .single()
 
   if (lessonError || !lesson) {
-    return { success: false, error: 'Lesson not found or access denied' }
+    return { ok: false, error: 'Lesson not found or access denied' }
   }
 
   const now = new Date()
@@ -973,7 +895,7 @@ export async function completeLessonAction(
     .single()
 
   if (progressError && progressError.code !== 'PGRST116') {
-    return { success: false, error: progressError.message }
+    return { ok: false, error: progressError.message }
   }
 
   let lessonProgressId: string
@@ -996,7 +918,7 @@ export async function completeLessonAction(
       .single()
 
     if (updateError) {
-      return { success: false, error: updateError.message }
+      return { ok: false, error: updateError.message }
     }
 
     lessonProgressId = updatedProgress.id
@@ -1017,14 +939,14 @@ export async function completeLessonAction(
       .single()
 
     if (insertError) {
-      return { success: false, error: insertError.message }
+      return { ok: false, error: insertError.message }
     }
 
     lessonProgressId = newProgress.id
   }
 
   // === Update user_stats and study_logs for streak/heatmap (Requirement 5.6) ===
-  
+
   // Fetch or create user_stats record
   const { data: existingStats, error: statsError } = await supabase
     .from('user_stats')
@@ -1033,7 +955,7 @@ export async function completeLessonAction(
     .single()
 
   if (statsError && statsError.code !== 'PGRST116') {
-    return { success: false, error: statsError.message }
+    return { ok: false, error: statsError.message }
   }
 
   // Calculate streak updates
@@ -1068,7 +990,7 @@ export async function completeLessonAction(
       .eq('user_id', user.id)
 
     if (updateStatsError) {
-      return { success: false, error: updateStatsError.message }
+      return { ok: false, error: updateStatsError.message }
     }
   } else {
     const { error: insertStatsError } = await supabase
@@ -1082,7 +1004,7 @@ export async function completeLessonAction(
       })
 
     if (insertStatsError) {
-      return { success: false, error: insertStatsError.message }
+      return { ok: false, error: insertStatsError.message }
     }
   }
 
@@ -1095,7 +1017,7 @@ export async function completeLessonAction(
     .single()
 
   if (logFetchError && logFetchError.code !== 'PGRST116') {
-    return { success: false, error: logFetchError.message }
+    return { ok: false, error: logFetchError.message }
   }
 
   if (existingLog) {
@@ -1109,7 +1031,7 @@ export async function completeLessonAction(
       .eq('study_date', todayDateStr)
 
     if (updateLogError) {
-      return { success: false, error: updateLogError.message }
+      return { ok: false, error: updateLogError.message }
     }
   } else {
     const { error: insertLogError } = await supabase
@@ -1121,7 +1043,7 @@ export async function completeLessonAction(
       })
 
     if (insertLogError) {
-      return { success: false, error: insertLogError.message }
+      return { ok: false, error: insertLogError.message }
     }
   }
 
@@ -1130,12 +1052,12 @@ export async function completeLessonAction(
   revalidatePath('/dashboard')
 
   return {
-    success: true,
+    ok: true,
     data: {
-      lessonProgressId,
-      score,
-      bestScore,
-      isNewBest,
+      xpEarned: score,
+      newTotalXp: newTotalReviews,
+      newStreak: streakResult.newStreak,
+      longestStreak: newLongestStreak,
     },
   }
 }

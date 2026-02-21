@@ -295,6 +295,7 @@ describe('Tab Switch Tracking', () => {
       fc.property(
         fc.array(fc.date({ min: new Date('2020-01-01'), max: new Date('2030-12-31') }), { minLength: 2, maxLength: 20 }),
         (dates) => {
+          fc.pre(dates.every(d => !isNaN(d.getTime())))
           let log: TabSwitchEntry[] = []
           let count = 0
           const snapshots: TabSwitchEntry[][] = []

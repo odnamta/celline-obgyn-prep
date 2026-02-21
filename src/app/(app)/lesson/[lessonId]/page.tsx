@@ -59,8 +59,8 @@ export default function LessonStudyPage({ params }: LessonStudyPageProps) {
       try {
         // Fetch lesson items
         const itemsResult = await getLessonItems(currentLessonId)
-        
-        if (!itemsResult.success) {
+
+        if (!itemsResult.ok) {
           setError(itemsResult.error || 'Failed to load lesson')
           setIsLoading(false)
           return
@@ -98,12 +98,12 @@ export default function LessonStudyPage({ params }: LessonStudyPageProps) {
     const totalItems = lessonData.items.length
     const result = await completeLessonAction(lessonId, correctCount, totalItems)
 
-    if (result.success && result.data) {
+    if (result.ok && result.data) {
       setCompletionResult({
         correctCount,
         mistakes,
-        bestScore: result.data.bestScore,
-        isNewBest: result.data.isNewBest,
+        bestScore: correctCount,
+        isNewBest: !lessonData.progress || correctCount > (lessonData.progress.best_score ?? 0),
       })
       setIsComplete(true)
     } else {

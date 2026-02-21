@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { withOrgUser } from './_helpers'
+import { RATE_LIMITS } from '@/lib/rate-limit'
 import { canManageSkillDomains, canLinkDeckToSkill, canViewOrgSkillScores } from '@/lib/skill-authorization'
 import type { ActionResultV2 } from '@/types/actions'
 import type { SkillDomain, EmployeeSkillScore } from '@/types/database'
@@ -39,7 +40,7 @@ export async function createSkillDomain(input: {
 
     revalidatePath('/skills')
     return { ok: true, data }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 /**
@@ -74,7 +75,7 @@ export async function updateSkillDomain(
 
     revalidatePath('/skills')
     return { ok: true, data }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 /**
@@ -98,7 +99,7 @@ export async function deleteSkillDomain(id: string): Promise<ActionResultV2<null
 
     revalidatePath('/skills')
     return { ok: true, data: null }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 /**
@@ -171,7 +172,7 @@ export async function linkDeckToSkill(
     revalidatePath('/skills')
     revalidatePath(`/decks/${deckTemplateId}`)
     return { ok: true, data: null }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 /**
@@ -198,7 +199,7 @@ export async function unlinkDeckFromSkill(
 
     revalidatePath('/skills')
     return { ok: true, data: null }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 /**

@@ -52,7 +52,7 @@ export function FlagIcon({
     startTransition(async () => {
       const result = await toggleCardFlag(cardTemplateId)
       
-      if (!result.success) {
+      if (!result.ok) {
         // Rollback on error
         setIsFlagged(previousState)
         setError(result.error || 'Failed to update flag')
@@ -60,8 +60,8 @@ export function FlagIcon({
       }
 
       // Update with server state (should match optimistic)
-      setIsFlagged(result.isFlagged)
-      onToggle?.(result.isFlagged)
+      setIsFlagged(result.data?.isFlagged ?? !previousState)
+      onToggle?.(result.data?.isFlagged ?? !previousState)
     })
   }
 

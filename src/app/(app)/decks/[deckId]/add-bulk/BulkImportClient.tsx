@@ -286,14 +286,13 @@ export default function BulkImportClient({ deckId, subject = 'General' }: BulkIm
 
       const result = await uploadSourceAction(formData)
 
-      if (!result.success) {
+      if (!result.ok) {
         setUploadError(result.error || 'Upload failed')
       } else if (result.data) {
-        const source = result.data as { id: string; title: string; file_url?: string }
         handleUploadSuccess({
-          id: source.id,
+          id: result.data.source.id,
           fileName: file.name,
-          fileUrl: source.file_url,
+          fileUrl: result.data.source.file_url,
         })
       }
     } catch (err) {

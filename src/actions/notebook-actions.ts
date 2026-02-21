@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient, getUser } from '@/lib/supabase/server'
+import type { ActionResultV2 } from '@/types/actions'
 
 /**
  * V10.6: Digital Notebook Server Actions
@@ -12,17 +13,6 @@ import { createSupabaseServerClient, getUser } from '@/lib/supabase/server'
 // Types
 // ============================================
 
-export interface ToggleFlagResult {
-  success: boolean
-  isFlagged: boolean
-  error?: string
-}
-
-export interface SaveNotesResult {
-  success: boolean
-  error?: string
-}
-
 export interface SearchResult {
   id: string
   stem: string
@@ -32,12 +22,6 @@ export interface SearchResult {
   type: 'card' | 'deck' | 'assessment'
   /** For deck results: href to navigate to */
   href?: string
-}
-
-export interface SearchCardsResult {
-  success: boolean
-  results: SearchResult[]
-  error?: string
 }
 
 // ============================================
@@ -53,10 +37,10 @@ export interface SearchCardsResult {
  * @param cardTemplateId - The card template to toggle flag for
  * @returns ToggleFlagResult with new flag state
  */
-export async function toggleCardFlag(cardTemplateId: string): Promise<ToggleFlagResult> {
+export async function toggleCardFlag(cardTemplateId: string): Promise<ActionResultV2<{ isFlagged: boolean }>> {
   const user = await getUser()
   if (!user) {
-    return { success: false, isFlagged: false, error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   const supabase = await createSupabaseServerClient()
@@ -92,14 +76,14 @@ export async function toggleCardFlag(cardTemplateId: string): Promise<ToggleFlag
     })
 
   if (upsertError) {
-    return { success: false, isFlagged: currentFlagged, error: upsertError.message }
+    return { ok: false, error: upsertError.message }
   }
 
   // Revalidate study pages
   revalidatePath('/study')
   revalidatePath('/dashboard')
 
-  return { success: true, isFlagged: newFlagged }
+  return { ok: true, data: { isFlagged: newFlagged } }
 }
 
 // ============================================
@@ -119,10 +103,10 @@ export async function toggleCardFlag(cardTemplateId: string): Promise<ToggleFlag
 export async function saveCardNotes(
   cardTemplateId: string,
   notes: string
-): Promise<SaveNotesResult> {
+): Promise<ActionResultV2> {
   const user = await getUser()
   if (!user) {
-    return { success: false, error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   const supabase = await createSupabaseServerClient()
@@ -148,10 +132,10 @@ export async function saveCardNotes(
     })
 
   if (upsertError) {
-    return { success: false, error: upsertError.message }
+    return { ok: false, error: upsertError.message }
   }
 
-  return { success: true }
+  return { ok: true }
 }
 
 // ============================================
@@ -192,16 +176,16 @@ function createSnippet(text: string, query: string): string {
  * Requirements: 3.1, 3.2, 3.3
  * 
  * @param query - Search query string
- * @returns SearchCardsResult with matching cards
+ * @returns ActionResultV2 with matching cards
  */
-export async function searchCards(query: string): Promise<SearchCardsResult> {
+export async function searchCards(query: string): Promise<ActionResultV2<{ results: SearchResult[] }>> {
   const user = await getUser()
   if (!user) {
-    return { success: false, results: [], error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   if (!query || query.trim().length === 0) {
-    return { success: true, results: [] }
+    return { ok: true, data: { results: [] } }
   }
 
   const supabase = await createSupabaseServerClient()
@@ -215,7 +199,7 @@ export async function searchCards(query: string): Promise<SearchCardsResult> {
     .eq('is_active', true)
 
   if (decksError) {
-    return { success: false, results: [], error: decksError.message }
+    return { ok: false, error: decksError.message }
   }
 
   const subscribedDeckIds = (userDecks || []).map(ud => ud.deck_template_id)
@@ -227,7 +211,7 @@ export async function searchCards(query: string): Promise<SearchCardsResult> {
     .eq('author_id', user.id)
 
   if (authoredError) {
-    return { success: false, results: [], error: authoredError.message }
+    return { ok: false, error: authoredError.message }
   }
 
   const authoredDeckIds = (authoredDecks || []).map(d => d.id)
@@ -236,7 +220,7 @@ export async function searchCards(query: string): Promise<SearchCardsResult> {
   const accessibleDeckIds = [...new Set([...subscribedDeckIds, ...authoredDeckIds])]
 
   if (accessibleDeckIds.length === 0) {
-    return { success: true, results: [] }
+    return { ok: true, data: { results: [] } }
   }
 
   // Search card_templates in accessible decks
@@ -254,15 +238,15 @@ export async function searchCards(query: string): Promise<SearchCardsResult> {
     .limit(MAX_SEARCH_RESULTS)
 
   if (searchError) {
-    return { success: false, results: [], error: searchError.message }
+    return { ok: false, error: searchError.message }
   }
 
   // Transform results
   const results: SearchResult[] = (cards || []).map(card => {
     const deckTemplate = card.deck_templates as unknown as { id: string; title: string }
-    const snippet = createSnippet(card.stem, query) || 
+    const snippet = createSnippet(card.stem, query) ||
                    (card.explanation ? createSnippet(card.explanation, query) : '')
-    
+
     return {
       id: card.id,
       stem: card.stem,
@@ -273,16 +257,16 @@ export async function searchCards(query: string): Promise<SearchCardsResult> {
     }
   })
 
-  return { success: true, results }
+  return { ok: true, data: { results } }
 }
 
 /**
  * Global search across cards, decks, and assessments.
  */
-export async function globalSearch(query: string): Promise<SearchCardsResult> {
+export async function globalSearch(query: string): Promise<ActionResultV2<{ results: SearchResult[] }>> {
   const user = await getUser()
-  if (!user) return { success: false, results: [], error: 'Authentication required' }
-  if (!query || query.trim().length === 0) return { success: true, results: [] }
+  if (!user) return { ok: false, error: 'Authentication required' }
+  if (!query || query.trim().length === 0) return { ok: true, data: { results: [] } }
 
   const supabase = await createSupabaseServerClient()
   const searchTerm = `%${query.trim()}%`
@@ -338,11 +322,11 @@ export async function globalSearch(query: string): Promise<SearchCardsResult> {
   }
 
   // Add card results (already typed)
-  if (cardResult.success) {
-    results.push(...cardResult.results)
+  if (cardResult.ok && cardResult.data) {
+    results.push(...cardResult.data.results)
   }
 
-  return { success: true, results: results.slice(0, 15) }
+  return { ok: true, data: { results: results.slice(0, 15) } }
 }
 
 // ============================================
@@ -361,23 +345,17 @@ export interface CardWithProgress {
   notes: string | null
 }
 
-export interface GetCardResult {
-  success: boolean
-  card?: CardWithProgress
-  error?: string
-}
-
 /**
  * Gets a single card with user's progress data.
  * Used for the preview modal.
- * 
+ *
  * @param cardTemplateId - The card template ID
- * @returns GetCardResult with card data
+ * @returns ActionResultV2 with card data
  */
-export async function getCardWithProgress(cardTemplateId: string): Promise<GetCardResult> {
+export async function getCardWithProgress(cardTemplateId: string): Promise<ActionResultV2<CardWithProgress>> {
   const user = await getUser()
   if (!user) {
-    return { success: false, error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   const supabase = await createSupabaseServerClient()
@@ -398,7 +376,7 @@ export async function getCardWithProgress(cardTemplateId: string): Promise<GetCa
     .single()
 
   if (cardError || !card) {
-    return { success: false, error: cardError?.message || 'Card not found' }
+    return { ok: false, error: cardError?.message || 'Card not found' }
   }
 
   // Get user's progress for this card
@@ -412,8 +390,8 @@ export async function getCardWithProgress(cardTemplateId: string): Promise<GetCa
   const deckTemplate = card.deck_templates as unknown as { id: string; title: string }
 
   return {
-    success: true,
-    card: {
+    ok: true,
+    data: {
       id: card.id,
       stem: card.stem,
       options: card.options,

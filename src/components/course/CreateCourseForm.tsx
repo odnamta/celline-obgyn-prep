@@ -5,9 +5,9 @@ import { createCourseAction } from '@/actions/course-actions'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Textarea } from '@/components/ui/Textarea'
-import type { ActionResult } from '@/types/actions'
+import type { ActionResultV2 } from '@/types/actions'
 
-const initialState: ActionResult = { success: true }
+const initialState: ActionResultV2 = { ok: true }
 
 /**
  * CreateCourseForm Component
@@ -27,7 +27,7 @@ export function CreateCourseForm() {
           label="Course Title"
           name="title"
           placeholder="e.g., Safety Training Basics"
-          error={!state.success ? state.fieldErrors?.title?.[0] : undefined}
+          error={!state.ok ? state.error : undefined}
         />
       </div>
       <div>
@@ -36,7 +36,7 @@ export function CreateCourseForm() {
           name="description"
           placeholder="Brief description of the course..."
           rows={2}
-          error={!state.success ? state.fieldErrors?.description?.[0] : undefined}
+          error={!state.ok ? state.error : undefined}
         />
       </div>
       <Button type="submit" disabled={isPending} className="w-full">

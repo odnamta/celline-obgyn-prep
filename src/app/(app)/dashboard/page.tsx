@@ -33,37 +33,43 @@ export default async function DashboardPage() {
   const supabase = await createSupabaseServerClient()
   const now = new Date().toISOString()
 
-  // Fetch study logs for heatmap - full year (Requirement 2.2)
-  const studyLogsResult = await getStudyLogs(365)
+  // Parallelize 6 independent top-level queries
+  const [
+    studyLogsResult,
+    userStatsResult,
+    globalStatsResult,
+    insightsResult,
+    { data: userTags },
+    { data: courses, error: coursesError },
+  ] = await Promise.all([
+    // Fetch study logs for heatmap - full year (Requirement 2.2)
+    getStudyLogs(365),
+    // Fetch user stats for streak display (Requirement 1.7)
+    getUserStats(),
+    // Fetch global stats for DashboardHero (Requirements 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8)
+    getGlobalStats(),
+    // V11.7: Fetch dashboard insights for weakest concepts
+    getDashboardInsights(),
+    // V11.7: Fetch user's tags for tag filter (topic and source only)
+    supabase
+      .from('tags')
+      .select('*')
+      .eq('user_id', user.id)
+      .in('category', ['topic', 'source'])
+      .order('name'),
+    // Fetch user's courses with units and lessons for progress calculation (Requirement 6.1)
+    supabase
+      .from('courses')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false }),
+  ])
+
   const studyLogs = studyLogsResult.ok ? (studyLogsResult.data?.logs ?? []) : []
-
-  // Fetch user stats for streak display (Requirement 1.7)
-  const userStatsResult = await getUserStats()
   const userStats = userStatsResult.ok ? (userStatsResult.data?.stats ?? null) : null
-
-  // Fetch global stats for DashboardHero (Requirements 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8)
-  const globalStatsResult = await getGlobalStats()
   const globalStats = globalStatsResult.ok ? globalStatsResult.data! : { totalDueCount: 0, completedToday: 0, currentStreak: 0, hasNewCards: false }
-
-  // V11.7: Fetch dashboard insights for weakest concepts
-  const insightsResult = await getDashboardInsights()
   const weakestConcepts = insightsResult.ok ? (insightsResult.data?.weakestConcepts || []) : []
-
-  // V11.7: Fetch user's tags for tag filter (topic and source only)
-  const { data: userTags } = await supabase
-    .from('tags')
-    .select('*')
-    .eq('user_id', user.id)
-    .in('category', ['topic', 'source'])
-    .order('name')
   const tags: Tag[] = (userTags || []) as Tag[]
-
-  // Fetch user's courses with units and lessons for progress calculation (Requirement 6.1)
-  const { data: courses, error: coursesError } = await supabase
-    .from('courses')
-    .select('*')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
 
   // Fetch all units for user's courses
   const courseIds = (courses || []).map(c => c.id)

@@ -5,6 +5,7 @@
  */
 
 import { withUser, withOrgUser } from '@/actions/_helpers'
+import { RATE_LIMITS } from '@/lib/rate-limit'
 import { createSupabaseServiceClient } from '@/lib/supabase/server'
 import { hasMinimumRole } from '@/lib/org-authorization'
 import type { ActionResultV2 } from '@/types/actions'
@@ -113,7 +114,7 @@ export async function markNotificationRead(
     }
 
     return { ok: true }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 /**
@@ -133,7 +134,7 @@ export async function markAllNotificationsRead(): Promise<ActionResultV2<void>> 
     }
 
     return { ok: true }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 /**
@@ -178,7 +179,7 @@ export async function notifyOrgCandidates(
     }
 
     return { ok: true }
-  })
+  }, undefined, RATE_LIMITS.sensitive)
 }
 
 /**
@@ -253,7 +254,7 @@ export async function sendAssessmentReminder(
     }
 
     return { ok: true, data: { notified: pendingMembers.length } }
-  })
+  }, undefined, RATE_LIMITS.sensitive)
 }
 
 /**
@@ -328,7 +329,7 @@ export async function sendDeadlineReminders(): Promise<ActionResultV2<{ notified
     }
 
     return { ok: true, data: { notified: totalNotified, assessments: assessments.length } }
-  })
+  }, undefined, RATE_LIMITS.sensitive)
 }
 
 /**
@@ -401,7 +402,7 @@ export async function assignAssessmentToAll(
     }
 
     return { ok: true, data: { notified: pending.length } }
-  })
+  }, undefined, RATE_LIMITS.bulk)
 }
 
 /**
@@ -467,5 +468,5 @@ export async function bulkAssignAssessment(
     }
 
     return { ok: true, data: { notified: pending.length, alreadyStarted: startedIds.size } }
-  })
+  }, undefined, RATE_LIMITS.bulk)
 }

@@ -2,27 +2,20 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient, getUser } from '@/lib/supabase/server'
-
-/**
- * Result type for profile update actions
- */
-export interface ProfileUpdateResult {
-  success: boolean
-  error?: string
-}
+import type { ActionResultV2 } from '@/types/actions'
 
 /**
  * Updates user profile metadata (display name).
  *
  * @param displayName - The user's display name
- * @returns ProfileUpdateResult with success status
+ * @returns ActionResultV2 with success status
  */
 export async function updateUserProfile(
   displayName: string
-): Promise<ProfileUpdateResult> {
+): Promise<ActionResultV2> {
   const user = await getUser()
   if (!user) {
-    return { success: false, error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   const supabase = await createSupabaseServerClient()
@@ -38,7 +31,7 @@ export async function updateUserProfile(
   })
 
   if (updateError) {
-    return { success: false, error: 'Unable to update profile. Please try again.' }
+    return { ok: false, error: 'Unable to update profile. Please try again.' }
   }
 
   // Sync full_name to profiles table
@@ -52,5 +45,5 @@ export async function updateUserProfile(
   revalidatePath('/profile')
   revalidatePath('/dashboard')
 
-  return { success: true }
+  return { ok: true }
 }

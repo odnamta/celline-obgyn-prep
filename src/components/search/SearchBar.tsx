@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { Search, X, Loader2 } from 'lucide-react'
 import { useDebouncedCallback } from 'use-debounce'
-import { globalSearch, type SearchResult } from '@/actions/notebook-actions'
+import { globalSearch } from '@/actions/notebook-actions'
+import type { SearchResult } from '@/actions/notebook-actions'
 import { SearchResults } from './SearchResults'
 
 export interface SearchBarProps {
@@ -65,10 +66,10 @@ export function SearchBar({ onResultClick }: SearchBarProps) {
 
     const result = await globalSearch(searchQuery)
 
-    if (result.success) {
-      setResults(result.results)
+    if (result.ok && result.data) {
+      setResults(result.data.results)
       setIsOpen(true)
-    } else {
+    } else if (!result.ok) {
       setError(result.error || 'Search failed')
       setResults([])
     }

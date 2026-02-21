@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { withOrgUser } from './_helpers'
+import { RATE_LIMITS } from '@/lib/rate-limit'
 import { canManageRoleProfiles, canAssignRoles } from '@/lib/skill-authorization'
 import type { ActionResultV2 } from '@/types/actions'
 import type { RoleProfile, RoleSkillRequirement, EmployeeRoleAssignment, SkillPriority } from '@/types/database'
@@ -48,7 +49,7 @@ export async function createRoleProfile(input: {
 
     revalidatePath('/skills')
     return { ok: true, data }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 /**
@@ -95,7 +96,7 @@ export async function updateRoleProfile(
 
     revalidatePath('/skills')
     return { ok: true, data }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 /**
@@ -119,7 +120,7 @@ export async function deleteRoleProfile(id: string): Promise<ActionResultV2<null
 
     revalidatePath('/skills')
     return { ok: true, data: null }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 /**
@@ -246,7 +247,7 @@ export async function setRoleSkillRequirements(
 
     revalidatePath('/skills')
     return { ok: true, data: null }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 /**
@@ -281,7 +282,7 @@ export async function assignEmployeeRole(
 
     revalidatePath('/skills')
     return { ok: true, data }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 /**
@@ -309,7 +310,7 @@ export async function unassignEmployeeRole(
 
     revalidatePath('/skills')
     return { ok: true, data: null }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 /**

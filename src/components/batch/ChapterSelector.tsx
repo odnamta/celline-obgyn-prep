@@ -47,7 +47,7 @@ export function ChapterSelector({
 
       setIsLoading(true)
       const result = await getChaptersByBook(bookSourceId)
-      if (result.success && result.data) {
+      if (result.ok && result.data) {
         // Already sorted by chapter_number from server
         setChapters(result.data)
       } else {
@@ -105,7 +105,7 @@ export function ChapterSelector({
       expected_question_count: expectedCount && expectedCount > 0 ? expectedCount : null,
     })
 
-    if (result.success && result.data) {
+    if (result.ok && result.data) {
       // Insert in sorted position
       setChapters(prev => {
         const updated = [...prev, result.data!]
@@ -116,7 +116,7 @@ export function ChapterSelector({
       setNewChapterNumber('')
       setNewTitle('')
       setNewExpectedCount('')
-    } else {
+    } else if (!result.ok) {
       setError(result.error || 'Failed to create chapter')
     }
 

@@ -8,6 +8,7 @@
  */
 
 import { withOrgUser } from './_helpers'
+import { RATE_LIMITS } from '@/lib/rate-limit'
 import {
   createBookSourceSchema,
   updateBookSourceSchema,
@@ -50,7 +51,7 @@ export async function createBookSource(
     }
 
     return { ok: true, data: data as BookSource }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 // ============================================
@@ -146,7 +147,7 @@ export async function updateBookSource(
     }
 
     return { ok: true, data: data as BookSource }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }
 
 // ============================================
@@ -167,5 +168,5 @@ export async function deleteBookSource(id: string): Promise<ActionResultV2<void>
     }
 
     return { ok: true }
-  })
+  }, undefined, RATE_LIMITS.standard)
 }

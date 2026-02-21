@@ -16,16 +16,7 @@ import {
   type CreateMatchingGroupInput,
 } from '@/lib/structured-content-schema'
 import type { BookChapter, MatchingGroup, CardTemplateV11 } from '@/types/database'
-
-// ============================================
-// Result Types
-// ============================================
-
-interface ActionResult<T = void> {
-  success: boolean
-  data?: T
-  error?: string
-}
+import type { ActionResultV2 } from '@/types/actions'
 
 // ============================================
 // Create Chapter
@@ -33,19 +24,19 @@ interface ActionResult<T = void> {
 
 export async function createChapter(
   input: CreateChapterInput
-): Promise<ActionResult<BookChapter>> {
+): Promise<ActionResultV2<BookChapter>> {
   const supabase = await createSupabaseServerClient()
-  
+
   // Get current user
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) {
-    return { success: false, error: 'Not authenticated' }
+    return { ok: false, error: 'Not authenticated' }
   }
 
   // Validate input
   const validation = createChapterSchema.safeParse(input)
   if (!validation.success) {
-    return { success: false, error: validation.error.issues[0]?.message || 'Invalid input' }
+    return { ok: false, error: validation.error.issues[0]?.message || 'Invalid input' }
   }
 
   const { book_source_id, chapter_number, title, expected_question_count } = validation.data
@@ -59,7 +50,7 @@ export async function createChapter(
     .single()
 
   if (bookError || !bookSource) {
-    return { success: false, error: 'Book source not found or not owned by user' }
+    return { ok: false, error: 'Book source not found or not owned by user' }
   }
 
   // Insert chapter
@@ -76,13 +67,13 @@ export async function createChapter(
 
   if (error) {
     if (error.code === '23505') {
-      return { success: false, error: `Chapter ${chapter_number} already exists in this book` }
+      return { ok: false, error: `Chapter ${chapter_number} already exists in this book` }
     }
     console.error('[createChapter] Error:', error)
-    return { success: false, error: 'Failed to create chapter' }
+    return { ok: false, error: 'Failed to create chapter' }
   }
 
-  return { success: true, data: data as BookChapter }
+  return { ok: true, data: data as BookChapter }
 }
 
 // ============================================
@@ -95,13 +86,13 @@ export async function createChapter(
  */
 export async function getChaptersByBook(
   bookSourceId: string
-): Promise<ActionResult<BookChapter[]>> {
+): Promise<ActionResultV2<BookChapter[]>> {
   const supabase = await createSupabaseServerClient()
-  
+
   // Get current user
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) {
-    return { success: false, error: 'Not authenticated' }
+    return { ok: false, error: 'Not authenticated' }
   }
 
   // Fetch chapters ordered by chapter_number
@@ -117,26 +108,26 @@ export async function getChaptersByBook(
 
   if (error) {
     console.error('[getChaptersByBook] Error:', error)
-    return { success: false, error: 'Failed to fetch chapters' }
+    return { ok: false, error: 'Failed to fetch chapters' }
   }
 
   // Strip the joined book_sources data
   const chapters = (data || []).map(({ book_sources: _, ...chapter }) => chapter) as BookChapter[]
 
-  return { success: true, data: chapters }
+  return { ok: true, data: chapters }
 }
 
 // ============================================
 // Get Single Chapter
 // ============================================
 
-export async function getChapter(id: string): Promise<ActionResult<BookChapter>> {
+export async function getChapter(id: string): Promise<ActionResultV2<BookChapter>> {
   const supabase = await createSupabaseServerClient()
-  
+
   // Get current user
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) {
-    return { success: false, error: 'Not authenticated' }
+    return { ok: false, error: 'Not authenticated' }
   }
 
   // Fetch chapter with ownership check
@@ -152,12 +143,12 @@ export async function getChapter(id: string): Promise<ActionResult<BookChapter>>
 
   if (error) {
     console.error('[getChapter] Error:', error)
-    return { success: false, error: 'Chapter not found' }
+    return { ok: false, error: 'Chapter not found' }
   }
 
   // Strip the joined book_sources data
   const { book_sources: _, ...chapter } = data
-  return { success: true, data: chapter as BookChapter }
+  return { ok: true, data: chapter as BookChapter }
 }
 
 // ============================================
@@ -166,19 +157,19 @@ export async function getChapter(id: string): Promise<ActionResult<BookChapter>>
 
 export async function updateChapter(
   input: UpdateChapterInput
-): Promise<ActionResult<BookChapter>> {
+): Promise<ActionResultV2<BookChapter>> {
   const supabase = await createSupabaseServerClient()
-  
+
   // Get current user
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) {
-    return { success: false, error: 'Not authenticated' }
+    return { ok: false, error: 'Not authenticated' }
   }
 
   // Validate input
   const validation = updateChapterSchema.safeParse(input)
   if (!validation.success) {
-    return { success: false, error: validation.error.issues[0]?.message || 'Invalid input' }
+    return { ok: false, error: validation.error.issues[0]?.message || 'Invalid input' }
   }
 
   const { id, ...updates } = validation.data
@@ -192,7 +183,7 @@ export async function updateChapter(
   }
 
   if (Object.keys(updateData).length === 0) {
-    return { success: false, error: 'No fields to update' }
+    return { ok: false, error: 'No fields to update' }
   }
 
   // First verify ownership
@@ -204,7 +195,7 @@ export async function updateChapter(
     .single()
 
   if (!existing) {
-    return { success: false, error: 'Chapter not found or not owned by user' }
+    return { ok: false, error: 'Chapter not found or not owned by user' }
   }
 
   // Update chapter
@@ -217,26 +208,26 @@ export async function updateChapter(
 
   if (error) {
     if (error.code === '23505') {
-      return { success: false, error: `Chapter ${updates.chapter_number} already exists in this book` }
+      return { ok: false, error: `Chapter ${updates.chapter_number} already exists in this book` }
     }
     console.error('[updateChapter] Error:', error)
-    return { success: false, error: 'Failed to update chapter' }
+    return { ok: false, error: 'Failed to update chapter' }
   }
 
-  return { success: true, data: data as BookChapter }
+  return { ok: true, data: data as BookChapter }
 }
 
 // ============================================
 // Delete Chapter
 // ============================================
 
-export async function deleteChapter(id: string): Promise<ActionResult> {
+export async function deleteChapter(id: string): Promise<ActionResultV2> {
   const supabase = await createSupabaseServerClient()
-  
+
   // Get current user
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) {
-    return { success: false, error: 'Not authenticated' }
+    return { ok: false, error: 'Not authenticated' }
   }
 
   // Verify ownership before delete
@@ -248,7 +239,7 @@ export async function deleteChapter(id: string): Promise<ActionResult> {
     .single()
 
   if (!existing) {
-    return { success: false, error: 'Chapter not found or not owned by user' }
+    return { ok: false, error: 'Chapter not found or not owned by user' }
   }
 
   // Delete chapter (card_templates.chapter_id will be set to NULL)
@@ -259,10 +250,10 @@ export async function deleteChapter(id: string): Promise<ActionResult> {
 
   if (error) {
     console.error('[deleteChapter] Error:', error)
-    return { success: false, error: 'Failed to delete chapter' }
+    return { ok: false, error: 'Failed to delete chapter' }
   }
 
-  return { success: true }
+  return { ok: true }
 }
 
 // ============================================
@@ -271,19 +262,19 @@ export async function deleteChapter(id: string): Promise<ActionResult> {
 
 export async function createMatchingGroup(
   input: CreateMatchingGroupInput
-): Promise<ActionResult<MatchingGroup>> {
+): Promise<ActionResultV2<MatchingGroup>> {
   const supabase = await createSupabaseServerClient()
-  
+
   // Get current user
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) {
-    return { success: false, error: 'Not authenticated' }
+    return { ok: false, error: 'Not authenticated' }
   }
 
   // Validate input
   const validation = createMatchingGroupSchema.safeParse(input)
   if (!validation.success) {
-    return { success: false, error: validation.error.issues[0]?.message || 'Invalid input' }
+    return { ok: false, error: validation.error.issues[0]?.message || 'Invalid input' }
   }
 
   const { chapter_id, common_options, instruction_text } = validation.data
@@ -298,7 +289,7 @@ export async function createMatchingGroup(
       .single()
 
     if (!chapter) {
-      return { success: false, error: 'Chapter not found or not owned by user' }
+      return { ok: false, error: 'Chapter not found or not owned by user' }
     }
   }
 
@@ -315,10 +306,10 @@ export async function createMatchingGroup(
 
   if (error) {
     console.error('[createMatchingGroup] Error:', error)
-    return { success: false, error: 'Failed to create matching group' }
+    return { ok: false, error: 'Failed to create matching group' }
   }
 
-  return { success: true, data: data as MatchingGroup }
+  return { ok: true, data: data as MatchingGroup }
 }
 
 // ============================================
@@ -331,13 +322,13 @@ export async function createMatchingGroup(
  */
 export async function getCardsByChapter(
   chapterId: string
-): Promise<ActionResult<CardTemplateV11[]>> {
+): Promise<ActionResultV2<CardTemplateV11[]>> {
   const supabase = await createSupabaseServerClient()
-  
+
   // Get current user
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) {
-    return { success: false, error: 'Not authenticated' }
+    return { ok: false, error: 'Not authenticated' }
   }
 
   // Fetch cards with chapter_id match
@@ -348,10 +339,10 @@ export async function getCardsByChapter(
 
   if (error) {
     console.error('[getCardsByChapter] Error:', error)
-    return { success: false, error: 'Failed to fetch cards' }
+    return { ok: false, error: 'Failed to fetch cards' }
   }
 
-  return { success: true, data: data as CardTemplateV11[] }
+  return { ok: true, data: data as CardTemplateV11[] }
 }
 
 // ============================================
@@ -360,9 +351,9 @@ export async function getCardsByChapter(
 
 export async function getCardCountByChapter(
   chapterId: string
-): Promise<ActionResult<number>> {
+): Promise<ActionResultV2<number>> {
   const supabase = await createSupabaseServerClient()
-  
+
   const { count, error } = await supabase
     .from('card_templates')
     .select('*', { count: 'exact', head: true })
@@ -370,8 +361,8 @@ export async function getCardCountByChapter(
 
   if (error) {
     console.error('[getCardCountByChapter] Error:', error)
-    return { success: false, error: 'Failed to count cards' }
+    return { ok: false, error: 'Failed to count cards' }
   }
 
-  return { success: true, data: count ?? 0 }
+  return { ok: true, data: count ?? 0 }
 }

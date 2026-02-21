@@ -45,9 +45,9 @@ export function SingleCardPreviewModal({
 
       const result = await getCardWithProgress(cardTemplateId!)
 
-      if (result.success && result.card) {
-        setCard(result.card)
-      } else {
+      if (result.ok && result.data) {
+        setCard(result.data)
+      } else if (!result.ok) {
         setError(result.error || 'Failed to load card')
       }
 

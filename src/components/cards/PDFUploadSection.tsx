@@ -36,10 +36,10 @@ export function PDFUploadSection({ deckId, linkedSource }: PDFUploadSectionProps
 
       const result = await uploadSourceAction(formData)
 
-      if (!result.success) {
+      if (!result.ok) {
         setError(result.error || 'Upload failed')
       } else if (result.data) {
-        setCurrentSource(result.data as Source)
+        setCurrentSource(result.data.source)
       }
     } catch (err) {
       // Extract meaningful error message from the exception

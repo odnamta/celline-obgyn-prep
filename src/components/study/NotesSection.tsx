@@ -54,7 +54,7 @@ export function NotesSection({
       
       const result = await saveCardNotes(cardTemplateId, notesValue)
       
-      if (result.success) {
+      if (result.ok) {
         setSaveStatus('saved')
         setLastSavedNotes(notesValue)
         onSave?.(notesValue)
