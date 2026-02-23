@@ -12,7 +12,8 @@ import { MySkillProfile } from '@/components/skills/MySkillProfile'
 import type { CourseWithProgress } from '@/components/course'
 import { getStudyLogs, getUserStats } from '@/actions/stats-actions'
 import { getGlobalStats } from '@/actions/global-study-actions'
-import { getDashboardInsights } from '@/actions/analytics-actions'
+import { getDashboardInsights, getSetupChecklistData } from '@/actions/analytics-actions'
+import { SetupChecklist } from '@/components/dashboard/SetupChecklist'
 import { resolveActiveOrg } from '@/lib/org-context'
 import { hasMinimumRole } from '@/lib/org-authorization'
 import type { DeckWithDueCount, Course, Lesson, LessonProgress, Tag } from '@/types/database'
@@ -34,12 +35,13 @@ export default async function DashboardPage() {
   const supabase = await createSupabaseServerClient()
   const now = new Date().toISOString()
 
-  // Parallelize 6 independent top-level queries
+  // Parallelize 7 independent top-level queries
   const [
     studyLogsResult,
     userStatsResult,
     globalStatsResult,
     insightsResult,
+    checklistResult,
     { data: userTags },
     { data: courses, error: coursesError },
   ] = await Promise.all([
@@ -51,6 +53,8 @@ export default async function DashboardPage() {
     getGlobalStats(),
     // V11.7: Fetch dashboard insights for weakest concepts
     getDashboardInsights(),
+    // V23: Fetch setup checklist data
+    getSetupChecklistData(),
     // V11.7: Fetch user's tags for tag filter (topic and source only)
     supabase
       .from('tags')
@@ -70,6 +74,7 @@ export default async function DashboardPage() {
   const userStats = userStatsResult.ok ? (userStatsResult.data?.stats ?? null) : null
   const globalStats = globalStatsResult.ok ? globalStatsResult.data! : { totalDueCount: 0, completedToday: 0, currentStreak: 0, hasNewCards: false }
   const weakestConcepts = insightsResult.ok ? (insightsResult.data?.weakestConcepts || []) : []
+  const checklistItems = (checklistResult.ok && checklistResult.data?.items) ? checklistResult.data.items : []
   const tags: Tag[] = (userTags || []) as Tag[]
 
   // Fetch all units for user's courses
@@ -233,6 +238,11 @@ export default async function DashboardPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
+      {/* V23: Setup Checklist */}
+      {checklistItems.length > 0 && (
+        <SetupChecklist items={checklistItems} />
+      )}
+
       {/* V13: Org Stats for Creators */}
       <OrgStatsCard />
 

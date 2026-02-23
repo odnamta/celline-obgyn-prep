@@ -7,13 +7,20 @@ import {
   formatDayName,
   findWeakestTopic,
   deriveSubjectFromDecks,
+  findWeakestConcepts,
 } from '@/lib/analytics-utils'
 import type {
   TopicAccuracy,
   DeckProgress,
   DailyActivity,
+  OrgRole,
 } from '@/types/database'
-import type { ActionResultV2 } from '@/types/actions'
+import type { ActionResultV2, DashboardInsightsResult, WeakestConceptSummary } from '@/types/actions'
+import { withUser, withOrgUser, type AuthContext, type OrgAuthContext } from './_helpers'
+import { hasMinimumRole } from '@/lib/org-authorization'
+import { getAdminChecklist, getCandidateChecklist, type ChecklistItem } from '@/lib/setup-checklist'
+import { getGlobalStats } from './global-study-actions'
+import { LOW_CONFIDENCE_THRESHOLD } from '@/lib/constants'
 
 export async function getUserAnalytics(): Promise<ActionResultV2<{ topicAccuracies: TopicAccuracy[]; deckProgress: DeckProgress[]; weakestTopic: TopicAccuracy | null }>> {
   const user = await getUser()
@@ -299,14 +306,77 @@ export async function exportStudyData(): Promise<ActionResultV2<{ csv: string }>
 }
 
 // ============================================
-// V11.7: Dashboard Insights
+// V23: Setup Checklist
 // ============================================
 
-import { withUser, type AuthContext } from './_helpers'
-import { findWeakestConcepts } from '@/lib/analytics-utils'
-import { getGlobalStats } from './global-study-actions'
-import type { DashboardInsightsResult, WeakestConceptSummary } from '@/types/actions'
-import { LOW_CONFIDENCE_THRESHOLD } from '@/lib/constants'
+/**
+ * V23: Get setup checklist data for the dashboard.
+ * Admin+ sees org-level onboarding items; candidates see personal onboarding items.
+ */
+export async function getSetupChecklistData(): Promise<
+  ActionResultV2<{ role: OrgRole; items: ChecklistItem[] }>
+> {
+  return withOrgUser(async ({ user, supabase, org, role }: OrgAuthContext) => {
+    if (hasMinimumRole(role, 'admin')) {
+      // Admin/Owner: count org-level resources
+      const [deckRes, cardRes, assessmentRes, memberRes] = await Promise.all([
+        supabase
+          .from('deck_templates')
+          .select('id', { count: 'exact', head: true })
+          .eq('org_id', org.id),
+        supabase
+          .from('card_templates')
+          .select('id', { count: 'exact', head: true })
+          .eq('org_id', org.id),
+        supabase
+          .from('assessments')
+          .select('id', { count: 'exact', head: true })
+          .eq('org_id', org.id)
+          .eq('status', 'published'),
+        supabase
+          .from('organization_members')
+          .select('id', { count: 'exact', head: true })
+          .eq('org_id', org.id),
+      ])
+
+      const items = getAdminChecklist({
+        deckCount: deckRes.count ?? 0,
+        cardCount: cardRes.count ?? 0,
+        assessmentCount: assessmentRes.count ?? 0,
+        memberCount: memberRes.count ?? 0,
+      })
+
+      return { ok: true, data: { role, items } }
+    }
+
+    // Candidate: check profile + assessment progress
+    const [profileRes, sessionRes] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('full_name, avatar_url')
+        .eq('id', user.id)
+        .single(),
+      supabase
+        .from('assessment_sessions')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('status', 'completed'),
+    ])
+
+    const profile = profileRes.data
+    const items = getCandidateChecklist({
+      hasName: !!profile?.full_name,
+      hasAvatar: !!profile?.avatar_url,
+      assessmentsTaken: sessionRes.count ?? 0,
+    })
+
+    return { ok: true, data: { role, items } }
+  })
+}
+
+// ============================================
+// V11.7: Dashboard Insights
+// ============================================
 
 /**
  * V11.7: Get dashboard insights including due count and weakest concepts.
