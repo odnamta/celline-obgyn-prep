@@ -190,6 +190,7 @@ export interface AssessmentSession {
   tab_switch_count: number
   tab_switch_log: TabSwitchEntry[]
   ip_address: string | null
+  certificate_url: string | null
   created_at: string
 }
 
