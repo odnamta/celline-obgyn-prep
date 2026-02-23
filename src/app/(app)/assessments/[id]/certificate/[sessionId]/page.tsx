@@ -10,9 +10,10 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Image from 'next/image'
-import { ArrowLeft, Printer, Award } from 'lucide-react'
+import { ArrowLeft, Printer, Award, Download } from 'lucide-react'
 import { useOrg } from '@/components/providers/OrgProvider'
 import { getAssessment, getSessionResults } from '@/actions/assessment-actions'
+import { generateCertificate } from '@/actions/certificate-actions'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import type { Assessment, AssessmentSession } from '@/types/database'
@@ -31,6 +32,16 @@ export default function CertificatePage() {
   const [candidateName, setCandidateName] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [generating, setGenerating] = useState(false)
+
+  async function handleGenerate() {
+    setGenerating(true)
+    const result = await generateCertificate(sessionId)
+    if (result.ok && result.data) {
+      setSession((prev) => prev ? { ...prev, certificate_url: result.data!.url } : prev)
+    }
+    setGenerating(false)
+  }
 
   useEffect(() => {
     async function load() {
@@ -106,10 +117,25 @@ export default function CertificatePage() {
           <ArrowLeft className="h-4 w-4" />
           Back
         </button>
-        <Button size="sm" variant="secondary" onClick={() => window.print()}>
-          <Printer className="h-4 w-4 mr-2" />
-          Print Certificate
-        </Button>
+        <div className="flex items-center gap-2">
+          {session.certificate_url ? (
+            <a href={session.certificate_url} target="_blank" rel="noopener noreferrer">
+              <Button size="sm">
+                <Download className="h-4 w-4 mr-2" />
+                Download PDF
+              </Button>
+            </a>
+          ) : (
+            <Button size="sm" onClick={handleGenerate} disabled={generating}>
+              <Download className="h-4 w-4 mr-2" />
+              {generating ? 'Generating...' : 'Generate PDF'}
+            </Button>
+          )}
+          <Button size="sm" variant="secondary" onClick={() => window.print()}>
+            <Printer className="h-4 w-4 mr-2" />
+            Print
+          </Button>
+        </div>
       </div>
 
       {/* Certificate — printable */}

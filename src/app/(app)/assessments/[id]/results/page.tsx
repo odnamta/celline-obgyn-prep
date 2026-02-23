@@ -345,14 +345,24 @@ ${answers.map((a, i) => `<tr>
           Download PDF Report
         </Button>
         {certificationEnabled && passed && (
-          <Button
-            size="sm"
-            variant="secondary"
-            className="ml-2"
-            onClick={() => router.push(`/assessments/${assessmentId}/certificate/${sessionId}`)}
-          >
-            View Certificate
-          </Button>
+          <>
+            {session.certificate_url && (
+              <a href={session.certificate_url} target="_blank" rel="noopener noreferrer">
+                <Button size="sm" variant="secondary" className="ml-2">
+                  <Download className="h-4 w-4 mr-1" />
+                  Download Certificate
+                </Button>
+              </a>
+            )}
+            <Button
+              size="sm"
+              variant="secondary"
+              className="ml-2"
+              onClick={() => router.push(`/assessments/${assessmentId}/certificate/${sessionId}`)}
+            >
+              View Certificate
+            </Button>
+          </>
         )}
       </div>
 
@@ -502,7 +512,15 @@ ${answers.map((a, i) => `<tr>
 
       {/* Certificate link for passed sessions (gated by feature flag) */}
       {passed && certificationEnabled && (
-        <div className="mt-6 text-center">
+        <div className="mt-6 text-center flex items-center justify-center gap-2">
+          {session.certificate_url && (
+            <a href={session.certificate_url} target="_blank" rel="noopener noreferrer">
+              <Button variant="secondary">
+                <Download className="h-4 w-4 mr-2" />
+                Download Certificate
+              </Button>
+            </a>
+          )}
           <Button
             variant="secondary"
             onClick={() => router.push(`/assessments/${assessmentId}/certificate/${sessionId}`)}
