@@ -18,6 +18,12 @@ import type { AssessmentTemplate, AssessmentTemplateConfig } from '@/types/datab
 import { notifyOrgCandidates } from '@/actions/notification-actions'
 import { logAuditEvent } from '@/actions/audit-actions'
 import { generateCertificate } from '@/actions/certificate-actions'
+import {
+  dispatchResultEmail,
+  dispatchCertificateEmail,
+  buildUnsubscribeUrl,
+  buildFullUrl,
+} from '@/lib/email-dispatch'
 import type {
   Assessment,
   AssessmentSession,
@@ -759,7 +765,7 @@ export async function submitAnswer(
 export async function completeSession(
   sessionId: string
 ): Promise<ActionResultV2<{ score: number; passed: boolean; total: number; correct: number }>> {
-  return withOrgUser(async ({ user, supabase }) => {
+  return withOrgUser(async ({ user, supabase, org }) => {
     // Verify session
     const { data: session } = await supabase
       .from('assessment_sessions')
@@ -805,6 +811,88 @@ export async function completeSession(
       generateCertificate(sessionId).catch((err) => {
         console.warn('[completeSession] Certificate generation failed:', err)
       })
+    }
+
+    // Fire-and-forget email dispatch for pass/fail result
+    try {
+      const serviceClient = await createSupabaseServiceClient()
+      const [{ data: profile }, { data: assessmentInfo }] = await Promise.all([
+        serviceClient
+          .from('profiles')
+          .select('email, full_name, email_notifications')
+          .eq('id', user.id)
+          .single(),
+        supabase
+          .from('assessments')
+          .select('title')
+          .eq('id', session.assessment_id)
+          .single(),
+      ])
+
+      if (profile && profile.email_notifications !== false && assessmentInfo) {
+        const orgName = org.name
+        const candidateName = profile.full_name ?? profile.email
+        const unsubUrl = buildUnsubscribeUrl(user.id)
+
+        if (passed) {
+          // For passed candidates, send CertificateDelivery (includes score)
+          // Delay slightly to let certificate generation complete
+          setTimeout(async () => {
+            try {
+              // Re-fetch session to get certificate_url
+              const { data: updatedSession } = await supabase
+                .from('assessment_sessions')
+                .select('certificate_url')
+                .eq('id', sessionId)
+                .single()
+
+              const certUrl = updatedSession?.certificate_url
+              if (certUrl) {
+                await dispatchCertificateEmail({
+                  to: profile.email,
+                  subject: `Sertifikat: ${assessmentInfo.title}`,
+                  orgName,
+                  candidateName,
+                  assessmentTitle: assessmentInfo.title,
+                  score,
+                  certificateUrl: buildFullUrl(certUrl),
+                  unsubscribeUrl: unsubUrl,
+                })
+              } else {
+                // Fallback: send result notification if certificate not ready
+                await dispatchResultEmail({
+                  to: profile.email,
+                  subject: `Hasil Asesmen: ${assessmentInfo.title} — LULUS`,
+                  orgName,
+                  candidateName,
+                  assessmentTitle: assessmentInfo.title,
+                  score,
+                  passed: true,
+                  actionUrl: buildFullUrl(`/assessments/${session.assessment_id}/results/${sessionId}`),
+                  unsubscribeUrl: unsubUrl,
+                })
+              }
+            } catch (err) {
+              console.warn('[email] certificate/result email failed:', err)
+            }
+          }, 5000)
+        } else {
+          // For failed candidates, send ResultNotification with retake link
+          dispatchResultEmail({
+            to: profile.email,
+            subject: `Hasil Asesmen: ${assessmentInfo.title} — TIDAK LULUS`,
+            orgName,
+            candidateName,
+            assessmentTitle: assessmentInfo.title,
+            score,
+            passed: false,
+            actionUrl: buildFullUrl(`/assessments/${session.assessment_id}/take`),
+            unsubscribeUrl: unsubUrl,
+          }).catch((err) => console.warn('[email] result notification failed:', err))
+        }
+      }
+    } catch (emailError) {
+      console.warn('[completeSession] Email dispatch failed:', emailError)
     }
 
     // V19: Update skill scores if skills_mapping is enabled

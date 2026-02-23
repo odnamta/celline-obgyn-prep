@@ -9,6 +9,11 @@ import { RATE_LIMITS } from '@/lib/rate-limit'
 import { createSupabaseServiceClient } from '@/lib/supabase/server'
 import { hasMinimumRole } from '@/lib/org-authorization'
 import type { ActionResultV2 } from '@/types/actions'
+import {
+  dispatchAssessmentEmail,
+  buildUnsubscribeUrl,
+  buildFullUrl,
+} from '@/lib/email-dispatch'
 
 export interface Notification {
   id: string
@@ -178,6 +183,25 @@ export async function notifyOrgCandidates(
       return { ok: false, error: error.message }
     }
 
+    // Fire-and-forget email dispatch
+    const { data: profiles } = await serviceClient
+      .from('profiles')
+      .select('id, email, email_notifications')
+      .in('id', members.map((m) => m.user_id))
+
+    for (const profile of profiles ?? []) {
+      if (profile.email_notifications === false) continue
+      dispatchAssessmentEmail({
+        to: profile.email,
+        subject: title,
+        orgName: org.name,
+        assessmentTitle: title,
+        message: body,
+        actionUrl: buildFullUrl(link),
+        unsubscribeUrl: buildUnsubscribeUrl(profile.id),
+      }).catch((err) => console.warn('[email] notifyOrgCandidates failed:', err))
+    }
+
     return { ok: true }
   }, undefined, RATE_LIMITS.sensitive)
 }
@@ -253,6 +277,25 @@ export async function sendAssessmentReminder(
       return { ok: false, error: insertError.message }
     }
 
+    // Fire-and-forget email dispatch
+    const { data: profiles } = await serviceClient
+      .from('profiles')
+      .select('id, email, email_notifications')
+      .in('id', pendingMembers.map((m) => m.user_id))
+
+    for (const profile of profiles ?? []) {
+      if (profile.email_notifications === false) continue
+      dispatchAssessmentEmail({
+        to: profile.email,
+        subject: 'Assessment Reminder',
+        orgName: org.name,
+        assessmentTitle: assessment.title,
+        message: `Don't forget to complete "${assessment.title}".`,
+        actionUrl: buildFullUrl('/assessments'),
+        unsubscribeUrl: buildUnsubscribeUrl(profile.id),
+      }).catch((err) => console.warn('[email] sendAssessmentReminder failed:', err))
+    }
+
     return { ok: true, data: { notified: pendingMembers.length } }
   }, undefined, RATE_LIMITS.sensitive)
 }
@@ -325,7 +368,29 @@ export async function sendDeadlineReminders(): Promise<ActionResultV2<{ notified
 
       const serviceClient = await createSupabaseServiceClient()
       const { error } = await serviceClient.from('notifications').insert(rows)
-      if (!error) totalNotified += pending.length
+      if (!error) {
+        totalNotified += pending.length
+
+        // Fire-and-forget email dispatch
+        const { data: profiles } = await serviceClient
+          .from('profiles')
+          .select('id, email, email_notifications')
+          .in('id', pending.map((m) => m.user_id))
+
+        const bodyText = `"${assessment.title}" closes in ${hoursLeft} hour${hoursLeft !== 1 ? 's' : ''}. Complete it before it closes.`
+        for (const profile of profiles ?? []) {
+          if (profile.email_notifications === false) continue
+          dispatchAssessmentEmail({
+            to: profile.email,
+            subject: 'Deadline Approaching',
+            orgName: org.name,
+            assessmentTitle: assessment.title,
+            message: bodyText,
+            actionUrl: buildFullUrl(`/assessments/${assessment.id}/take`),
+            unsubscribeUrl: buildUnsubscribeUrl(profile.id),
+          }).catch((err) => console.warn('[email] sendDeadlineReminders failed:', err))
+        }
+      }
     }
 
     return { ok: true, data: { notified: totalNotified, assessments: assessments.length } }
