@@ -2,6 +2,43 @@
 
 All notable changes to Cekatan will be documented in this file.
 
+## [v0.21.0] - Production Readiness
+
+### Added
+
+#### Phase 1: Onboarding & Polish
+- **Setup checklist** on dashboard: role-aware progress tracker guiding new admins and candidates through initial setup steps
+- **Empty state CTAs**: Context-aware action buttons on Assessments, Library, and Skills pages (role-aware, Indonesian labels)
+- **PWA install prompt delay**: Install banner now requires 2+ visits before showing
+
+#### Phase 2: Certificate Generation
+- **Certificate PDF template**: Professional A4 landscape certificate using @react-pdf/renderer with org branding
+- **Auto-generate certificate on pass**: `completeSession()` triggers fire-and-forget PDF generation, uploads to Supabase Storage
+- **Certificate download UI**: Download PDF and Generate PDF buttons on certificate and results pages
+- **Public verification page**: `/verify/[certId]` — server-rendered, no auth required, shows verified badge
+
+#### Phase 3: Candidate Reporting
+- **Candidate profile server actions**: `getCandidateFullProfile()` and `getCandidateScoreProgression()` for enriched candidate data
+- **Candidate profile redesign**: Avatar, role badges, joined date, score progression chart (Recharts), skill radar
+- **Candidate list filters**: Role profile dropdown and pass/fail toggle on candidate listing
+- **Candidate PDF report export**: One-page PDF summary with stats, scores table, and skill scores
+
+#### Phase 4: Email Notifications
+- **Resend email infrastructure**: `sendEmail()` utility with graceful degradation (no-op without API key)
+- **3 email templates**: AssessmentNotification, ResultNotification, CertificateDelivery using @react-email/components
+- **Email dispatch on notifications**: Emails sent alongside in-app notifications for published assessments, reminders, deadlines, and results
+- **Email preferences**: Profile page toggle syncs with `profiles.email_notifications` column
+- **One-click unsubscribe**: Public `/unsubscribe/[token]` page for email opt-out
+
+### Dependencies Added
+- `@react-pdf/renderer` — PDF generation for certificates and reports
+- `resend` — Email delivery service
+- `@react-email/components` — React-based email templates
+
+### Migrations
+- `migrate-v23-certificates.sql` — `certificate_url` column on `assessment_sessions`
+- `migrate-v24-email-preferences.sql` — `email_notifications` column on `profiles`
+
 ## [v20.4] - E2E Tests & API Route Cleanup
 
 ### Added
