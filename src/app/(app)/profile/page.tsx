@@ -51,8 +51,20 @@ export default function ProfilePage() {
         setDisplayName(user.user_metadata?.full_name || user.user_metadata?.name || '')
         setDepartment(user.user_metadata?.department || '')
         setTimezone(user.user_metadata?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone)
-        setEmailNotifications(user.user_metadata?.email_notifications !== false)
         setExamReminders(user.user_metadata?.exam_reminders !== false)
+
+        // Read email_notifications from profiles table (source of truth for email dispatch)
+        // Falls back to user_metadata if profiles column doesn't exist yet
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('email_notifications')
+          .eq('id', user.id)
+          .single()
+        if (profile && profile.email_notifications !== undefined && profile.email_notifications !== null) {
+          setEmailNotifications(profile.email_notifications !== false)
+        } else {
+          setEmailNotifications(user.user_metadata?.email_notifications !== false)
+        }
       }
 
       // Load assessment history
@@ -89,6 +101,15 @@ export default function ProfilePage() {
         setError(updateError.message)
         setIsSaving(false)
         return
+      }
+
+      // Sync email_notifications to profiles table (used by email dispatch system)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        await supabase
+          .from('profiles')
+          .update({ email_notifications: emailNotifications })
+          .eq('id', user.id)
       }
 
       setSuccess('Profile updated successfully!')
