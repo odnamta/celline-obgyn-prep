@@ -205,3 +205,18 @@ export type InviteMemberInput = z.infer<typeof inviteMemberSchema>;
 export type CreateAssessmentInput = z.infer<typeof createAssessmentSchema>;
 export type UpdateAssessmentInput = z.infer<typeof updateAssessmentSchema>;
 export type SubmitAnswerInput = z.infer<typeof submitAnswerSchema>;
+
+// ============================================
+// Public Test Link Validation Schemas
+// ============================================
+
+export const publicRegistrationSchema = z.object({
+  name: z.string().min(2, 'Nama minimal 2 karakter').max(100, 'Nama terlalu panjang').trim(),
+  email: z.string().email('Format email tidak valid').optional().or(z.literal('')),
+  phone: z.string().min(10, 'Nomor HP minimal 10 digit').max(15, 'Nomor HP terlalu panjang').regex(/^[0-9+\-\s]+$/, 'Format nomor HP tidak valid').optional().or(z.literal('')),
+}).refine(
+  (data) => (data.email && data.email.length > 0) || (data.phone && data.phone.length > 0),
+  { message: 'Email atau nomor HP harus diisi', path: ['email'] }
+)
+
+export type PublicRegistrationInput = z.infer<typeof publicRegistrationSchema>;
