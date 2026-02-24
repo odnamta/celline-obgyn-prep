@@ -83,6 +83,7 @@ export interface Profile {
   email: string
   full_name: string | null
   avatar_url: string | null
+  phone: string | null
   email_notifications?: boolean
   created_at: string
   updated_at: string
@@ -166,6 +167,7 @@ export interface Assessment {
   start_date: string | null
   end_date: string | null
   access_code: string | null
+  public_code: string | null
   status: AssessmentStatus
   created_by: string
   created_at: string
