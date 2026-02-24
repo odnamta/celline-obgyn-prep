@@ -47,6 +47,7 @@ import { useToast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import type { Assessment, AssessmentSession } from '@/types/database'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { usePageTitle } from '@/hooks/use-page-title'
@@ -64,7 +65,7 @@ type EnrichedAnswer = {
   explanation: string | null
 }
 
-type SessionWithEmail = AssessmentSession & { user_email: string }
+type SessionWithEmail = AssessmentSession & { user_email: string; user_full_name: string | null; user_phone: string | null }
 
 export default function AssessmentResultsPage() {
   usePageTitle('Assessment Results')
@@ -634,6 +635,22 @@ type QuestionStat = {
   avgTimeSeconds: number | null
 }
 
+function buildScoreDistribution(sessions: Array<{ score: number | null }>) {
+  const buckets = Array.from({ length: 10 }, (_, i) => ({
+    range: `${i * 10 + 1}-${(i + 1) * 10}`,
+    count: 0,
+  }))
+  // Handle 0 score in first bucket
+  buckets[0].range = '0-10'
+
+  sessions.forEach((s) => {
+    if (s.score == null) return
+    const idx = Math.min(Math.floor(s.score / 10), 9)
+    buckets[idx].count++
+  })
+  return buckets
+}
+
 function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
   const router = useRouter()
   const { org } = useOrg()
@@ -802,6 +819,22 @@ function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
             </div>
             <div className="text-xs text-slate-500">Pass Rate</div>
           </div>
+        </div>
+      )}
+
+      {/* Score Distribution Histogram */}
+      {sessions.length > 0 && (
+        <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 mb-8">
+          <h3 className="font-medium text-slate-900 dark:text-slate-100 mb-4">Distribusi Skor</h3>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={buildScoreDistribution(sessions)}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="range" fontSize={12} />
+              <YAxis allowDecimals={false} fontSize={12} />
+              <Tooltip />
+              <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       )}
 
@@ -1006,10 +1039,12 @@ function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
             All Attempts
           </h2>
           <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-x-auto">
-            <table className="w-full text-sm min-w-[700px]" aria-label="Candidate attempt results">
+            <table className="w-full text-sm min-w-[900px]" aria-label="Candidate attempt results">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-800/50 text-left">
-                  <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Candidate</th>
+                  <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Nama</th>
+                  <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Email</th>
+                  <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Telepon</th>
                   <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Score</th>
                   <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Status</th>
                   {proctoringEnabled && <th className="px-4 py-3 font-medium text-slate-600 dark:text-slate-400">Tab Switches</th>}
@@ -1021,7 +1056,13 @@ function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
                 {sessions.slice(0, sessionLimit).map((s) => (
                   <tr key={s.id} className="bg-white dark:bg-slate-800">
                     <td className="px-4 py-3 text-slate-900 dark:text-slate-100">
+                      {s.user_full_name || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-xs">
                       {s.user_email}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-xs">
+                      {s.user_phone || '—'}
                     </td>
                     <td className="px-4 py-3">
                       {(s.status === 'completed' || s.status === 'timed_out') && s.score !== null ? (

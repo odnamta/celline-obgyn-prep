@@ -1292,7 +1292,7 @@ export async function getExistingAnswers(
 export async function getAssessmentResultsDetailed(
   assessmentId: string
 ): Promise<ActionResultV2<{
-  sessions: (AssessmentSession & { user_email: string })[]
+  sessions: (AssessmentSession & { user_email: string; user_full_name: string | null; user_phone: string | null })[]
   stats: { avgScore: number; passRate: number; totalAttempts: number }
 }>> {
   return withOrgUser(async ({ supabase, org, role }) => {
@@ -1321,26 +1321,31 @@ export async function getAssessmentResultsDetailed(
       return a.org_id === org.id
     })
 
-    // Bulk-fetch user emails from profiles table
+    // Bulk-fetch user profiles (email, full_name, phone) from profiles table
     const userIds = [...new Set(orgSessions.map((s) => s.user_id))]
-    const userEmailMap = new Map<string, string>()
+    const userProfileMap = new Map<string, { email: string; full_name: string | null; phone: string | null }>()
 
     if (userIds.length > 0) {
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, email')
+        .select('id, email, full_name, phone')
         .in('id', userIds)
       if (profiles) {
         for (const p of profiles) {
-          userEmailMap.set(p.id, p.email)
+          userProfileMap.set(p.id, { email: p.email, full_name: p.full_name, phone: p.phone })
         }
       }
     }
 
-    const sessions = orgSessions.map((s) => ({
-      ...s,
-      user_email: userEmailMap.get(s.user_id) ?? `user-${s.user_id.slice(0, 8)}`,
-    })) as (AssessmentSession & { user_email: string })[]
+    const sessions = orgSessions.map((s) => {
+      const profile = userProfileMap.get(s.user_id)
+      return {
+        ...s,
+        user_email: profile?.email ?? `user-${s.user_id.slice(0, 8)}`,
+        user_full_name: profile?.full_name ?? null,
+        user_phone: profile?.phone ?? null,
+      }
+    }) as (AssessmentSession & { user_email: string; user_full_name: string | null; user_phone: string | null })[]
 
     // Calculate stats from finished sessions (completed + timed_out)
     const finished = sessions.filter((s) => s.status === 'completed' || s.status === 'timed_out')
@@ -2099,25 +2104,31 @@ export async function exportResultsCsv(
       return a.org_id === org.id
     })
 
-    // Fetch emails
+    // Fetch profiles (email, full_name, phone)
     const userIds = [...new Set(orgSessions.map((s) => s.user_id))]
-    const emailMap = new Map<string, string>()
+    const profileMap = new Map<string, { email: string; full_name: string | null; phone: string | null }>()
     if (userIds.length > 0) {
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, email')
+        .select('id, email, full_name, phone')
         .in('id', userIds)
       if (profiles) {
-        for (const p of profiles) emailMap.set(p.id, p.email)
+        for (const p of profiles) profileMap.set(p.id, { email: p.email, full_name: p.full_name, phone: p.phone })
       }
     }
 
-    // Build CSV
-    const header = 'Candidate,Status,Score,Passed,Tab Switches,Started At,Completed At'
+    // Build CSV with BOM for Excel compatibility
+    const BOM = '\uFEFF'
+    const header = 'Nama,Email,Telepon,Status,Score,Passed,Tab Switches,Started At,Completed At'
     const rows = orgSessions.map((s) => {
-      const email = emailMap.get(s.user_id) ?? `user-${s.user_id.slice(0, 8)}`
+      const profile = profileMap.get(s.user_id)
+      const name = (profile?.full_name ?? '').replace(/,/g, ' ')
+      const email = profile?.email ?? `user-${s.user_id.slice(0, 8)}`
+      const phone = profile?.phone ?? ''
       return [
+        `"${name}"`,
         `"${email}"`,
+        `"${phone}"`,
         s.status,
         s.score ?? '',
         s.passed ? 'Yes' : s.passed === false ? 'No' : '',
@@ -2127,7 +2138,7 @@ export async function exportResultsCsv(
       ].join(',')
     })
 
-    const csv = [header, ...rows].join('\n')
+    const csv = BOM + [header, ...rows].join('\n')
     return { ok: true, data: csv }
   })
 }
