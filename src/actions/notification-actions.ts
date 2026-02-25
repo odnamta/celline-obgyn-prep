@@ -466,6 +466,26 @@ export async function assignAssessmentToAll(
       return { ok: false, error: error.message }
     }
 
+    // Send email notifications (fire-and-forget)
+    const pendingUserIds = pending.map(c => c.user_id)
+    const { data: profiles } = await serviceClient
+      .from('profiles')
+      .select('id, email, full_name, email_notifications')
+      .in('id', pendingUserIds)
+
+    for (const profile of profiles ?? []) {
+      if (!profile.email_notifications) continue
+      dispatchAssessmentEmail({
+        to: profile.email,
+        subject: `Assessment ditugaskan: ${assessment.title} — ${org.name}`,
+        orgName: org.name,
+        assessmentTitle: assessment.title,
+        message: `Anda ditugaskan untuk mengerjakan "${assessment.title}". Silakan kerjakan sebelum batas waktu.`,
+        actionUrl: buildFullUrl(`/assessments/${assessment.id}/take`),
+        unsubscribeUrl: buildUnsubscribeUrl(profile.id),
+      }).catch(() => {})
+    }
+
     return { ok: true, data: { notified: pending.length } }
   }, undefined, RATE_LIMITS.bulk)
 }
@@ -530,6 +550,25 @@ export async function bulkAssignAssessment(
     const { error } = await serviceClient.from('notifications').insert(rows)
     if (error) {
       return { ok: false, error: error.message }
+    }
+
+    // Send email notifications (fire-and-forget)
+    const { data: profiles } = await serviceClient
+      .from('profiles')
+      .select('id, email, full_name, email_notifications')
+      .in('id', pending)
+
+    for (const profile of profiles ?? []) {
+      if (!profile.email_notifications) continue
+      dispatchAssessmentEmail({
+        to: profile.email,
+        subject: `Assessment ditugaskan: ${assessment.title} — ${org.name}`,
+        orgName: org.name,
+        assessmentTitle: assessment.title,
+        message: `Anda ditugaskan untuk mengerjakan "${assessment.title}". Silakan kerjakan sebelum batas waktu.`,
+        actionUrl: buildFullUrl(`/assessments/${assessment.id}/take`),
+        unsubscribeUrl: buildUnsubscribeUrl(profile.id),
+      }).catch(() => {})
     }
 
     return { ok: true, data: { notified: pending.length, alreadyStarted: startedIds.size } }

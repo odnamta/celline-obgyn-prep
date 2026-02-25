@@ -30,13 +30,16 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null)
 
   const isAssessmentMode = org.settings?.features?.assessment_mode
+  const isStudyMode = org.settings?.features?.study_mode
 
   const items: PaletteItem[] = [
     { id: 'dashboard', label: 'Dashboard', href: '/dashboard', icon: <Layout className="h-4 w-4" />, keywords: ['home', 'overview'] },
     { id: 'library', label: 'Library', href: '/library', icon: <BookOpen className="h-4 w-4" />, keywords: ['decks', 'cards', 'browse'] },
-    { id: 'my-library', label: 'My Library', href: '/library/my', icon: <BookOpen className="h-4 w-4" />, keywords: ['my decks', 'created'] },
-    { id: 'study', label: 'Study', href: '/study', icon: <GraduationCap className="h-4 w-4" />, keywords: ['learn', 'flashcards', 'review'] },
-    { id: 'stats', label: 'Statistics', href: '/stats', icon: <BarChart3 className="h-4 w-4" />, keywords: ['progress', 'analytics'] },
+    ...(isStudyMode ? [
+      { id: 'my-library', label: 'My Library', href: '/library/my', icon: <BookOpen className="h-4 w-4" />, keywords: ['my decks', 'created'] },
+      { id: 'study', label: 'Study', href: '/study', icon: <GraduationCap className="h-4 w-4" />, keywords: ['learn', 'flashcards', 'review'] },
+      { id: 'stats', label: 'Statistics', href: '/stats', icon: <BarChart3 className="h-4 w-4" />, keywords: ['progress', 'analytics'] },
+    ] : []),
     { id: 'profile', label: 'Profile', href: '/profile', icon: <User className="h-4 w-4" />, keywords: ['account', 'settings'] },
     { id: 'notifications', label: 'Notifications', href: '/notifications', icon: <Bell className="h-4 w-4" />, keywords: ['alerts', 'messages'] },
     ...(isAssessmentMode ? [
@@ -44,8 +47,10 @@ export function CommandPalette() {
       { id: 'candidates', label: 'Candidates', href: '/assessments/candidates', icon: <Users className="h-4 w-4" />, keywords: ['students', 'members'], minRole: 'creator' as const },
       { id: 'questions', label: 'Question Bank', href: '/assessments/questions', icon: <FileText className="h-4 w-4" />, keywords: ['mcq', 'manage questions'], minRole: 'creator' as const },
     ] : []),
-    { id: 'custom-study', label: 'Custom Study', href: '/study/custom', icon: <Layers className="h-4 w-4" />, keywords: ['practice', 'tag study', 'filtered'] },
-    { id: 'global-study', label: 'Global Study', href: '/study/global', icon: <Globe className="h-4 w-4" />, keywords: ['all decks', 'cross-deck'] },
+    ...(isStudyMode ? [
+      { id: 'custom-study', label: 'Custom Study', href: '/study/custom', icon: <Layers className="h-4 w-4" />, keywords: ['practice', 'tag study', 'filtered'] },
+      { id: 'global-study', label: 'Global Study', href: '/study/global', icon: <Globe className="h-4 w-4" />, keywords: ['all decks', 'cross-deck'] },
+    ] : []),
     ...(isAssessmentMode ? [
       { id: 'templates', label: 'Assessment Templates', href: '/assessments/templates', icon: <ClipboardList className="h-4 w-4" />, keywords: ['template', 'config', 'preset'], minRole: 'creator' as const },
     ] : []),
@@ -53,7 +58,9 @@ export function CommandPalette() {
     { id: 'org-members', label: 'Members', href: `/orgs/${org.slug}/members`, icon: <UserPlus className="h-4 w-4" />, keywords: ['invite', 'team', 'roles'], minRole: 'admin' },
     { id: 'org-analytics', label: 'Organization Analytics', href: `/orgs/${org.slug}/analytics`, icon: <PieChart className="h-4 w-4" />, keywords: ['org stats', 'metrics'], minRole: 'creator' },
     { id: 'audit-log', label: 'Audit Log', href: `/orgs/${org.slug}/audit`, icon: <Shield className="h-4 w-4" />, keywords: ['history', 'activity'], minRole: 'admin' },
-    { id: 'export-data', label: 'Export Study Data', href: '/stats', icon: <Download className="h-4 w-4" />, keywords: ['csv', 'download', 'export'] },
+    ...(isStudyMode ? [
+      { id: 'export-data', label: 'Export Study Data', href: '/stats', icon: <Download className="h-4 w-4" />, keywords: ['csv', 'download', 'export'] },
+    ] : []),
   ]
 
   // Filter by role

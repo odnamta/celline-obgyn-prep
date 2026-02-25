@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { withOrgUser } from './_helpers'
 import { RATE_LIMITS } from '@/lib/rate-limit'
 import { canManageRoleProfiles, canAssignRoles } from '@/lib/skill-authorization'
+import { createSupabaseServiceClient } from '@/lib/supabase/server'
+import { dispatchRoleAssignmentEmail, buildUnsubscribeUrl, buildFullUrl } from '@/lib/email-dispatch'
 import type { ActionResultV2 } from '@/types/actions'
 import type { RoleProfile, RoleSkillRequirement, EmployeeRoleAssignment, SkillPriority } from '@/types/database'
 
@@ -278,6 +280,32 @@ export async function assignEmployeeRole(
         return { ok: false, error: 'Employee already assigned to this role' }
       }
       return { ok: false, error: error.message }
+    }
+
+    // Send email notification (fire-and-forget)
+    const serviceClient = await createSupabaseServiceClient()
+    const { data: profile } = await serviceClient
+      .from('profiles')
+      .select('email, full_name, email_notifications')
+      .eq('id', userId)
+      .single()
+    const { data: roleProfile } = await supabase
+      .from('role_profiles')
+      .select('name')
+      .eq('id', roleProfileId)
+      .single()
+
+    if (profile?.email_notifications && roleProfile) {
+      dispatchRoleAssignmentEmail({
+        to: profile.email,
+        subject: `Role baru: ${roleProfile.name} — ${org.name}`,
+        orgName: org.name,
+        employeeName: profile.full_name || profile.email,
+        roleName: roleProfile.name,
+        message: `Anda telah ditugaskan ke role "${roleProfile.name}" di ${org.name}. Lihat skill yang diperlukan dan mulai tingkatkan kompetensi Anda.`,
+        actionUrl: buildFullUrl('/skills'),
+        unsubscribeUrl: buildUnsubscribeUrl(userId),
+      }).catch(() => {})
     }
 
     revalidatePath('/skills')

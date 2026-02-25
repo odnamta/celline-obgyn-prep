@@ -1923,6 +1923,7 @@ export async function getOrgCandidateList(): Promise<ActionResultV2<
     totalCompleted: number
     avgScore: number
     lastActiveAt: string | null
+    roleProfileIds: string[]
   }>
 >> {
   return withOrgUser(async ({ supabase, org, role }) => {
@@ -1964,6 +1965,18 @@ export async function getOrgCandidateList(): Promise<ActionResultV2<
       return a.org_id === org.id
     })
 
+    // Role profile assignments
+    const { data: roleAssignments } = await supabase
+      .from('employee_role_assignments')
+      .select('user_id, role_profile_id')
+      .in('user_id', userIds)
+    const userRoles = new Map<string, string[]>()
+    for (const ra of roleAssignments ?? []) {
+      const existing = userRoles.get(ra.user_id) ?? []
+      existing.push(ra.role_profile_id)
+      userRoles.set(ra.user_id, existing)
+    }
+
     // Aggregate per user
     const userStats = new Map<string, { total: number; scoreSum: number; lastAt: string | null }>()
     for (const s of orgSessions) {
@@ -1986,6 +1999,7 @@ export async function getOrgCandidateList(): Promise<ActionResultV2<
         totalCompleted: stats?.total ?? 0,
         avgScore: stats && stats.total > 0 ? Math.round(stats.scoreSum / stats.total) : 0,
         lastActiveAt: stats?.lastAt ?? null,
+        roleProfileIds: userRoles.get(uid) ?? [],
       }
     })
 
@@ -3104,5 +3118,139 @@ export async function getCandidateScoreProgression(
     }))
 
     return { ok: true, data: progression }
+  })
+}
+
+/**
+ * Get violation heatmap data: tab switches mapped to question positions.
+ * Correlates tab_switch_log timestamps with answer timestamps to determine
+ * which question was active during each violation. Creator+ only.
+ */
+export async function getViolationHeatmap(
+  assessmentId: string
+): Promise<ActionResultV2<{
+  questions: Array<{ index: number; stem: string; violationCount: number }>
+  totalViolations: number
+  flaggedSessionCount: number
+}>> {
+  return withOrgUser(async ({ supabase, org, role }) => {
+    if (!hasMinimumRole(role, 'creator')) {
+      return { ok: false, error: 'Insufficient permissions' }
+    }
+
+    // Get flagged sessions with tab_switch_log
+    const { data: sessions } = await supabase
+      .from('assessment_sessions')
+      .select('id, tab_switch_log, question_order, assessments!inner(org_id)')
+      .eq('assessment_id', assessmentId)
+      .gt('tab_switch_count', 0)
+
+    const orgSessions = (sessions ?? []).filter((s) => {
+      const a = s.assessments as unknown as { org_id: string }
+      return a.org_id === org.id
+    })
+
+    if (orgSessions.length === 0) {
+      return { ok: true, data: { questions: [], totalViolations: 0, flaggedSessionCount: 0 } }
+    }
+
+    // Get all answers with timing for these sessions
+    const sessionIds = orgSessions.map(s => s.id)
+    const { data: answers } = await supabase
+      .from('assessment_answers')
+      .select('session_id, card_template_id, answered_at, time_spent_seconds')
+      .in('session_id', sessionIds)
+
+    // Get question stems
+    const allCardIds = new Set<string>()
+    for (const s of orgSessions) {
+      const order = s.question_order as string[] ?? []
+      for (const cid of order) allCardIds.add(cid)
+    }
+    const { data: cards } = await supabase
+      .from('card_templates')
+      .select('id, front_text')
+      .in('id', [...allCardIds])
+    const stemMap = new Map<string, string>()
+    for (const c of cards ?? []) {
+      stemMap.set(c.id, c.front_text?.length > 60 ? c.front_text.slice(0, 57) + '...' : c.front_text ?? '')
+    }
+
+    // Build per-question answer windows per session
+    const answersBySession = new Map<string, Array<{ cardId: string; answeredAt: Date; timeSpent: number }>>()
+    for (const a of answers ?? []) {
+      if (!a.answered_at) continue
+      const arr = answersBySession.get(a.session_id) ?? []
+      arr.push({
+        cardId: a.card_template_id,
+        answeredAt: new Date(a.answered_at),
+        timeSpent: a.time_spent_seconds ?? 0,
+      })
+      answersBySession.set(a.session_id, arr)
+    }
+
+    // Count violations per question index across all sessions
+    const questionOrder = orgSessions[0]?.question_order as string[] ?? []
+    const violationCounts = new Array(questionOrder.length).fill(0) as number[]
+    let totalViolations = 0
+
+    for (const session of orgSessions) {
+      const log = Array.isArray(session.tab_switch_log)
+        ? (session.tab_switch_log as Array<{ timestamp: string; type: string }>)
+        : []
+      const sessionAnswers = answersBySession.get(session.id) ?? []
+
+      // Sort answers by answeredAt
+      sessionAnswers.sort((a, b) => a.answeredAt.getTime() - b.answeredAt.getTime())
+
+      // For each tab_hidden event, find which question was active
+      for (const entry of log) {
+        if (entry.type !== 'tab_hidden') continue
+        totalViolations++
+        const ts = new Date(entry.timestamp).getTime()
+
+        // Find the question whose answer window contains this timestamp
+        // Answer window: [answeredAt - timeSpent, answeredAt]
+        let matched = false
+        for (const ans of sessionAnswers) {
+          const windowStart = ans.answeredAt.getTime() - (ans.timeSpent * 1000)
+          const windowEnd = ans.answeredAt.getTime()
+          if (ts >= windowStart && ts <= windowEnd) {
+            const order = session.question_order as string[] ?? []
+            const qIdx = order.indexOf(ans.cardId)
+            if (qIdx >= 0 && qIdx < violationCounts.length) {
+              violationCounts[qIdx]++
+            }
+            matched = true
+            break
+          }
+        }
+        // If no match, attribute to the last unanswered question
+        if (!matched && sessionAnswers.length > 0) {
+          const lastAnswered = sessionAnswers[sessionAnswers.length - 1]
+          const order = session.question_order as string[] ?? []
+          const lastIdx = order.indexOf(lastAnswered.cardId)
+          const nextIdx = lastIdx + 1
+          if (nextIdx < violationCounts.length) {
+            violationCounts[nextIdx]++
+          }
+        }
+      }
+    }
+
+    const questions = questionOrder.map((cardId, idx) => ({
+      index: idx + 1,
+      stem: stemMap.get(cardId) ?? `Question ${idx + 1}`,
+      violationCount: violationCounts[idx],
+    }))
+
+    return {
+      ok: true,
+      data: {
+        questions,
+        totalViolations,
+        flaggedSessionCount: orgSessions.length,
+      },
+    }
   })
 }

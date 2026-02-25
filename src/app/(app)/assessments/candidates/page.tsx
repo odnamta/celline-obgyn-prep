@@ -26,6 +26,7 @@ type Candidate = {
   totalCompleted: number
   avgScore: number
   lastActiveAt: string | null
+  roleProfileIds: string[]
 }
 
 type AssessmentOption = {
@@ -174,9 +175,10 @@ export default function CandidateListPage() {
       if (c.totalCompleted === 0 || c.avgScore >= 60) return false
     }
 
-    // TODO: Role filter — requires candidate-role association data from backend.
-    // Currently the dropdown is present as UI but filtering is a no-op until
-    // getOrgCandidateList() returns role assignment IDs per candidate.
+    // Role profile filter
+    if (roleFilter !== 'all') {
+      if (!c.roleProfileIds.includes(roleFilter)) return false
+    }
 
     return true
   })

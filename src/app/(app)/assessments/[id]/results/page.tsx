@@ -30,6 +30,7 @@ import {
   History,
   Search,
   Award,
+  FileDown,
 } from 'lucide-react'
 import { useOrg } from '@/components/providers/OrgProvider'
 import { hasMinimumRole } from '@/lib/org-authorization'
@@ -44,7 +45,9 @@ import {
   getActiveSessionsForAssessment,
   getSessionPercentile,
   getMyAttemptsForAssessment,
+  getViolationHeatmap,
 } from '@/actions/assessment-actions'
+import { exportAssessmentResultsPdf } from '@/actions/assessment-report-actions'
 import { useToast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/badge'
@@ -677,6 +680,8 @@ function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
   const [expandedViolation, setExpandedViolation] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<'all' | 'passed' | 'failed'>('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [exportingPdf, setExportingPdf] = useState(false)
+  const [violationHeatmap, setViolationHeatmap] = useState<Array<{ index: number; stem: string; violationCount: number }>>([])
   const [activeSessions, setActiveSessions] = useState<Array<{
     sessionId: string; userEmail: string; startedAt: string
     timeRemainingSeconds: number | null; questionsAnswered: number
@@ -711,6 +716,15 @@ function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
         setQuestionStats(qResult.data.questions)
       }
       setLoading(false)
+
+      // Load violation heatmap if proctoring is enabled
+      if (proctoringEnabled) {
+        getViolationHeatmap(assessmentId).then(hResult => {
+          if (hResult.ok && hResult.data) {
+            setViolationHeatmap(hResult.data.questions)
+          }
+        })
+      }
 
       // Initial poll + start interval for live monitoring
       pollActiveSessions()
@@ -808,28 +822,49 @@ function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
           {assessment?.title ?? 'Assessment'} — Results
         </h1>
         {sessions.length > 0 && (
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={async () => {
-              const result = await exportResultsCsv(assessmentId)
-              if (result.ok && result.data) {
-                const blob = new Blob([result.data], { type: 'text/csv' })
-                const url = URL.createObjectURL(blob)
-                const a = document.createElement('a')
-                a.href = url
-                a.download = `${assessment?.title ?? 'assessment'}-results.csv`
-                a.click()
-                URL.revokeObjectURL(url)
-                showToast('CSV exported', 'success')
-              } else if (!result.ok) {
-                showToast(result.error, 'error')
-              }
-            }}
-          >
-            <Download className="h-4 w-4 mr-1" />
-            Export CSV
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={exportingPdf}
+              onClick={async () => {
+                setExportingPdf(true)
+                const result = await exportAssessmentResultsPdf(assessmentId)
+                setExportingPdf(false)
+                if (result.ok && result.data) {
+                  window.open(result.data.url, '_blank')
+                  showToast('PDF exported', 'success')
+                } else if (!result.ok) {
+                  showToast(result.error, 'error')
+                }
+              }}
+            >
+              <FileDown className="h-4 w-4 mr-1" />
+              {exportingPdf ? 'Generating...' : 'Export PDF'}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={async () => {
+                const result = await exportResultsCsv(assessmentId)
+                if (result.ok && result.data) {
+                  const blob = new Blob([result.data], { type: 'text/csv' })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = `${assessment?.title ?? 'assessment'}-results.csv`
+                  a.click()
+                  URL.revokeObjectURL(url)
+                  showToast('CSV exported', 'success')
+                } else if (!result.ok) {
+                  showToast(result.error, 'error')
+                }
+              }}
+            >
+              <Download className="h-4 w-4 mr-1" />
+              Export CSV
+            </Button>
+          </div>
         )}
       </div>
       {assessment && (
@@ -1052,6 +1087,46 @@ function CreatorResultsView({ assessmentId }: { assessmentId: string }) {
           </div>
         )
       })()}
+
+      {/* Violation Heatmap by Question */}
+      {violationHeatmap.length > 0 && violationHeatmap.some(q => q.violationCount > 0) && (
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
+            <Shield className="h-5 w-5 text-red-500" />
+            Violation Heatmap by Question
+          </h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">
+            Tab switches during each question across all flagged sessions. Darker = more violations.
+          </p>
+          <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
+            {violationHeatmap.map((q) => {
+              const maxV = Math.max(...violationHeatmap.map(h => h.violationCount), 1)
+              const intensity = q.violationCount / maxV
+              const bg = q.violationCount === 0
+                ? 'bg-slate-100 dark:bg-slate-800'
+                : intensity < 0.33
+                  ? 'bg-amber-100 dark:bg-amber-900/30'
+                  : intensity < 0.66
+                    ? 'bg-orange-200 dark:bg-orange-900/40'
+                    : 'bg-red-300 dark:bg-red-900/50'
+              return (
+                <div
+                  key={q.index}
+                  title={`Q${q.index}: ${q.stem} — ${q.violationCount} violations`}
+                  className={`${bg} rounded p-2 text-center cursor-default transition-colors`}
+                >
+                  <div className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                    Q{q.index}
+                  </div>
+                  <div className={`text-sm font-bold ${q.violationCount > 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-400'}`}>
+                    {q.violationCount}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Question Difficulty Analysis */}
       {questionStats.length > 0 && (

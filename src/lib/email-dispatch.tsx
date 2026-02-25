@@ -9,6 +9,7 @@ import { sendEmail } from '@/lib/email'
 import AssessmentNotification from '@/components/email/AssessmentNotification'
 import ResultNotification from '@/components/email/ResultNotification'
 import CertificateDelivery from '@/components/email/CertificateDelivery'
+import RoleAssignmentNotification from '@/components/email/RoleAssignmentNotification'
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://cekatan.com'
 
@@ -106,6 +107,33 @@ export function dispatchResultEmail(opts: {
       assessmentTitle: opts.assessmentTitle,
       score: opts.score,
       passed: opts.passed,
+      actionUrl: opts.actionUrl,
+      unsubscribeUrl: opts.unsubscribeUrl,
+    }),
+  })
+}
+
+/**
+ * Fire-and-forget role assignment email.
+ */
+export function dispatchRoleAssignmentEmail(opts: {
+  to: string
+  subject: string
+  orgName: string
+  employeeName: string
+  roleName: string
+  message: string
+  actionUrl: string
+  unsubscribeUrl: string
+}): Promise<{ ok: boolean }> {
+  return sendEmail({
+    to: opts.to,
+    subject: opts.subject,
+    react: React.createElement(RoleAssignmentNotification, {
+      orgName: opts.orgName,
+      employeeName: opts.employeeName,
+      roleName: opts.roleName,
+      message: opts.message,
       actionUrl: opts.actionUrl,
       unsubscribeUrl: opts.unsubscribeUrl,
     }),
