@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { createSupabaseServerClient, getUser } from '@/lib/supabase/server'
 import { getCategoryColor } from '@/lib/tag-colors'
+import { logger } from '@/lib/logger'
 import { toTitleCase } from '@/lib/string-utils'
 import type { Tag, TagCategory } from '@/types/database'
 
@@ -706,7 +707,7 @@ export async function analyzeTagConsolidation(): Promise<AnalyzeTagConsolidation
     .order('name')
 
   if (fetchError) {
-    console.error('Failed to fetch tags:', fetchError)
+    logger.error('analyzeTagConsolidation.fetchTags', fetchError)
     return { ok: false, error: 'AI_ERROR' }
   }
 
@@ -761,14 +762,14 @@ If no duplicates/synonyms are found, return: {"groups": []}`,
 
       const content = response.choices[0]?.message?.content
       if (!content) {
-        console.error('OpenAI returned empty content')
+        logger.error('analyzeTagConsolidation', 'OpenAI returned empty content')
         continue
       }
 
       // Parse the AI response
       const parsed = parseConsolidationResponse(content)
       if (!parsed) {
-        console.error('Failed to parse AI response:', content)
+        logger.error('analyzeTagConsolidation.parseResponse', content)
         continue
       }
 
@@ -776,7 +777,7 @@ If no duplicates/synonyms are found, return: {"groups": []}`,
       const resolved = resolveTagSuggestions(parsed, tagLookup)
       allSuggestions.push(...resolved)
     } catch (error) {
-      console.error('OpenAI API error:', error)
+      logger.error('analyzeTagConsolidation', error)
       return { ok: false, error: 'AI_ERROR' }
     }
   }

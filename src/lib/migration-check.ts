@@ -6,6 +6,7 @@
  */
 
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { logger } from '@/lib/logger'
 
 export interface MigrationStatus {
   legacyCardsCount: number
@@ -40,7 +41,7 @@ export async function checkMigrationStatus(): Promise<MigrationStatus> {
     .select('*', { count: 'exact', head: true })
 
   if (cardsError) {
-    console.error('Failed to count legacy cards:', cardsError.message)
+    logger.error('checkMigrationStatus.countLegacyCards', cardsError.message)
   }
 
   // Count legacy decks
@@ -49,7 +50,7 @@ export async function checkMigrationStatus(): Promise<MigrationStatus> {
     .select('*', { count: 'exact', head: true })
 
   if (decksError) {
-    console.error('Failed to count legacy decks:', decksError.message)
+    logger.error('checkMigrationStatus.countLegacyDecks', decksError.message)
   }
 
   // Count V2 card_templates
@@ -58,7 +59,7 @@ export async function checkMigrationStatus(): Promise<MigrationStatus> {
     .select('*', { count: 'exact', head: true })
 
   if (ctError) {
-    console.error('Failed to count card_templates:', ctError.message)
+    logger.error('checkMigrationStatus.countCardTemplates', ctError.message)
   }
 
   // Count V2 deck_templates
@@ -67,7 +68,7 @@ export async function checkMigrationStatus(): Promise<MigrationStatus> {
     .select('*', { count: 'exact', head: true })
 
   if (dtError) {
-    console.error('Failed to count deck_templates:', dtError.message)
+    logger.error('checkMigrationStatus.countDeckTemplates', dtError.message)
   }
 
   const legacyCards = legacyCardsCount || 0
@@ -113,7 +114,7 @@ export async function logMigrationStatus(): Promise<void> {
       console.warn(warning)
     }
   } catch (error) {
-    console.error('Failed to check migration status:', error)
+    logger.error('logMigrationStatus', error)
   }
 }
 

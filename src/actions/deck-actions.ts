@@ -7,6 +7,7 @@ import { createDeckSchema } from '@/lib/validations'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { formatZodErrors } from '@/lib/zod-utils'
 import type { ActionResultV2 } from '@/types/actions'
+import { logger } from '@/lib/logger'
 
 /**
  * V8.0/V9.1: Server Action for creating a new deck.
@@ -31,7 +32,7 @@ export async function createDeckAction(
   }
 
   // Rate limit check
-  const rateLimitResult = checkRateLimit(`user:${user.id}:createDeck`, RATE_LIMITS.standard)
+  const rateLimitResult = await checkRateLimit(`user:${user.id}:createDeck`, RATE_LIMITS.standard)
   if (!rateLimitResult.allowed) {
     return { ok: false, error: 'Rate limit exceeded. Please try again later.' }
   }
@@ -122,7 +123,7 @@ export async function getUserDecks(): Promise<{ id: string; title: string }[]> {
       .eq('is_active', true)
 
     if (error) {
-      console.error('Failed to fetch user decks:', error)
+      logger.error('getUserDecks', error)
       return { ok: true as const, data: [] as { id: string; title: string }[] }
     }
 
@@ -177,7 +178,7 @@ export async function getDeckTemplates(): Promise<DeckTemplateWithCounts[]> {
       .eq('is_active', true)
 
     if (userDecksError) {
-      console.error('Failed to fetch deck templates:', userDecksError)
+      logger.error('getDeckTemplates.fetchDecks', userDecksError)
       return { ok: true as const, data: [] as DeckTemplateWithCounts[] }
     }
 
@@ -195,7 +196,7 @@ export async function getDeckTemplates(): Promise<DeckTemplateWithCounts[]> {
       .in('deck_template_id', deckTemplateIds)
 
     if (ctError) {
-      console.error('Failed to fetch card templates:', ctError)
+      logger.error('getDeckTemplates.fetchCards', ctError)
     }
 
     // Create map of card_template_id -> deck_template_id
@@ -223,7 +224,7 @@ export async function getDeckTemplates(): Promise<DeckTemplateWithCounts[]> {
       .in('card_template_id', cardTemplateIdList)
 
     if (dueError) {
-      console.error('Failed to fetch due counts:', dueError)
+      logger.error('getDeckTemplates.fetchDueCounts', dueError)
     }
 
     // Build due count map
@@ -275,7 +276,7 @@ export async function getUserDeckTemplates(): Promise<{ id: string; title: strin
       .eq('is_active', true)
 
     if (error) {
-      console.error('Failed to fetch user deck templates:', error)
+      logger.error('getUserDeckTemplates', error)
       return { ok: true as const, data: [] as { id: string; title: string }[] }
     }
 
@@ -317,7 +318,7 @@ export async function createDeckTemplateAction(
   }
 
   // Rate limit check
-  const rateLimitResult = checkRateLimit(`user:${user.id}:createDeckTemplate`, RATE_LIMITS.standard)
+  const rateLimitResult = await checkRateLimit(`user:${user.id}:createDeckTemplate`, RATE_LIMITS.standard)
   if (!rateLimitResult.allowed) {
     return { ok: false, error: 'Rate limit exceeded. Please try again later.' }
   }
@@ -364,7 +365,7 @@ export async function createDeckTemplateAction(
     })
 
   if (subscribeError) {
-    console.error('Failed to auto-subscribe author:', subscribeError)
+    logger.error('createDeckTemplateAction.autoSubscribe', subscribeError)
     // Don't fail the whole operation, deck was created
   }
 

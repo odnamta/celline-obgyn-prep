@@ -1,37 +1,12 @@
 /**
- * V20: In-memory sliding window rate limiter for server actions.
+ * V22: Rate limiter using Upstash Redis (works on Vercel serverless).
  *
- * Tracks request timestamps per key (user ID) and rejects
- * when the limit is exceeded within the window.
- *
- * WARNING: This is per-process and DOES NOT work on Vercel serverless.
- * Each request gets a fresh process, so the in-memory store is always empty.
- * This only provides protection during local dev and sustained connections.
- * TODO: Replace with Upstash Redis or Vercel KV for production rate limiting.
+ * Uses @upstash/ratelimit sliding window algorithm backed by Upstash Redis.
+ * Falls back to in-memory store when UPSTASH env vars are not set (local dev).
  */
 
-type RateLimitEntry = {
-  timestamps: number[]
-}
-
-const store = new Map<string, RateLimitEntry>()
-
-// Cleanup stale entries every 5 minutes
-const CLEANUP_INTERVAL = 5 * 60 * 1000
-let lastCleanup = Date.now()
-
-function cleanup(windowMs: number) {
-  const now = Date.now()
-  if (now - lastCleanup < CLEANUP_INTERVAL) return
-  lastCleanup = now
-
-  const cutoff = now - windowMs * 2
-  for (const [key, entry] of store) {
-    if (entry.timestamps.length === 0 || entry.timestamps[entry.timestamps.length - 1] < cutoff) {
-      store.delete(key)
-    }
-  }
-}
+import { Ratelimit } from '@upstash/ratelimit'
+import { Redis } from '@upstash/redis'
 
 export type RateLimitConfig = {
   /** Maximum number of requests allowed within the window */
@@ -46,42 +21,90 @@ export type RateLimitResult = {
   resetMs: number
 }
 
-/**
- * Check and consume a rate limit token for the given key.
- * Returns whether the request is allowed and remaining quota.
- */
-export function checkRateLimit(
-  key: string,
-  config: RateLimitConfig,
-): RateLimitResult {
-  cleanup(config.windowMs)
+// Singleton Redis client — created once per cold start
+let redis: Redis | null = null
 
+function getRedis(): Redis | null {
+  if (redis) return redis
+  const url = process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  if (!url || !token) return null
+  redis = new Redis({ url, token })
+  return redis
+}
+
+// Cache of Ratelimit instances keyed by "maxRequests:windowMs"
+const limiters = new Map<string, Ratelimit>()
+
+function getLimiter(config: RateLimitConfig): Ratelimit | null {
+  const r = getRedis()
+  if (!r) return null
+
+  const key = `${config.maxRequests}:${config.windowMs}`
+  let limiter = limiters.get(key)
+  if (!limiter) {
+    const windowSec = Math.ceil(config.windowMs / 1000)
+    limiter = new Ratelimit({
+      redis: r,
+      limiter: Ratelimit.slidingWindow(config.maxRequests, `${windowSec} s`),
+      prefix: 'cekatan:rl',
+    })
+    limiters.set(key, limiter)
+  }
+  return limiter
+}
+
+// ============================================
+// In-memory fallback (local dev only)
+// ============================================
+
+const memStore = new Map<string, number[]>()
+
+function checkMemoryRateLimit(key: string, config: RateLimitConfig): RateLimitResult {
   const now = Date.now()
   const windowStart = now - config.windowMs
+  let timestamps = memStore.get(key) ?? []
+  timestamps = timestamps.filter((t) => t > windowStart)
 
-  let entry = store.get(key)
-  if (!entry) {
-    entry = { timestamps: [] }
-    store.set(key, entry)
+  if (timestamps.length >= config.maxRequests) {
+    memStore.set(key, timestamps)
+    return { allowed: false, remaining: 0, resetMs: timestamps[0] + config.windowMs - now }
   }
 
-  // Remove timestamps outside the window
-  entry.timestamps = entry.timestamps.filter((t) => t > windowStart)
+  timestamps.push(now)
+  memStore.set(key, timestamps)
+  return { allowed: true, remaining: config.maxRequests - timestamps.length, resetMs: config.windowMs }
+}
 
-  if (entry.timestamps.length >= config.maxRequests) {
-    const oldestInWindow = entry.timestamps[0]
+// ============================================
+// Public API
+// ============================================
+
+/**
+ * Check and consume a rate limit token for the given key.
+ * Uses Upstash Redis in production, in-memory in local dev.
+ */
+export async function checkRateLimit(
+  key: string,
+  config: RateLimitConfig,
+): Promise<RateLimitResult> {
+  const limiter = getLimiter(config)
+
+  if (!limiter) {
+    // Fallback to in-memory for local dev
+    return checkMemoryRateLimit(key, config)
+  }
+
+  try {
+    const result = await limiter.limit(key)
     return {
-      allowed: false,
-      remaining: 0,
-      resetMs: oldestInWindow + config.windowMs - now,
+      allowed: result.success,
+      remaining: result.remaining,
+      resetMs: result.reset - Date.now(),
     }
-  }
-
-  entry.timestamps.push(now)
-  return {
-    allowed: true,
-    remaining: config.maxRequests - entry.timestamps.length,
-    resetMs: config.windowMs,
+  } catch {
+    // If Redis is down, fail open (allow the request)
+    return { allowed: true, remaining: config.maxRequests, resetMs: config.windowMs }
   }
 }
 
@@ -95,4 +118,6 @@ export const RATE_LIMITS = {
   bulk: { maxRequests: 5, windowMs: 60_000 } as RateLimitConfig,
   /** Auth attempts: 10 per 5 minutes */
   auth: { maxRequests: 10, windowMs: 5 * 60_000 } as RateLimitConfig,
+  /** Public registration: 5 per hour per IP */
+  publicRegistration: { maxRequests: 5, windowMs: 60 * 60_000 } as RateLimitConfig,
 } as const

@@ -158,7 +158,7 @@ export function GlobalStudySession({
     setError(null)
     const result = await rateCardAction(currentCard.id, rating)
 
-    if (!result.success) {
+    if (!result.ok) {
       setError(result.error || 'Failed to rate card')
       return
     }
@@ -201,7 +201,7 @@ export function GlobalStudySession({
     setError(null)
     const result = await rateCardAction(currentCard.id, rating as 1 | 2 | 3 | 4)
 
-    if (!result.success) {
+    if (!result.ok) {
       setError(result.error || 'Failed to rate card')
     }
 

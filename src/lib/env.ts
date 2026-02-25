@@ -1,0 +1,39 @@
+/**
+ * V22: Centralized environment variable validation.
+ *
+ * Called from instrumentation.ts on server startup.
+ * Logs warnings for missing optional vars, throws for missing required vars.
+ */
+
+const REQUIRED_VARS = [
+  'NEXT_PUBLIC_SUPABASE_URL',
+  'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+  'SUPABASE_SERVICE_ROLE_KEY',
+] as const
+
+const OPTIONAL_VARS = [
+  { key: 'OPENAI_API_KEY', feature: 'AI MCQ generation' },
+  { key: 'RESEND_API_KEY', feature: 'Email notifications' },
+  { key: 'UPSTASH_REDIS_REST_URL', feature: 'Production rate limiting' },
+  { key: 'UPSTASH_REDIS_REST_TOKEN', feature: 'Production rate limiting' },
+] as const
+
+export function validateEnv(): void {
+  const missing: string[] = []
+
+  for (const key of REQUIRED_VARS) {
+    if (!process.env[key]) {
+      missing.push(key)
+    }
+  }
+
+  if (missing.length > 0) {
+    throw new Error(`Missing required environment variables: ${missing.join(', ')}`)
+  }
+
+  for (const { key, feature } of OPTIONAL_VARS) {
+    if (!process.env[key]) {
+      console.warn(`[env] ${key} not set — ${feature} disabled`)
+    }
+  }
+}

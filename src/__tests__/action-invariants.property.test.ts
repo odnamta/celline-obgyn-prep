@@ -130,34 +130,32 @@ describe('canDeleteOrg Authorization', () => {
 // ============================================
 
 describe('Rate Limiter Invariants', () => {
-  it('first request is always allowed', () => {
-    fc.assert(fc.property(
+  it('first request is always allowed', async () => {
+    await fc.assert(fc.asyncProperty(
       fc.string({ minLength: 5, maxLength: 20 }),
       fc.integer({ min: 1, max: 100 }),
       fc.integer({ min: 1000, max: 60000 }),
-      (key, max, windowMs) => {
-        // Use unique key per test to avoid cross-contamination
+      async (key, max, windowMs) => {
         const uniqueKey = `test-first-${key}-${Date.now()}-${Math.random()}`
         const config: RateLimitConfig = { maxRequests: max, windowMs }
-        const result = checkRateLimit(uniqueKey, config)
+        const result = await checkRateLimit(uniqueKey, config)
         expect(result.allowed).toBe(true)
         expect(result.remaining).toBe(max - 1)
       },
     ))
   })
 
-  it('remaining decreases with each allowed request', () => {
-    fc.assert(fc.property(
+  it('remaining decreases with each allowed request', async () => {
+    await fc.assert(fc.asyncProperty(
       fc.integer({ min: 2, max: 10 }),
-      (max) => {
+      async (max) => {
         const key = `test-dec-${Date.now()}-${Math.random()}`
         const config: RateLimitConfig = { maxRequests: max, windowMs: 60000 }
         const remainings: number[] = []
         for (let i = 0; i < max; i++) {
-          const result = checkRateLimit(key, config)
+          const result = await checkRateLimit(key, config)
           remainings.push(result.remaining)
         }
-        // Should be strictly decreasing
         for (let i = 1; i < remainings.length; i++) {
           expect(remainings[i]).toBeLessThan(remainings[i - 1])
         }
@@ -165,36 +163,32 @@ describe('Rate Limiter Invariants', () => {
     ))
   })
 
-  it('request after max is rejected', () => {
-    fc.assert(fc.property(
+  it('request after max is rejected', async () => {
+    await fc.assert(fc.asyncProperty(
       fc.integer({ min: 1, max: 20 }),
-      (max) => {
+      async (max) => {
         const key = `test-reject-${Date.now()}-${Math.random()}`
         const config: RateLimitConfig = { maxRequests: max, windowMs: 60000 }
-        // Exhaust limit
         for (let i = 0; i < max; i++) {
-          checkRateLimit(key, config)
+          await checkRateLimit(key, config)
         }
-        // Next should be rejected
-        const result = checkRateLimit(key, config)
+        const result = await checkRateLimit(key, config)
         expect(result.allowed).toBe(false)
         expect(result.remaining).toBe(0)
       },
     ))
   })
 
-  it('different keys do not interfere', () => {
-    fc.assert(fc.property(
+  it('different keys do not interfere', async () => {
+    await fc.assert(fc.asyncProperty(
       fc.integer({ min: 1, max: 5 }),
-      (max) => {
+      async (max) => {
         const baseKey = `test-iso-${Date.now()}-${Math.random()}`
         const config: RateLimitConfig = { maxRequests: max, windowMs: 60000 }
-        // Exhaust key A
         for (let i = 0; i < max; i++) {
-          checkRateLimit(`${baseKey}-A`, config)
+          await checkRateLimit(`${baseKey}-A`, config)
         }
-        // Key B should still be allowed
-        const result = checkRateLimit(`${baseKey}-B`, config)
+        const result = await checkRateLimit(`${baseKey}-B`, config)
         expect(result.allowed).toBe(true)
       },
     ))

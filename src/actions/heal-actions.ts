@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { logger } from '@/lib/logger'
 import { withUser, type AuthContext } from './_helpers'
 import { getCardDefaults } from '@/lib/card-defaults'
 import type { ActionResultV2 } from '@/types/actions'
@@ -158,7 +159,7 @@ export async function healAuthorProgress(): Promise<ActionResultV2<{ healedCount
 
       return { ok: true, data: { healedCount: missingCardIds.length } }
     } catch (error) {
-      console.error('Heal action error:', error)
+      logger.error('healAuthorProgress', error)
       return { ok: false, error: 'Failed to heal progress records' }
     }
   })
@@ -369,7 +370,7 @@ export async function mergeDuplicateDecks(): Promise<ActionResultV2<{ mergedCoun
         },
       }
     } catch (error) {
-      console.error('Merge action error:', error)
+      logger.error('mergeDuplicateDecks', error)
       return { ok: false, error: 'Failed to merge duplicate decks' }
     }
   })

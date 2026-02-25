@@ -65,7 +65,7 @@ export async function withUser<T>(
 
   // Rate limit check (keyed by user ID)
   if (rateLimit) {
-    const result = checkRateLimit(`user:${user.id}`, rateLimit)
+    const result = await checkRateLimit(`user:${user.id}`, rateLimit)
     if (!result.allowed) {
       return { ok: false, error: 'RATE_LIMIT_EXCEEDED' }
     }
@@ -100,7 +100,7 @@ export async function withOrgUser<T>(
 
   // Rate limit check (keyed by user ID + action context)
   if (rateLimit) {
-    const result = checkRateLimit(`org:${user.id}`, rateLimit)
+    const result = await checkRateLimit(`org:${user.id}`, rateLimit)
     if (!result.allowed) {
       return { ok: false, error: 'RATE_LIMIT_EXCEEDED' }
     }

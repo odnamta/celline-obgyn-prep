@@ -1,4 +1,5 @@
 import { createSupabaseServiceClient } from '@/lib/supabase/server'
+import { verifyUnsubscribeToken } from '@/lib/email-dispatch'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
@@ -7,7 +8,7 @@ export const metadata: Metadata = {
 
 /**
  * One-click unsubscribe page.
- * Token is base64(userId). Uses service client to bypass RLS.
+ * Token is HMAC-signed (payload.hmac). Uses service client to bypass RLS.
  * This is a server component — the update runs on page load.
  */
 export default async function UnsubscribePage({
@@ -19,10 +20,9 @@ export default async function UnsubscribePage({
   let success = false
 
   try {
-    // Decode token to get userId
-    const userId = Buffer.from(token, 'base64').toString()
+    // Verify HMAC-signed token and extract userId
+    const userId = verifyUnsubscribeToken(token)
 
-    // Basic validation: UUIDs are 36 chars
     if (!userId || userId.length !== 36) {
       return <UnsubscribeResult success={false} />
     }

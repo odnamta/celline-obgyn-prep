@@ -56,7 +56,7 @@ export function StudySession({ initialCards, deckId, userStats }: StudySessionPr
     setError(null)
     const result = await rateCardAction(currentCard.id, rating)
 
-    if (!result.success) {
+    if (!result.ok) {
       setError(result.error)
       return
     }

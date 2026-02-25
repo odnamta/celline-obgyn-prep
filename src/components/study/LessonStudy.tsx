@@ -109,7 +109,7 @@ export function LessonStudy({ lesson, items, onComplete }: LessonStudyProps) {
 
     setIsLoading(false)
 
-    if (!result.success) {
+    if (!result.ok) {
       setError(result.error || 'Failed to rate card')
       return
     }

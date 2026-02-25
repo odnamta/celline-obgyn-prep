@@ -10,28 +10,10 @@ import crypto from 'crypto'
 import { headers } from 'next/headers'
 import { createSupabaseServiceClient } from '@/lib/supabase/server'
 import { publicRegistrationSchema } from '@/lib/validations'
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { logger } from '@/lib/logger'
 import type { ActionResultV2 } from '@/types/actions'
 import type { Assessment } from '@/types/database'
-
-// ============================================
-// Rate Limiting (in-memory, per-IP)
-// ============================================
-
-const ipAttempts = new Map<string, { count: number; resetAt: number }>()
-const RATE_LIMIT_MAX = 5
-const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000
-
-function checkIpRateLimit(ip: string): boolean {
-  const now = Date.now()
-  const entry = ipAttempts.get(ip)
-  if (!entry || now > entry.resetAt) {
-    ipAttempts.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS })
-    return true
-  }
-  if (entry.count >= RATE_LIMIT_MAX) return false
-  entry.count++
-  return true
-}
 
 // ============================================
 // 1. getPublicAssessment
@@ -94,7 +76,7 @@ export async function getPublicAssessment(
       },
     }
   } catch (err) {
-    console.error('[getPublicAssessment]', err)
+    logger.error('getPublicAssessment', err)
     return { ok: false, error: 'Asesmen tidak ditemukan atau sudah ditutup' }
   }
 }
@@ -123,7 +105,8 @@ export async function registerAndStartSession(
       ?? hdrs.get('x-real-ip')
       ?? 'unknown'
 
-    if (!checkIpRateLimit(clientIp)) {
+    const rl = await checkRateLimit(`pub:${clientIp}`, RATE_LIMITS.publicRegistration)
+    if (!rl.allowed) {
       return { ok: false, error: 'Terlalu banyak percobaan. Coba lagi nanti.' }
     }
 
@@ -223,7 +206,7 @@ export async function registerAndStartSession(
       })
 
       if (createError || !newUser.user) {
-        console.error('[registerAndStartSession] createUser failed:', createError)
+        logger.error('registerAndStartSession', createError ?? 'createUser failed')
         return { ok: false, error: 'Gagal membuat akun. Coba lagi.' }
       }
 
@@ -334,7 +317,7 @@ export async function registerAndStartSession(
       .single()
 
     if (sError || !session) {
-      console.error('[registerAndStartSession] session create failed:', sError)
+      logger.error('registerAndStartSession', sError ?? 'session create failed')
       return { ok: false, error: 'Gagal memulai sesi' }
     }
 
@@ -356,7 +339,7 @@ export async function registerAndStartSession(
       },
     }
   } catch (err) {
-    console.error('[registerAndStartSession]', err)
+    logger.error('registerAndStartSession', err)
     return { ok: false, error: 'Gagal memulai sesi' }
   }
 }
@@ -455,7 +438,7 @@ export async function getPublicQuestions(
       },
     }
   } catch (err) {
-    console.error('[getPublicQuestions]', err)
+    logger.error('getPublicQuestions', err)
     return { ok: false, error: 'Sesi tidak ditemukan atau sudah selesai' }
   }
 }
@@ -535,7 +518,7 @@ export async function submitPublicAnswer(
 
     return { ok: true, data: { isCorrect } }
   } catch (err) {
-    console.error('[submitPublicAnswer]', err)
+    logger.error('submitPublicAnswer', err)
     return { ok: false, error: 'Sesi tidak ditemukan atau sudah selesai' }
   }
 }
@@ -599,7 +582,7 @@ export async function completePublicSession(
 
     return { ok: true, data: { score, passed, total, correct } }
   } catch (err) {
-    console.error('[completePublicSession]', err)
+    logger.error('completePublicSession', err)
     return { ok: false, error: 'Sesi tidak ditemukan' }
   }
 }
@@ -679,7 +662,7 @@ export async function getPublicResults(
       },
     }
   } catch (err) {
-    console.error('[getPublicResults]', err)
+    logger.error('getPublicResults', err)
     return { ok: false, error: 'Hasil tidak ditemukan' }
   }
 }

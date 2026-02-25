@@ -1,9 +1,8 @@
 import type { Card } from './database';
 
 /**
- * V11.5: Unified ActionResult type
- * Use { ok: true/false } pattern for new actions.
- * @deprecated { success: true/false } pattern - use ActionResultV2 instead
+ * @deprecated Use ActionResultV2 instead. This type uses { success: true/false }
+ * which is being phased out in favor of { ok: true/false }.
  */
 export type ActionResult =
   | { success: true; data?: unknown }
@@ -18,8 +17,8 @@ export type ActionResultV2<T = void> =
   | { ok: false; error: string };
 
 export type NextCardResult =
-  | { success: true; nextCard: Card | null; remainingCount: number }
-  | { success: false; error: string };
+  | { ok: true; nextCard: Card | null; remainingCount: number }
+  | { ok: false; error: string };
 
 /**
  * V11.6: Draft card summary for Drafts Workspace

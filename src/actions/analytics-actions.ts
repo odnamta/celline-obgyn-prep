@@ -19,6 +19,7 @@ import type { ActionResultV2, DashboardInsightsResult, WeakestConceptSummary } f
 import { withUser, withOrgUser, type AuthContext, type OrgAuthContext } from './_helpers'
 import { hasMinimumRole } from '@/lib/org-authorization'
 import { getAdminChecklist, getCandidateChecklist, type ChecklistItem } from '@/lib/setup-checklist'
+import { logger } from '@/lib/logger'
 import { getGlobalStats } from './global-study-actions'
 import { LOW_CONFIDENCE_THRESHOLD } from '@/lib/constants'
 
@@ -162,7 +163,7 @@ export async function getUserAnalytics(): Promise<ActionResultV2<{ topicAccuraci
 
     return { ok: true, data: { topicAccuracies, deckProgress, weakestTopic } }
   } catch (error) {
-    console.error('getUserAnalytics error:', error)
+    logger.error('getUserAnalytics', error)
     return { ok: false, error: 'Failed to fetch analytics data' }
   }
 }
@@ -216,7 +217,7 @@ export async function getActivityData(days: number = 7): Promise<ActionResultV2<
 
     return { ok: true, data: { activity } }
   } catch (error) {
-    console.error('getActivityData error:', error)
+    logger.error('getActivityData', error)
     return { ok: false, error: 'Failed to fetch activity data' }
   }
 }
@@ -257,7 +258,7 @@ export async function getUserSubject(): Promise<ActionResultV2<{ subject: string
 
     return { ok: true, data: { subject } }
   } catch (error) {
-    console.error('getUserSubject error:', error)
+    logger.error('getUserSubject', error)
     return { ok: false, error: 'Failed to fetch subject' }
   }
 }
@@ -300,7 +301,7 @@ export async function exportStudyData(): Promise<ActionResultV2<{ csv: string }>
 
     return { ok: true, data: { csv: rows.join('\n') } }
   } catch (err) {
-    console.error('exportStudyData error:', err)
+    logger.error('exportStudyData', err)
     return { ok: false, error: 'Failed to export study data' }
   }
 }

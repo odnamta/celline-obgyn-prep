@@ -18,6 +18,11 @@ import { formatZodErrors } from '@/lib/zod-utils'
 import type { ActionResultV2 } from '@/types/actions'
 import type { Card, Lesson, LessonItem, LessonProgress } from '@/types/database'
 
+// Supabase join result types (avoids `as any` for chained selects)
+type UnitWithCourse = { courses: { id: string } }
+type LessonWithUnit = { units: { course_id: string } }
+type LessonWithUnitDetail = { units: { id: string; course_id: string; order_index: number; courses: { id: string; user_id: string } } }
+
 // ============================================
 // Course CRUD Actions (Requirement 4.1)
 // ============================================
@@ -260,8 +265,7 @@ export async function updateUnitAction(
     return { ok: false, error: error.message }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const courseId = (updatedUnit as any).courses?.id
+  const courseId = (updatedUnit as unknown as UnitWithCourse).courses?.id
   if (courseId) {
     revalidatePath(`/course/${courseId}`)
   }
@@ -374,8 +378,7 @@ export async function createLessonAction(
     return { ok: false, error: error.message }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const courseId = (data as any).units?.course_id
+  const courseId = (data as unknown as LessonWithUnit).units?.course_id
   if (courseId) {
     revalidatePath(`/course/${courseId}`)
   }
@@ -426,8 +429,7 @@ export async function updateLessonAction(
     return { ok: false, error: error.message }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const courseId = (updatedLesson as any).units?.course_id
+  const courseId = (updatedLesson as unknown as LessonWithUnit).units?.course_id
   if (courseId) {
     revalidatePath(`/course/${courseId}`)
   }
@@ -470,8 +472,7 @@ export async function deleteLessonAction(lessonId: string): Promise<ActionResult
     return { ok: false, error: error.message }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const courseId = (lesson as any)?.units?.course_id
+  const courseId = (lesson as unknown as LessonWithUnit | null)?.units?.course_id
   if (courseId) {
     revalidatePath(`/course/${courseId}`)
   }
@@ -753,8 +754,7 @@ export async function getLessonDetail(
       return { ok: false, error: 'Lesson not found' }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const unit = (lesson as any).units as { id: string; course_id: string; order_index: number; courses: { id: string; user_id: string } }
+    const unit = (lesson as unknown as LessonWithUnitDetail).units
     const courseId = unit.course_id
 
     // Fetch all lessons in the course to determine lock status

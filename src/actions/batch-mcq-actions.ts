@@ -6,6 +6,7 @@ import { MCQ_MODEL, MCQ_TEMPERATURE, MCQ_MAX_TOKENS } from '@/lib/ai-config'
 import { createSupabaseServerClient, getUser } from '@/lib/supabase/server'
 import { withUser, type AuthContext } from './_helpers'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { logger } from '@/lib/logger'
 import { getCardDefaults } from '@/lib/card-defaults'
 import {
   draftBatchInputSchema,
@@ -319,7 +320,7 @@ export async function draftBatchMCQFromText(input: DraftBatchInput): Promise<Dra
   // Rate limit check (sensitive: AI batch operation)
   const user = await getUser()
   if (user) {
-    const rateLimitResult = checkRateLimit(`user:${user.id}:draftBatchMCQ`, RATE_LIMITS.sensitive)
+    const rateLimitResult = await checkRateLimit(`user:${user.id}:draftBatchMCQ`, RATE_LIMITS.sensitive)
     if (!rateLimitResult.allowed) {
       return { ok: false, error: { message: 'Rate limit exceeded. Please try again later.', code: 'RATE_LIMITED' } }
     }
@@ -438,7 +439,7 @@ export async function draftBatchMCQFromText(input: DraftBatchInput): Promise<Dra
       numQuestionsWithExtraOptions,
     }
   } catch (error) {
-    console.error('OpenAI API error:', error)
+    logger.error('draftBatchMCQFromText', error)
     return { ok: false, error: { message: 'AI service unavailable', code: 'OPENAI_ERROR' } }
   }
 }
@@ -513,7 +514,7 @@ export async function bulkCreateMCQV2(input: BulkCreateV2Input): Promise<BulkCre
   if (!rateLimitUser) {
     return { ok: false, error: { message: 'Authentication required', code: 'UNAUTHORIZED' } }
   }
-  const bulkCreateRateLimit = checkRateLimit(`user:${rateLimitUser.id}:bulkCreateMCQ`, RATE_LIMITS.sensitive)
+  const bulkCreateRateLimit = await checkRateLimit(`user:${rateLimitUser.id}:bulkCreateMCQ`, RATE_LIMITS.sensitive)
   if (!bulkCreateRateLimit.allowed) {
     return { ok: false, error: { message: 'Rate limit exceeded. Please try again later.', code: 'RATE_LIMITED' } }
   }
@@ -607,7 +608,7 @@ export async function bulkCreateMCQV2(input: BulkCreateV2Input): Promise<BulkCre
         .single()
       
       if (groupError) {
-        console.error('[bulkCreateMCQV2] V11: Failed to create matching_group:', groupError)
+        logger.error('bulkCreateMCQV2.createMatchingGroup', groupError)
         // Non-fatal: continue without matching group linking
       } else if (newGroup) {
         effectiveMatchingGroupId = newGroup.id
@@ -800,7 +801,7 @@ export async function bulkCreateMCQV2(input: BulkCreateV2Input): Promise<BulkCre
     if (cardTagRows.length > 0) {
       const { error: tagLinkError } = await supabase.from('card_template_tags').insert(cardTagRows)
       if (tagLinkError) {
-        console.error('[bulkCreateMCQV2] Failed to insert card_template_tags:', tagLinkError)
+        logger.error('bulkCreateMCQV2.insertCardTemplateTags', tagLinkError)
       }
     }
     
@@ -823,7 +824,7 @@ export async function bulkCreateMCQV2(input: BulkCreateV2Input): Promise<BulkCre
     // V11.6: Include skippedCount in result
     return { ok: true, createdCount: insertedTemplates.length, skippedCount, deckId: deckTemplateId }
   } catch (error) {
-    console.error('Bulk create V2 error:', error)
+    logger.error('bulkCreateMCQV2', error)
     return { ok: false, error: { message: 'Failed to create cards', code: 'DB_ERROR' } }
   }
 }
@@ -913,7 +914,7 @@ export async function getDeckDrafts(
       .order('id', { ascending: true })
 
     if (draftsError) {
-      console.error('[getDeckDrafts] Error fetching drafts:', draftsError)
+      logger.error('getDeckDrafts', draftsError)
       return { ok: false, error: 'Failed to fetch drafts' }
     }
 
@@ -975,7 +976,7 @@ export async function bulkPublishDrafts(
       .in('id', cardIds)
 
     if (fetchError) {
-      console.error('[bulkPublishDrafts] Error fetching cards:', fetchError)
+      logger.error('bulkPublishDrafts.fetchCards', fetchError)
       return { ok: false, error: 'Failed to fetch cards' }
     }
 
@@ -997,7 +998,7 @@ export async function bulkPublishDrafts(
       .eq('author_id', user.id) // Extra safety
 
     if (updateError) {
-      console.error('[bulkPublishDrafts] Error updating cards:', updateError)
+      logger.error('bulkPublishDrafts.updateCards', updateError)
       return { ok: false, error: 'Failed to publish cards' }
     }
 
@@ -1036,7 +1037,7 @@ export async function bulkArchiveDrafts(
       .in('id', cardIds)
 
     if (fetchError) {
-      console.error('[bulkArchiveDrafts] Error fetching cards:', fetchError)
+      logger.error('bulkArchiveDrafts.fetchCards', fetchError)
       return { ok: false, error: 'Failed to fetch cards' }
     }
 
@@ -1058,7 +1059,7 @@ export async function bulkArchiveDrafts(
       .eq('author_id', user.id) // Extra safety
 
     if (updateError) {
-      console.error('[bulkArchiveDrafts] Error updating cards:', updateError)
+      logger.error('bulkArchiveDrafts.updateCards', updateError)
       return { ok: false, error: 'Failed to archive cards' }
     }
 

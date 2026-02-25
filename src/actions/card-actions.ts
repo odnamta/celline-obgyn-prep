@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient, getUser } from '@/lib/supabase/server'
+import { logger } from '@/lib/logger'
 import { createCardSchema } from '@/lib/validations'
 import { getCardDefaults } from '@/lib/card-defaults'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
@@ -49,7 +50,7 @@ export async function createCardAction(
   }
 
   // Rate limit check
-  const rateLimitResult = checkRateLimit(`user:${user.id}:createCard`, RATE_LIMITS.standard)
+  const rateLimitResult = await checkRateLimit(`user:${user.id}:createCard`, RATE_LIMITS.standard)
   if (!rateLimitResult.allowed) {
     return { ok: false, error: 'Rate limit exceeded. Please try again later.' }
   }
@@ -366,7 +367,7 @@ export async function bulkDeleteCards(cardIds: string[]): Promise<ActionResultV2
   }
 
   // Rate limit check
-  const rateLimitResult = checkRateLimit(`user:${user.id}:bulkDeleteCards`, RATE_LIMITS.bulk)
+  const rateLimitResult = await checkRateLimit(`user:${user.id}:bulkDeleteCards`, RATE_LIMITS.bulk)
   if (!rateLimitResult.allowed) {
     return { ok: false, error: 'Rate limit exceeded. Please try again later.' }
   }
@@ -437,7 +438,7 @@ export async function bulkMoveCards(
   }
 
   // Rate limit check
-  const rateLimitResult = checkRateLimit(`user:${user.id}:bulkMoveCards`, RATE_LIMITS.bulk)
+  const rateLimitResult = await checkRateLimit(`user:${user.id}:bulkMoveCards`, RATE_LIMITS.bulk)
   if (!rateLimitResult.allowed) {
     return { ok: false, error: 'Rate limit exceeded. Please try again later.' }
   }
@@ -559,7 +560,7 @@ export async function getAllCardIdsInDeck(deckId: string): Promise<string[]> {
     .order('created_at', { ascending: true })
 
   if (error || !cardTemplates) {
-    console.error('Failed to fetch card IDs:', error)
+    logger.error('getCardIdsByDeck', error)
     return []
   }
 
@@ -670,7 +671,7 @@ export async function bulkPublishCards(input: BulkPublishInput): Promise<BulkPub
   }
 
   // Rate limit check
-  const rateLimitResult = checkRateLimit(`user:${user.id}:bulkPublishCards`, RATE_LIMITS.bulk)
+  const rateLimitResult = await checkRateLimit(`user:${user.id}:bulkPublishCards`, RATE_LIMITS.bulk)
   if (!rateLimitResult.allowed) {
     return { ok: false, error: 'Rate limit exceeded. Please try again later.' }
   }

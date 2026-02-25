@@ -10,6 +10,7 @@ import { TAG_CATEGORIES, isValidTagCategory } from '@/lib/constants'
 import { hasMinimumRole } from '@/lib/org-authorization'
 import type { Tag, TagCategory } from '@/types/database'
 import type { ActionResultV2 } from '@/types/actions'
+import { logger } from '@/lib/logger'
 
 /**
  * Tag Server Actions
@@ -470,7 +471,7 @@ export async function bulkAddTagToCards(
         })
 
       if (insertError) {
-        console.error('Bulk tag insert error:', insertError)
+        logger.error('bulkAddTagToCards', insertError)
         return { ok: false, error: 'Failed to tag cards. Please try again.' }
       }
 
@@ -620,7 +621,7 @@ Respond with JSON only, no markdown:
 
         const content = response.choices[0]?.message?.content
         if (!content) {
-          console.error('Empty AI response for card:', ct.id)
+          logger.error('autoTagCards.emptyResponse', ct.id, { cardId: ct.id })
           return { cardId: ct.id, success: false }
         }
 
@@ -629,7 +630,7 @@ Respond with JSON only, no markdown:
         try {
           parsed = JSON.parse(content)
         } catch {
-          console.error('Failed to parse AI response:', content)
+          logger.error('autoTagCards.parseResponse', content)
           return { cardId: ct.id, success: false }
         }
 
@@ -642,7 +643,7 @@ Respond with JSON only, no markdown:
 
         const validated = singleCardSchema.safeParse(parsed)
         if (!validated.success) {
-          console.error('Invalid AI response schema:', validated.error)
+          logger.error('autoTagCards.invalidSchema', validated.error)
           return { cardId: ct.id, success: false }
         }
 
@@ -693,7 +694,7 @@ Respond with JSON only, no markdown:
               .single()
 
             if (createError || !newTag) {
-              console.error('Failed to create tag:', createError)
+              logger.error('autoTagCards.createTag', createError)
               continue
             }
             tagId = newTag.id
@@ -710,7 +711,7 @@ Respond with JSON only, no markdown:
 
         return { cardId: ct.id, success: true }
       } catch (error) {
-        console.error('Auto-tag error for card:', ct.id, error)
+        logger.error('autoTagCards', error, { cardId: ct.id })
         return { cardId: ct.id, success: false }
       }
     }))

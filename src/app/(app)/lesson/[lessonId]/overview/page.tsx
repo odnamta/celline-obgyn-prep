@@ -76,11 +76,9 @@ export default async function LessonOverviewPage({ params }: LessonOverviewPageP
     ? Math.round((bestScore / targetItemCount) * 100) 
     : null;
 
-  // Extract nested data
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const unit = (lesson as any).units;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const course = unit?.courses;
+  // Extract nested join data
+  const unit = (lesson as unknown as { units: { id: string; title: string; course_id: string; courses: { id: string; title: string; user_id: string } } }).units
+  const course = unit?.courses
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 py-8 px-4">

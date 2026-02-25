@@ -5,6 +5,7 @@ import { createSupabaseServerClient, getUser } from '@/lib/supabase/server'
 import { ratingSchema } from '@/lib/validations'
 import { calculateNextReview } from '@/lib/sm2'
 import { calculateStreak, updateLongestStreak, incrementTotalReviews } from '@/lib/streak'
+import { logger } from '@/lib/logger'
 import type { NextCardResult } from '@/types/actions'
 import type { Card } from '@/types/database'
 
@@ -19,12 +20,12 @@ export async function rateCardAction(
 ): Promise<NextCardResult> {
   const validationResult = ratingSchema.safeParse({ cardId, rating })
   if (!validationResult.success) {
-    return { success: false, error: 'Invalid rating data' }
+    return { ok: false, error: 'Invalid rating data' }
   }
 
   const user = await getUser()
   if (!user) {
-    return { success: false, error: 'Authentication required' }
+    return { ok: false, error: 'Authentication required' }
   }
 
   const supabase = await createSupabaseServerClient()
@@ -40,7 +41,7 @@ export async function rateCardAction(
     .single()
 
   if (cardError || !cardTemplate) {
-    return { success: false, error: 'Card not found in V2 schema' }
+    return { ok: false, error: 'Card not found in V2 schema' }
   }
 
   // V8.0: Get current progress from user_card_progress
@@ -82,15 +83,14 @@ export async function rateCardAction(
       onConflict: 'user_id,card_template_id',
     })
 
-  // V8.2: Debug logging for SRS updates
-  console.log(`[SRS] Card ${cardId} rated ${rating}:`, {
+  logger.info('rateCard', `Card ${cardId} rated ${rating}`, {
     oldInterval: currentProgress?.interval ?? 0,
     newInterval: sm2Result.interval,
     nextReview: sm2Result.nextReview.toISOString(),
   })
 
   if (updateError) {
-    return { success: false, error: updateError.message }
+    return { ok: false, error: updateError.message }
   }
 
   // === Gamification: Update user_stats and study_logs ===
@@ -227,7 +227,7 @@ export async function rateCardAction(
   }
 
   return {
-    success: true,
+    ok: true,
     nextCard,
     remainingCount: count || 0,
   }

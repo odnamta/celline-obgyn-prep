@@ -43,6 +43,7 @@ import { validatePdfFile, createSourceSchema } from '@/lib/pdf-validation'
 import { formatZodErrors } from '@/lib/zod-utils'
 import type { ActionResultV2 } from '@/types/actions'
 import type { Source } from '@/types/database'
+import { logger } from '@/lib/logger'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 // Storage bucket name - must be created in Supabase Dashboard
@@ -102,7 +103,7 @@ async function migrateLegacyDeck(
     .single()
 
   if (createError || !newTemplate) {
-    console.error('[migrateLegacyDeck] Failed to create template:', createError)
+    logger.error('migrateLegacyDeck.createTemplate', createError)
     return null
   }
 
@@ -264,7 +265,7 @@ export async function uploadSourceAction(
 
     if (uploadError) {
       // Log the full error for debugging
-      console.error('[uploadSourceAction] Storage upload error:', uploadError)
+      logger.error('uploadSourceAction.storageUpload', uploadError)
       
       // Check for common error cases and provide helpful messages
       const errorMsg = uploadError.message || String(uploadError)
@@ -309,7 +310,7 @@ export async function uploadSourceAction(
 
     if (sourceError) {
       // Log the full error for debugging
-      console.error('Failed to create source record:', sourceError)
+      logger.error('uploadSourceAction.createSource', sourceError)
       // Clean up uploaded file if source creation fails
       await supabase.storage.from(STORAGE_BUCKET).remove([filePath])
       
@@ -333,7 +334,7 @@ export async function uploadSourceAction(
 
       if (linkError) {
         // Don't fail the whole operation, just log the error
-        console.error('[uploadSourceAction] Failed to link source to deck:', linkError)
+        logger.error('uploadSourceAction.linkToDeck', linkError)
       }
     }
 
@@ -351,7 +352,7 @@ export async function uploadSourceAction(
     return { ok: true, data: { source: source as Source, sourceId: source.id } }
   } catch (error) {
     // Catch any unexpected errors and return a proper response
-    console.error('uploadSourceAction unexpected error:', error)
+    logger.error('uploadSourceAction', error)
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred during upload'
     return { ok: false, error: errorMessage }
   }

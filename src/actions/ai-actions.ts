@@ -2,6 +2,7 @@
 
 import { openai } from '@/lib/openai-client'
 import { MCQ_MODEL, MCQ_TEMPERATURE } from '@/lib/ai-config'
+import { logger } from '@/lib/logger'
 import {
   draftMCQInputSchema,
   mcqDraftSchema,
@@ -265,7 +266,7 @@ export async function draftMCQFromText(input: DraftMCQInput): Promise<MCQDraftRe
     const content = response.choices[0]?.message?.content
     
     if (!content) {
-      console.error('OpenAI returned empty content')
+      logger.error('draftMCQFromText', 'OpenAI returned empty content')
       return { ok: false, error: 'OPENAI_ERROR' }
     }
     
@@ -274,7 +275,7 @@ export async function draftMCQFromText(input: DraftMCQInput): Promise<MCQDraftRe
     try {
       parsed = JSON.parse(content)
     } catch {
-      console.error('Failed to parse OpenAI response as JSON:', content)
+      logger.error('draftMCQFromText.parseJSON', content)
       return { ok: false, error: 'PARSE_ERROR' }
     }
     
@@ -282,7 +283,7 @@ export async function draftMCQFromText(input: DraftMCQInput): Promise<MCQDraftRe
     const draftResult = mcqDraftSchema.safeParse(parsed)
     
     if (!draftResult.success) {
-      console.error('MCQ draft validation failed:', draftResult.error.issues)
+      logger.error('draftMCQFromText.validation', draftResult.error.issues)
       return { ok: false, error: 'PARSE_ERROR' }
     }
     
@@ -291,7 +292,7 @@ export async function draftMCQFromText(input: DraftMCQInput): Promise<MCQDraftRe
     
   } catch (error) {
     // Handle API errors (network, auth, rate limits, etc.)
-    console.error('OpenAI API error:', error)
+    logger.error('draftMCQFromText', error)
     return { ok: false, error: 'OPENAI_ERROR' }
   }
 }

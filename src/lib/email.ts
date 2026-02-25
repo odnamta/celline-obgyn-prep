@@ -1,4 +1,5 @@
 import { Resend } from 'resend'
+import { logger } from '@/lib/logger'
 
 let _resend: Resend | null = null
 function getResend(): Resend {
@@ -6,6 +7,13 @@ function getResend(): Resend {
     _resend = new Resend(process.env.RESEND_API_KEY)
   }
   return _resend
+}
+
+const MAX_RETRIES = 3
+const BACKOFF_BASE_MS = 1000
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 export async function sendEmail({
@@ -22,17 +30,29 @@ export async function sendEmail({
     return { ok: true as const }
   }
 
-  const { error } = await getResend().emails.send({
-    from: 'Cekatan <noreply@cekatan.com>',
-    to,
-    subject,
-    react,
-  })
+  let lastError: string = 'Unknown error'
 
-  if (error) {
-    console.error('[email] Send failed:', error)
-    return { ok: false as const, error: error.message }
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const { error } = await getResend().emails.send({
+      from: 'Cekatan <noreply@cekatan.com>',
+      to,
+      subject,
+      react,
+    })
+
+    if (!error) {
+      return { ok: true as const }
+    }
+
+    lastError = error.message
+
+    if (attempt < MAX_RETRIES - 1) {
+      const delayMs = BACKOFF_BASE_MS * Math.pow(2, attempt)
+      logger.warn('sendEmail', `Attempt ${attempt + 1} failed, retrying in ${delayMs}ms`, { to, error: lastError })
+      await sleep(delayMs)
+    }
   }
 
-  return { ok: true as const }
+  logger.error('sendEmail', `All ${MAX_RETRIES} attempts failed`, { to, error: lastError })
+  return { ok: false as const, error: lastError }
 }

@@ -1,6 +1,7 @@
 'use server'
 
 import { withOrgUser } from '@/actions/_helpers'
+import { logger } from '@/lib/logger'
 import type { Card, CardTemplate, UserCardProgress } from '@/types/database'
 import type { SessionMode } from '@/lib/custom-session-params'
 import type { ActionResultV2 } from '@/types/actions'
@@ -222,7 +223,7 @@ export async function getCustomSessionCardsV2(
         data: { cards: resultCards, totalMatching },
       }
     } catch (error) {
-      console.error('Custom session V2 error:', error)
+      logger.error('getCustomSessionCards', error)
       return { ok: false as const, error: 'Failed to fetch cards' }
     }
   })

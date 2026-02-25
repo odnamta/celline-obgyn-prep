@@ -5,6 +5,7 @@
  */
 
 import { createSupabaseServerClient } from './server'
+import { logger } from '@/lib/logger'
 
 const BUCKET_NAME = 'vision-images'
 const SIGNED_URL_EXPIRY = 3600 // 1 hour
@@ -38,23 +39,23 @@ export async function uploadImageForVision(
       })
     
     if (uploadError) {
-      console.error('Image upload error:', uploadError)
+      logger.error('uploadImageForVision.upload', uploadError)
       return { ok: false, error: 'Failed to upload image' }
     }
-    
+
     // Generate signed URL
     const { data: signedUrlData, error: signedUrlError } = await supabase.storage
       .from(BUCKET_NAME)
       .createSignedUrl(filename, SIGNED_URL_EXPIRY)
-    
+
     if (signedUrlError || !signedUrlData?.signedUrl) {
-      console.error('Signed URL error:', signedUrlError)
+      logger.error('uploadImageForVision.signedUrl', signedUrlError)
       return { ok: false, error: 'Failed to generate image URL' }
     }
     
     return { ok: true, url: signedUrlData.signedUrl }
   } catch (error) {
-    console.error('Image upload error:', error)
+    logger.error('uploadImageForVision', error)
     return { ok: false, error: 'Failed to upload image' }
   }
 }
@@ -74,13 +75,13 @@ export async function deleteVisionImage(
       .remove([filename])
     
     if (error) {
-      console.error('Image delete error:', error)
+      logger.error('deleteVisionImage.remove', error)
       return false
     }
-    
+
     return true
   } catch (error) {
-    console.error('Image delete error:', error)
+    logger.error('deleteVisionImage', error)
     return false
   }
 }

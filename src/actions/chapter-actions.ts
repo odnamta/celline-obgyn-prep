@@ -17,6 +17,7 @@ import {
 } from '@/lib/structured-content-schema'
 import type { BookChapter, MatchingGroup, CardTemplateV11 } from '@/types/database'
 import type { ActionResultV2 } from '@/types/actions'
+import { logger } from '@/lib/logger'
 
 // ============================================
 // Create Chapter
@@ -69,7 +70,7 @@ export async function createChapter(
     if (error.code === '23505') {
       return { ok: false, error: `Chapter ${chapter_number} already exists in this book` }
     }
-    console.error('[createChapter] Error:', error)
+    logger.error('createChapter', error)
     return { ok: false, error: 'Failed to create chapter' }
   }
 
@@ -107,7 +108,7 @@ export async function getChaptersByBook(
     .order('chapter_number', { ascending: true })
 
   if (error) {
-    console.error('[getChaptersByBook] Error:', error)
+    logger.error('getChaptersByBook', error)
     return { ok: false, error: 'Failed to fetch chapters' }
   }
 
@@ -142,7 +143,7 @@ export async function getChapter(id: string): Promise<ActionResultV2<BookChapter
     .single()
 
   if (error) {
-    console.error('[getChapter] Error:', error)
+    logger.error('getChapter', error)
     return { ok: false, error: 'Chapter not found' }
   }
 
@@ -210,7 +211,7 @@ export async function updateChapter(
     if (error.code === '23505') {
       return { ok: false, error: `Chapter ${updates.chapter_number} already exists in this book` }
     }
-    console.error('[updateChapter] Error:', error)
+    logger.error('updateChapter', error)
     return { ok: false, error: 'Failed to update chapter' }
   }
 
@@ -249,7 +250,7 @@ export async function deleteChapter(id: string): Promise<ActionResultV2> {
     .eq('id', id)
 
   if (error) {
-    console.error('[deleteChapter] Error:', error)
+    logger.error('deleteChapter', error)
     return { ok: false, error: 'Failed to delete chapter' }
   }
 
@@ -305,7 +306,7 @@ export async function createMatchingGroup(
     .single()
 
   if (error) {
-    console.error('[createMatchingGroup] Error:', error)
+    logger.error('createMatchingGroup', error)
     return { ok: false, error: 'Failed to create matching group' }
   }
 
@@ -338,7 +339,7 @@ export async function getCardsByChapter(
     .eq('chapter_id', chapterId)
 
   if (error) {
-    console.error('[getCardsByChapter] Error:', error)
+    logger.error('getCardsByChapter', error)
     return { ok: false, error: 'Failed to fetch cards' }
   }
 
@@ -360,7 +361,7 @@ export async function getCardCountByChapter(
     .eq('chapter_id', chapterId)
 
   if (error) {
-    console.error('[getCardCountByChapter] Error:', error)
+    logger.error('getCardCountByChapter', error)
     return { ok: false, error: 'Failed to count cards' }
   }
 
