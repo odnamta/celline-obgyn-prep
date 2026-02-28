@@ -59,8 +59,26 @@ function getLimiter(config: RateLimitConfig): Ratelimit | null {
 // ============================================
 
 const memStore = new Map<string, number[]>()
+let lastGc = Date.now()
+const GC_INTERVAL_MS = 5 * 60_000 // 5 minutes
+
+function gcMemStore() {
+  const now = Date.now()
+  if (now - lastGc < GC_INTERVAL_MS) return
+  lastGc = now
+  const maxWindow = 60 * 60_000 // 1 hour (longest window)
+  for (const [key, timestamps] of memStore) {
+    const fresh = timestamps.filter((t) => t > now - maxWindow)
+    if (fresh.length === 0) {
+      memStore.delete(key)
+    } else {
+      memStore.set(key, fresh)
+    }
+  }
+}
 
 function checkMemoryRateLimit(key: string, config: RateLimitConfig): RateLimitResult {
+  gcMemStore()
   const now = Date.now()
   const windowStart = now - config.windowMs
   let timestamps = memStore.get(key) ?? []

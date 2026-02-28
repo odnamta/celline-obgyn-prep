@@ -422,6 +422,9 @@ export async function switchOrganization(
  * Transfer ownership to another member. Owner only.
  * Demotes current owner to admin.
  */
+// TODO: Wrap dual role update in an atomic Supabase RPC
+// (e.g. `transfer_ownership(org_id, from_user_id, to_user_id)`)
+// to prevent partial updates if one query fails. Requires Supabase access — currently paused.
 export async function transferOwnership(
   targetMemberId: string
 ): Promise<ActionResultV2<void>> {

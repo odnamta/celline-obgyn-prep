@@ -58,30 +58,29 @@ export async function draftBatchMCQFromText(input: DraftBatchInput): Promise<Dra
   
   const { text, defaultTags, mode = 'extract', subject, imageBase64, imageUrl } = validationResult.data
 
-  // Rate limit check (sensitive: AI batch operation)
+  // Auth + rate limit check (sensitive: AI batch operation)
   const user = await getUser()
-  if (user) {
-    const rateLimitResult = await checkRateLimit(`user:${user.id}:draftBatchMCQ`, RATE_LIMITS.sensitive)
-    if (!rateLimitResult.allowed) {
-      return { ok: false, error: { message: 'Rate limit exceeded. Please try again later.', code: 'RATE_LIMITED' } }
-    }
+  if (!user) {
+    return { ok: false, error: { message: 'Authentication required', code: 'UNAUTHORIZED' } }
+  }
+  const rateLimitResult = await checkRateLimit(`user:${user.id}:draftBatchMCQ`, RATE_LIMITS.sensitive)
+  if (!rateLimitResult.allowed) {
+    return { ok: false, error: { message: 'Rate limit exceeded. Please try again later.', code: 'RATE_LIMITED' } }
   }
 
   // V9: Fetch Golden List topics for AI classification
   let goldenTopics: string[] = []
   try {
-    if (user) {
-      const supabase = await createSupabaseServerClient()
-      const { data: topics } = await supabase
-        .from('tags')
-        .select('name')
-        .eq('user_id', user.id)
-        .eq('category', 'topic')
-        .order('name')
-      goldenTopics = topics?.map(t => t.name) || []
-    }
-  } catch (e) {
-    console.warn('[draftBatchMCQFromText] V9: Failed to load Golden List, using defaults')
+    const supabase = await createSupabaseServerClient()
+    const { data: topics } = await supabase
+      .from('tags')
+      .select('name')
+      .eq('user_id', user.id)
+      .eq('category', 'topic')
+      .order('name')
+    goldenTopics = topics?.map(t => t.name) || []
+  } catch {
+    logger.warn('draftBatchMCQFromText.goldenList', 'Failed to load Golden List, using defaults')
   }
   
   try {
@@ -165,7 +164,7 @@ export async function draftBatchMCQFromText(input: DraftBatchInput): Promise<Dra
 
     } catch (scanError) {
       // V12: Fail soft - log and continue without quality data
-      console.warn('[draftBatchMCQFromText] V12: Quality scan failed, continuing without quality data:', scanError)
+      logger.warn('draftBatchMCQFromText.qualityScan', 'Quality scan failed, continuing without quality data')
     }
 
     // V12: Attach quality issues to each draft (in-memory only)
@@ -257,27 +256,22 @@ export async function bulkCreateMCQV2(input: BulkCreateV2Input): Promise<BulkCre
   // When importSessionId is provided, cards are drafts; otherwise published (backwards compatible)
   const cardStatus = importSessionId ? 'draft' : 'published'
 
-  // Rate limit check (sensitive: bulk card creation)
-  const rateLimitUser = await getUser()
-  if (!rateLimitUser) {
-    return { ok: false, error: { message: 'Authentication required', code: 'UNAUTHORIZED' } }
-  }
-  const bulkCreateRateLimit = await checkRateLimit(`user:${rateLimitUser.id}:bulkCreateMCQ`, RATE_LIMITS.sensitive)
-  if (!bulkCreateRateLimit.allowed) {
-    return { ok: false, error: { message: 'Rate limit exceeded. Please try again later.', code: 'RATE_LIMITED' } }
-  }
-
-  // V11.5.1: Use withUser for auth
+  // Single auth + rate limit via withUser
   const authResult = await withUser(async ({ user, supabase }: AuthContext) => {
+    // Rate limit check (sensitive: bulk card creation)
+    const bulkCreateRateLimit = await checkRateLimit(`user:${user.id}:bulkCreateMCQ`, RATE_LIMITS.sensitive)
+    if (!bulkCreateRateLimit.allowed) {
+      return { ok: false as const, error: { message: 'Rate limit exceeded. Please try again later.', code: 'RATE_LIMITED' } }
+    }
+
     // V8.0: Direct deck_template lookup - NO FALLBACK
     const { data: deckTemplate, error: deckError } = await supabase
       .from('deck_templates')
       .select('id, author_id')
       .eq('id', deckTemplateId)
       .single()
-    
+
     if (deckError || !deckTemplate) {
-      // V8.0: No legacy fallback - return error immediately
       return { ok: false as const, error: { message: `Deck not found in V2 schema: ${deckTemplateId}`, code: 'NOT_FOUND' } }
     }
 
@@ -293,7 +287,6 @@ export async function bulkCreateMCQV2(input: BulkCreateV2Input): Promise<BulkCre
     if (authResult.error === 'AUTH_REQUIRED') {
       return { ok: false, error: { message: 'Authentication required', code: 'UNAUTHORIZED' } }
     }
-    // Pass through other errors (deck not found, not author)
     return authResult as BulkCreateResult
   }
 

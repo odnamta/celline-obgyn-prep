@@ -143,6 +143,14 @@ export function useAutoScan(options: UseAutoScanOptions): UseAutoScanReturn {
   const statsRef = useRef(stats)
   const skippedPagesRef = useRef(skippedPages)
   const scanEndPageRef = useRef(scanEndPage)  // V8.3
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Clear pending timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    }
+  }, [])
 
   // Keep refs in sync
   useEffect(() => { isScanningRef.current = isScanning }, [isScanning])
@@ -337,7 +345,7 @@ export function useAutoScan(options: UseAutoScanOptions): UseAutoScanReturn {
     persistState()
 
     // Schedule next iteration
-    setTimeout(runScanIteration, SCAN_DELAY_MS)
+    timeoutRef.current = setTimeout(runScanIteration, SCAN_DELAY_MS)
   }, [processPage, onComplete, onSafetyStop, persistState])
 
   // V7.2: Start fresh - always starts from page 1, clears all state
@@ -358,7 +366,7 @@ export function useAutoScan(options: UseAutoScanOptions): UseAutoScanReturn {
     setIsScanning(true)
     
     // Kick off the loop
-    setTimeout(runScanIteration, 100)
+    timeoutRef.current = setTimeout(runScanIteration, 100)
   }, [pdfDocument, totalPages, deckId, sourceId, runScanIteration])
 
   // V8.5: Start scanning with explicit isResuming flag
@@ -390,7 +398,7 @@ export function useAutoScan(options: UseAutoScanOptions): UseAutoScanReturn {
         // V8.6: Sync refs before loop starts
         isScanningRef.current = true
         currentPageRef.current = 1
-        setTimeout(runScanIteration, 100)
+        timeoutRef.current = setTimeout(runScanIteration, 100)
         return
       }
       
@@ -424,7 +432,7 @@ export function useAutoScan(options: UseAutoScanOptions): UseAutoScanReturn {
     }
 
     // Kick off the loop
-    setTimeout(runScanIteration, 100)
+    timeoutRef.current = setTimeout(runScanIteration, 100)
   }, [pdfDocument, totalPages, deckId, sourceId, runScanIteration])
 
   // V7.2: Resume - continues from saved page, preserves stats
@@ -467,7 +475,7 @@ export function useAutoScan(options: UseAutoScanOptions): UseAutoScanReturn {
     setIsScanning(true)
     
     // Kick off the loop
-    setTimeout(runScanIteration, 100)
+    timeoutRef.current = setTimeout(runScanIteration, 100)
   }, [pdfDocument, totalPages, deckId, sourceId, runScanIteration])
 
   // V7.2: Pause scanning - preserves state and persists immediately

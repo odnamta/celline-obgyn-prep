@@ -134,6 +134,10 @@ export function useHotkeys(hotkeys: HotkeyConfig[]): void {
  */
 export function isMac(): boolean {
   if (typeof navigator === 'undefined') return false
+  // navigator.platform is deprecated; prefer userAgentData when available
+  if ('userAgentData' in navigator && (navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform) {
+    return (navigator as { userAgentData: { platform: string } }).userAgentData.platform === 'macOS'
+  }
   return /Mac|iPod|iPhone|iPad/.test(navigator.platform)
 }
 

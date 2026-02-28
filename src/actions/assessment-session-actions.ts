@@ -562,31 +562,33 @@ export async function expireStaleSessions(): Promise<ActionResultV2<{ expired: n
       answersBySession.set(a.session_id, arr)
     }
 
-    // Build batch update data
+    // Parallelize session updates
     const nowIso = new Date().toISOString()
-    let expiredCount = 0
-    for (const s of stale) {
-      const a = s.assessments as unknown as { pass_score: number }
-      const answers = answersBySession.get(s.id) ?? []
+    const updateResults = await Promise.all(
+      stale.map(async (s) => {
+        const a = s.assessments as unknown as { pass_score: number }
+        const answers = answersBySession.get(s.id) ?? []
 
-      const total = answers.length
-      const correct = answers.filter((ans) => ans.is_correct === true).length
-      const score = total > 0 ? Math.round((correct / total) * 100) : 0
-      const passed = score >= a.pass_score
+        const total = answers.length
+        const correct = answers.filter((ans) => ans.is_correct === true).length
+        const score = total > 0 ? Math.round((correct / total) * 100) : 0
+        const passed = score >= a.pass_score
 
-      const { error } = await supabase
-        .from('assessment_sessions')
-        .update({
-          status: 'timed_out',
-          completed_at: nowIso,
-          score,
-          passed,
-          time_remaining_seconds: 0,
-        })
-        .eq('id', s.id)
+        const { error } = await supabase
+          .from('assessment_sessions')
+          .update({
+            status: 'timed_out',
+            completed_at: nowIso,
+            score,
+            passed,
+            time_remaining_seconds: 0,
+          })
+          .eq('id', s.id)
 
-      if (!error) expiredCount++
-    }
+        return !error
+      })
+    )
+    const expiredCount = updateResults.filter(Boolean).length
 
     if (expiredCount > 0) {
       revalidatePath('/assessments')

@@ -34,6 +34,8 @@ export default withPWA({
   },
   workboxOptions: {
     skipWaiting: true,
+    // CRITICAL: Prevents Vercel WorkerError crash (was buildExcludes in old next-pwa)
+    exclude: [/middleware-manifest\.json$/],
     runtimeCaching: [
       {
         urlPattern: /^https:\/\/.*\.supabase\.co\/rest\/.*/i,

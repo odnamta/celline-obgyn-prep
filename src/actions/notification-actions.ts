@@ -8,6 +8,7 @@ import { withUser, withOrgUser } from '@/actions/_helpers'
 import { RATE_LIMITS } from '@/lib/rate-limit'
 import { createSupabaseServiceClient } from '@/lib/supabase/server'
 import { hasMinimumRole } from '@/lib/org-authorization'
+import { logger } from '@/lib/logger'
 import type { ActionResultV2 } from '@/types/actions'
 import {
   dispatchAssessmentEmail,
@@ -340,6 +341,7 @@ export async function sendDeadlineReminders(): Promise<ActionResultV2<{ notified
     }
 
     let totalNotified = 0
+    const serviceClient = await createSupabaseServiceClient()
 
     for (const assessment of assessments) {
       // Get users who already completed
@@ -366,7 +368,6 @@ export async function sendDeadlineReminders(): Promise<ActionResultV2<{ notified
         link: `/assessments/${assessment.id}/take`,
       }))
 
-      const serviceClient = await createSupabaseServiceClient()
       const { error } = await serviceClient.from('notifications').insert(rows)
       if (!error) {
         totalNotified += pending.length
@@ -388,7 +389,7 @@ export async function sendDeadlineReminders(): Promise<ActionResultV2<{ notified
             message: bodyText,
             actionUrl: buildFullUrl(`/assessments/${assessment.id}/take`),
             unsubscribeUrl: buildUnsubscribeUrl(profile.id),
-          }).catch((err) => console.warn('[email] sendDeadlineReminders failed:', err))
+          }).catch((err) => logger.warn('sendDeadlineReminders.email', String(err)))
         }
       }
     }

@@ -249,11 +249,11 @@ export async function assignTagsToCard(
     return { ok: false, error: 'Card ID is required' }
   }
 
-  return withUser(async ({ user, supabase }: AuthContext) => {
-    // Verify card ownership via deck
+  return withOrgUser(async ({ user, supabase }: OrgAuthContext) => {
+    // Verify card ownership via deck_template
     const { data: card } = await supabase
-      .from('cards')
-      .select('id, deck_id, decks!inner(user_id)')
+      .from('card_templates')
+      .select('id, deck_template_id, deck_templates!inner(author_id)')
       .eq('id', cardId)
       .single()
 
@@ -261,26 +261,26 @@ export async function assignTagsToCard(
       return { ok: false, error: 'Card not found' }
     }
 
-    const deckData = card.decks as unknown as { user_id: string }
-    if (deckData.user_id !== user.id) {
+    const deckData = card.deck_templates as unknown as { author_id: string }
+    if (deckData.author_id !== user.id) {
       return { ok: false, error: 'Access denied' }
     }
 
     // Remove existing tags
     await supabase
-      .from('card_tags')
+      .from('card_template_tags')
       .delete()
-      .eq('card_id', cardId)
+      .eq('card_template_id', cardId)
 
     // Add new tags (if any)
     if (tagIds.length > 0) {
       const cardTags = tagIds.map((tagId) => ({
-        card_id: cardId,
+        card_template_id: cardId,
         tag_id: tagId,
       }))
 
       const { error } = await supabase
-        .from('card_tags')
+        .from('card_template_tags')
         .insert(cardTags)
 
       if (error) {
@@ -289,7 +289,7 @@ export async function assignTagsToCard(
     }
 
     // Revalidate deck page
-    revalidatePath(`/decks/${card.deck_id}`)
+    revalidatePath(`/decks/${card.deck_template_id}`)
 
     return { ok: true }
   })
@@ -308,11 +308,11 @@ export async function removeTagFromCard(
     return { ok: false, error: 'Card ID and Tag ID are required' }
   }
 
-  return withUser(async ({ user, supabase }: AuthContext) => {
-    // Verify card ownership via deck
+  return withOrgUser(async ({ user, supabase }: OrgAuthContext) => {
+    // Verify card ownership via deck_template
     const { data: card } = await supabase
-      .from('cards')
-      .select('id, deck_id, decks!inner(user_id)')
+      .from('card_templates')
+      .select('id, deck_template_id, deck_templates!inner(author_id)')
       .eq('id', cardId)
       .single()
 
@@ -320,16 +320,16 @@ export async function removeTagFromCard(
       return { ok: false, error: 'Card not found' }
     }
 
-    const deckData = card.decks as unknown as { user_id: string }
-    if (deckData.user_id !== user.id) {
+    const deckData = card.deck_templates as unknown as { author_id: string }
+    if (deckData.author_id !== user.id) {
       return { ok: false, error: 'Access denied' }
     }
 
     // Remove the tag association
     const { error } = await supabase
-      .from('card_tags')
+      .from('card_template_tags')
       .delete()
-      .eq('card_id', cardId)
+      .eq('card_template_id', cardId)
       .eq('tag_id', tagId)
 
     if (error) {
@@ -337,7 +337,7 @@ export async function removeTagFromCard(
     }
 
     // Revalidate deck page
-    revalidatePath(`/decks/${card.deck_id}`)
+    revalidatePath(`/decks/${card.deck_template_id}`)
 
     return { ok: true }
   })
@@ -353,11 +353,11 @@ export async function getCardTags(cardId: string): Promise<Tag[]> {
     return []
   }
 
-  const result = await withUser(async ({ supabase }: AuthContext) => {
+  const result = await withOrgUser(async ({ supabase }: OrgAuthContext) => {
     const { data } = await supabase
-      .from('card_tags')
+      .from('card_template_tags')
       .select('tags(*)')
-      .eq('card_id', cardId)
+      .eq('card_template_id', cardId)
 
     if (!data) {
       return { ok: true as const, data: [] as Tag[] }
@@ -371,7 +371,7 @@ export async function getCardTags(cardId: string): Promise<Tag[]> {
     return { ok: true as const, data: tags }
   })
 
-  // Return empty array if auth failed
+  // Return empty array if auth or org resolution failed
   if (!result.ok) return []
   return result.data ?? []
 }
@@ -534,192 +534,161 @@ export async function autoTagCards(
     return { ok: false, error: 'No cards selected' }
   }
 
-  // V13: Resolve auth + org context for tag creation with org_id
-  const user = await getUser()
-  if (!user) {
-    return { ok: false, error: 'AUTH_REQUIRED' }
-  }
+  return withOrgUser(async ({ user, supabase, org }: OrgAuthContext) => {
+    // Fetch card templates with their deck info for authorization
+    const { data: cardTemplates, error: fetchError } = await supabase
+      .from('card_templates')
+      .select('id, stem, deck_template_id, deck_templates!inner(author_id, subject)')
+      .in('id', cardIds)
 
-  const supabase = await createSupabaseServerClient()
+    if (fetchError || !cardTemplates) {
+      return { ok: false, error: 'Could not fetch cards' }
+    }
 
-  // V13: Resolve user's active org for tag scoping
-  const { data: orgMembership } = await supabase
-    .from('organization_members')
-    .select('org_id')
-    .eq('user_id', user.id)
-    .order('joined_at', { ascending: true })
-    .limit(1)
-    .single()
-  if (!orgMembership?.org_id) {
-    return { ok: false, error: 'No active organization found' }
-  }
-  const activeOrgId = orgMembership.org_id
+    if (cardTemplates.length === 0) {
+      return { ok: false, error: 'No cards found' }
+    }
 
-  // Fetch card templates with their deck info for authorization
-  const { data: cardTemplates, error: fetchError } = await supabase
-    .from('card_templates')
-    .select('id, stem, deck_template_id, deck_templates!inner(author_id, subject)')
-    .in('id', cardIds)
+    // Verify user is author of all cards
+    const unauthorized = cardTemplates.some((ct) => {
+      const deckData = ct.deck_templates as unknown as { author_id: string }
+      return deckData.author_id !== user.id
+    })
 
-  if (fetchError || !cardTemplates) {
-    return { ok: false, error: 'Could not fetch cards' }
-  }
+    if (unauthorized) {
+      return { ok: false, error: 'Only the author can auto-tag these cards' }
+    }
 
-  if (cardTemplates.length === 0) {
-    return { ok: false, error: 'No cards found' }
-  }
+    // V9.3: Use provided subject or fall back to deck subject or default
+    const firstDeck = cardTemplates[0].deck_templates as unknown as { subject?: string }
+    const effectiveSubject = subject || firstDeck.subject || 'General'
 
-  // Verify user is author of all cards
-  const unauthorized = cardTemplates.some((ct) => {
-    const deckData = ct.deck_templates as unknown as { author_id: string }
-    return deckData.author_id !== user.id
-  })
-
-  if (unauthorized) {
-    return { ok: false, error: 'Only the author can auto-tag these cards' }
-  }
-
-  // V9.3: Use provided subject or fall back to deck subject or default
-  const firstDeck = cardTemplates[0].deck_templates as unknown as { subject?: string }
-  const effectiveSubject = subject || firstDeck.subject || 'General'
-
-  // V9.3: Process cards with bounded concurrency (5 at a time)
-  const CONCURRENCY_LIMIT = 5
-  const results: { cardId: string; success: boolean }[] = []
-  for (let i = 0; i < cardTemplates.length; i += CONCURRENCY_LIMIT) {
-    const batch = cardTemplates.slice(i, i + CONCURRENCY_LIMIT)
-    const batchResults = await Promise.all(
-      batch.map(async (ct) => {
-      try {
-        const cardForPrompt = { id: ct.id, stem: ct.stem }
-
-        // V9.3: Subject-aware system prompt (extracted to ai-prompts.ts)
-        const systemPrompt = buildAutoTagSystemPrompt(effectiveSubject)
-
-        const userPrompt = `Classify this ${effectiveSubject} question:\n${JSON.stringify(cardForPrompt, null, 2)}`
-
-        const response = await openai.chat.completions.create({
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          temperature: 0.3,
-          response_format: { type: 'json_object' },
-        })
-
-        const content = response.choices[0]?.message?.content
-        if (!content) {
-          logger.error('autoTagCards.emptyResponse', ct.id, { cardId: ct.id })
-          return { cardId: ct.id, success: false }
-        }
-
-        // Parse response
-        let parsed: unknown
+    // V9.3: Process cards with bounded concurrency (5 at a time)
+    const CONCURRENCY_LIMIT = 5
+    const results: { cardId: string; success: boolean }[] = []
+    for (let i = 0; i < cardTemplates.length; i += CONCURRENCY_LIMIT) {
+      const batch = cardTemplates.slice(i, i + CONCURRENCY_LIMIT)
+      const batchResults = await Promise.all(
+        batch.map(async (ct) => {
         try {
-          parsed = JSON.parse(content)
-        } catch {
-          logger.error('autoTagCards.parseResponse', content)
-          return { cardId: ct.id, success: false }
-        }
+          const cardForPrompt = { id: ct.id, stem: ct.stem }
 
-        // Validate single card response
-        const singleCardSchema = z.object({
-          cardId: z.string(),
-          topic: z.string(),
-          concepts: z.array(z.string()).min(1).max(2),
-        })
+          const systemPrompt = buildAutoTagSystemPrompt(effectiveSubject)
+          const userPrompt = `Classify this ${effectiveSubject} question:\n${JSON.stringify(cardForPrompt, null, 2)}`
 
-        const validated = singleCardSchema.safeParse(parsed)
-        if (!validated.success) {
-          logger.error('autoTagCards.invalidSchema', validated.error)
-          return { cardId: ct.id, success: false }
-        }
+          const response = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt },
+            ],
+            temperature: 0.3,
+            response_format: { type: 'json_object' },
+          })
 
-        const classification = validated.data
-
-        // Validate topic is in Golden List
-        const canonicalTopic = getCanonicalTopicTag(classification.topic)
-        if (!canonicalTopic) {
-          console.warn(`Invalid topic "${classification.topic}" for card ${ct.id}`)
-          return { cardId: ct.id, success: false }
-        }
-
-        // Collect all tags to apply (topic + concepts)
-        const tagNames = [canonicalTopic, ...classification.concepts]
-
-        // Find or create tags and apply them
-        for (const tagName of tagNames) {
-          const trimmedName = tagName.trim()
-          if (!trimmedName) continue
-
-          // Find existing tag or create new one
-          const { data: existingTag } = await supabase
-            .from('tags')
-            .select('id')
-            .eq('user_id', user.id)
-            .ilike('name', trimmedName)
-            .single()
-
-          let tagId: string
-
-          if (existingTag) {
-            tagId = existingTag.id
-          } else {
-            // Create new tag - topic category for Golden List, concept for others
-            const category = getCanonicalTopicTag(trimmedName) ? 'topic' : 'concept'
-            const color = category === 'topic' ? '#10b981' : '#6366f1'
-
-            const { data: newTag, error: createError } = await supabase
-              .from('tags')
-              .insert({
-                user_id: user.id,
-                org_id: activeOrgId,
-                name: trimmedName,
-                category,
-                color,
-              })
-              .select('id')
-              .single()
-
-            if (createError || !newTag) {
-              logger.error('autoTagCards.createTag', createError)
-              continue
-            }
-            tagId = newTag.id
+          const content = response.choices[0]?.message?.content
+          if (!content) {
+            logger.error('autoTagCards.emptyResponse', ct.id, { cardId: ct.id })
+            return { cardId: ct.id, success: false }
           }
 
-          // Upsert card-tag association (idempotent)
-          await supabase
-            .from('card_template_tags')
-            .upsert(
-              { card_template_id: ct.id, tag_id: tagId },
-              { onConflict: 'card_template_id,tag_id', ignoreDuplicates: true }
-            )
+          let parsed: unknown
+          try {
+            parsed = JSON.parse(content)
+          } catch {
+            logger.error('autoTagCards.parseResponse', content)
+            return { cardId: ct.id, success: false }
+          }
+
+          const singleCardSchema = z.object({
+            cardId: z.string(),
+            topic: z.string(),
+            concepts: z.array(z.string()).min(1).max(2),
+          })
+
+          const validated = singleCardSchema.safeParse(parsed)
+          if (!validated.success) {
+            logger.error('autoTagCards.invalidSchema', validated.error)
+            return { cardId: ct.id, success: false }
+          }
+
+          const classification = validated.data
+
+          const canonicalTopic = getCanonicalTopicTag(classification.topic)
+          if (!canonicalTopic) {
+            logger.warn('autoTagCards.invalidTopic', `Invalid topic: ${classification.topic}`, { cardId: ct.id })
+            return { cardId: ct.id, success: false }
+          }
+
+          const tagNames = [canonicalTopic, ...classification.concepts]
+
+          for (const tagName of tagNames) {
+            const trimmedName = tagName.trim()
+            if (!trimmedName) continue
+
+            const { data: existingTag } = await supabase
+              .from('tags')
+              .select('id')
+              .eq('user_id', user.id)
+              .ilike('name', trimmedName)
+              .single()
+
+            let tagId: string
+
+            if (existingTag) {
+              tagId = existingTag.id
+            } else {
+              const category = getCanonicalTopicTag(trimmedName) ? 'topic' : 'concept'
+              const color = category === 'topic' ? '#10b981' : '#6366f1'
+
+              const { data: newTag, error: createError } = await supabase
+                .from('tags')
+                .insert({
+                  user_id: user.id,
+                  org_id: org.id,
+                  name: trimmedName,
+                  category,
+                  color,
+                })
+                .select('id')
+                .single()
+
+              if (createError || !newTag) {
+                logger.error('autoTagCards.createTag', createError)
+                continue
+              }
+              tagId = newTag.id
+            }
+
+            await supabase
+              .from('card_template_tags')
+              .upsert(
+                { card_template_id: ct.id, tag_id: tagId },
+                { onConflict: 'card_template_id,tag_id', ignoreDuplicates: true }
+              )
+          }
+
+          return { cardId: ct.id, success: true }
+        } catch (error) {
+          logger.error('autoTagCards', error, { cardId: ct.id })
+          return { cardId: ct.id, success: false }
         }
+      }))
+      results.push(...batchResults)
+    }
 
-        return { cardId: ct.id, success: true }
-      } catch (error) {
-        logger.error('autoTagCards', error, { cardId: ct.id })
-        return { cardId: ct.id, success: false }
-      }
-    }))
-    results.push(...batchResults)
-  }
+    const totalTagged = results.filter((r) => r.success).length
+    const totalSkipped = results.filter((r) => !r.success).length
 
-  // Aggregate results
-  const totalTagged = results.filter((r) => r.success).length
-  const totalSkipped = results.filter((r) => !r.success).length
+    if (totalTagged === 0 && totalSkipped > 0) {
+      return { ok: false, error: 'AI classification failed. Please try again.' }
+    }
 
-  if (totalTagged === 0 && totalSkipped > 0) {
-    return { ok: false, error: 'AI classification failed. Please try again.' }
-  }
+    const deckIds = [...new Set(cardTemplates.map((ct) => ct.deck_template_id))]
+    for (const deckId of deckIds) {
+      revalidatePath(`/decks/${deckId}`)
+    }
 
-  // Revalidate affected deck pages
-  const deckIds = [...new Set(cardTemplates.map((ct) => ct.deck_template_id))]
-  for (const deckId of deckIds) {
-    revalidatePath(`/decks/${deckId}`)
-  }
-
-  return { ok: true, data: { taggedCount: totalTagged, skippedCount: totalSkipped } }
+    return { ok: true, data: { taggedCount: totalTagged, skippedCount: totalSkipped } }
+  }, undefined, RATE_LIMITS.bulk)
 }

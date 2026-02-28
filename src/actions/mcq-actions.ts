@@ -205,13 +205,6 @@ export async function answerMCQAction(
           onConflict: 'user_id,card_template_id',
         })
 
-      // V8.2: Debug logging for SRS updates
-      console.log(`[SRS] MCQ ${cardId} answered ${isCorrect ? 'correct' : 'incorrect'} (rating ${rating}):`, {
-        oldInterval: currentProgress?.interval ?? 0,
-        newInterval: sm2Result.interval,
-        nextReview: sm2Result.nextReview.toISOString(),
-      })
-
       if (updateError) {
         return { ok: false, error: updateError.message }
       }

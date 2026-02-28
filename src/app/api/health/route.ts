@@ -12,7 +12,9 @@ async function checkSupabase(): Promise<{ status: ServiceStatus; latencyMs: numb
 
   const start = Date.now()
   try {
-    const supabase = createClient(url, key)
+    const supabase = createClient(url, key, {
+      auth: { persistSession: false },
+    })
     const { error } = await supabase.from('organizations').select('id', { count: 'exact', head: true })
     const latencyMs = Date.now() - start
     if (error) return { status: 'degraded', latencyMs }

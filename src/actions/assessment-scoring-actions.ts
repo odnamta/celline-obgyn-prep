@@ -74,6 +74,9 @@ export async function getSessionResults(
  * Get percentile ranking for a completed session.
  * Returns what percentage of other takers the candidate scored better than.
  */
+// TODO: Replace client-side percentile calculation with DB aggregate RPC
+// (e.g. `percent_rank() OVER (ORDER BY score)`) for better performance at scale.
+// Requires Supabase access — currently paused.
 export async function getSessionPercentile(
   sessionId: string
 ): Promise<ActionResultV2<{ percentile: number; rank: number; totalSessions: number }>> {
@@ -382,6 +385,9 @@ export async function getSessionWeakAreas(
  * Get all questions across org decks with difficulty stats.
  * Creator+ only. Used for the question bank view.
  */
+// TODO: Replace N+1 session-answer fetch with a DB aggregate view/RPC
+// (e.g. materialized view joining card_templates with aggregated answer stats).
+// Requires Supabase access — currently paused.
 export async function getOrgQuestionBank(
   deckTemplateId?: string
 ): Promise<ActionResultV2<{
