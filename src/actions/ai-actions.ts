@@ -3,7 +3,7 @@
 import { openai } from '@/lib/openai-client'
 import { MCQ_MODEL, MCQ_TEMPERATURE } from '@/lib/ai-config'
 import { logger } from '@/lib/logger'
-import { withUser } from './_helpers'
+import { withOrgUser } from './_helpers'
 import { RATE_LIMITS } from '@/lib/rate-limit'
 import {
   draftMCQInputSchema,
@@ -58,7 +58,12 @@ export async function draftMCQFromText(input: DraftMCQInput): Promise<MCQDraftRe
     return { ok: false, error: 'TEXT_TOO_SHORT' }
   }
 
-  return withUser(async () => {
+  return withOrgUser(async ({ org }) => {
+    // Check ai_generation feature flag
+    if (!org.settings?.features?.ai_generation) {
+      return { ok: false, error: 'NOT_CONFIGURED' }
+    }
+
     const { sourceText, deckName, mode = 'extract', subject, imageBase64, imageUrl } = validationResult.data
 
     try {
@@ -114,5 +119,5 @@ export async function draftMCQFromText(input: DraftMCQInput): Promise<MCQDraftRe
       logger.error('draftMCQFromText', error)
       return { ok: false, error: 'OPENAI_ERROR' }
     }
-  }, RATE_LIMITS.sensitive) as Promise<MCQDraftResult>
+  }, undefined, RATE_LIMITS.sensitive) as Promise<MCQDraftResult>
 }

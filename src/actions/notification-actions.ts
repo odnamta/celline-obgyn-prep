@@ -267,8 +267,8 @@ export async function sendAssessmentReminder(
       user_id: m.user_id,
       org_id: org.id,
       type: 'assessment_reminder',
-      title: 'Assessment Reminder',
-      body: `Don't forget to complete "${assessment.title}".`,
+      title: 'Pengingat Asesmen',
+      body: `Jangan lupa menyelesaikan "${assessment.title}".`,
       link: `/assessments`,
     }))
 
@@ -288,10 +288,10 @@ export async function sendAssessmentReminder(
       if (profile.email_notifications === false) continue
       dispatchAssessmentEmail({
         to: profile.email,
-        subject: 'Assessment Reminder',
+        subject: 'Pengingat Asesmen',
         orgName: org.name,
         assessmentTitle: assessment.title,
-        message: `Don't forget to complete "${assessment.title}".`,
+        message: `Jangan lupa menyelesaikan "${assessment.title}".`,
         actionUrl: buildFullUrl('/assessments'),
         unsubscribeUrl: buildUnsubscribeUrl(profile.id),
       }).catch((err) => logger.warn('sendAssessmentReminder.email', String(err)))
@@ -373,8 +373,8 @@ export async function sendDeadlineReminders(): Promise<ActionResultV2<{ notified
         user_id: m.user_id,
         org_id: org.id,
         type: 'assessment_deadline_approaching',
-        title: 'Deadline Approaching',
-        body: `"${assessment.title}" closes in ${hoursLeft} hour${hoursLeft !== 1 ? 's' : ''}. Complete it before it closes.`,
+        title: 'Batas Waktu Mendekat',
+        body: `"${assessment.title}" ditutup dalam ${hoursLeft} jam. Selesaikan sebelum ditutup.`,
         link: `/assessments/${assessment.id}/take`,
       }))
 
@@ -388,12 +388,12 @@ export async function sendDeadlineReminders(): Promise<ActionResultV2<{ notified
           .select('id, email, email_notifications')
           .in('id', pending.map((m) => m.user_id))
 
-        const bodyText = `"${assessment.title}" closes in ${hoursLeft} hour${hoursLeft !== 1 ? 's' : ''}. Complete it before it closes.`
+        const bodyText = `"${assessment.title}" ditutup dalam ${hoursLeft} jam. Selesaikan sebelum ditutup.`
         for (const profile of profiles ?? []) {
           if (profile.email_notifications === false) continue
           dispatchAssessmentEmail({
             to: profile.email,
-            subject: 'Deadline Approaching',
+            subject: 'Batas Waktu Mendekat',
             orgName: org.name,
             assessmentTitle: assessment.title,
             message: bodyText,
@@ -466,8 +466,8 @@ export async function assignAssessmentToAll(
       user_id: c.user_id,
       org_id: org.id,
       type: 'assessment_assigned',
-      title: 'Assessment Assigned',
-      body: `You have been assigned "${assessment.title}". Please complete it.`,
+      title: 'Asesmen Ditugaskan',
+      body: `Anda ditugaskan untuk mengerjakan "${assessment.title}". Silakan selesaikan.`,
       link: `/assessments/${assessment.id}/take`,
     }))
 
@@ -552,8 +552,8 @@ export async function bulkAssignAssessment(
       user_id: userId,
       org_id: org.id,
       type: 'assessment_assigned',
-      title: 'Assessment Assigned',
-      body: `You have been assigned "${assessment.title}". Please complete it.`,
+      title: 'Asesmen Ditugaskan',
+      body: `Anda ditugaskan untuk mengerjakan "${assessment.title}". Silakan selesaikan.`,
       link: `/assessments/${assessment.id}/take`,
     }))
 

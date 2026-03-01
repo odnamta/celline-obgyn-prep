@@ -14,6 +14,40 @@ import type { AssessmentSession, SessionWithAssessment } from '@/types/database'
 import { logAuditEvent } from '@/actions/audit-actions'
 
 /**
+ * RFC 4180 compliant CSV row parser.
+ * Handles quoted fields containing commas and escaped double-quotes.
+ */
+function parseCsvRow(row: string): string[] {
+  const fields: string[] = []
+  let current = ''
+  let inQuotes = false
+  for (let i = 0; i < row.length; i++) {
+    const ch = row[i]
+    if (inQuotes) {
+      if (ch === '"' && row[i + 1] === '"') {
+        current += '"'
+        i++ // skip escaped quote
+      } else if (ch === '"') {
+        inQuotes = false
+      } else {
+        current += ch
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true
+      } else if (ch === ',') {
+        fields.push(current)
+        current = ''
+      } else {
+        current += ch
+      }
+    }
+  }
+  fields.push(current)
+  return fields
+}
+
+/**
  * Get user's sessions across all assessments in the org.
  */
 export async function getMyAssessmentSessions(): Promise<ActionResultV2<SessionWithAssessment[]>> {
@@ -433,9 +467,8 @@ export async function exportCandidateProfile(
     startedAt: string
     tabSwitchCount: number
     answers: Array<{
-      questionText: string
-      selectedOption: string | null
-      correctOption: string
+      cardTemplateId: string
+      selectedIndex: number | null
       isCorrect: boolean
       timeSpentSeconds: number | null
     }>
@@ -495,9 +528,8 @@ export async function exportCandidateProfile(
 
     const sessions = orgSessions.map((s) => {
       const answers = (answersBySession.get(s.id) ?? []).map((a: Record<string, unknown>) => ({
-        questionText: (a.question_text as string) ?? '',
-        selectedOption: (a.selected_option_id as string) ?? null,
-        correctOption: (a.correct_option_id as string) ?? '',
+        cardTemplateId: (a.card_template_id as string) ?? '',
+        selectedIndex: (a.selected_index as number | null) ?? null,
         isCorrect: (a.is_correct as boolean) ?? false,
         timeSpentSeconds: (a.time_spent_seconds as number) ?? null,
       }))
@@ -536,6 +568,10 @@ export async function exportCandidateProfile(
 export async function importCandidatesCsv(
   csvText: string
 ): Promise<ActionResultV2<{ imported: number; skipped: number; errors: string[] }>> {
+  if (csvText.length > 500_000) {
+    return { ok: false, error: 'File terlalu besar (maks 500KB)' }
+  }
+
   return withOrgUser(async ({ user, supabase, org, role }) => {
     if (!hasMinimumRole(role, 'creator')) {
       return { ok: false, error: 'Insufficient permissions' }
@@ -543,14 +579,17 @@ export async function importCandidatesCsv(
 
     const lines = csvText.trim().split('\n')
     if (lines.length < 2) {
-      return { ok: false, error: 'CSV must have a header row and at least one data row' }
+      return { ok: false, error: 'CSV harus memiliki header dan minimal satu baris data' }
+    }
+    if (lines.length > 1001) {
+      return { ok: false, error: 'Maksimal 1000 baris per import' }
     }
 
     // Parse header
-    const header = lines[0].toLowerCase().split(',').map((h) => h.trim())
+    const header = parseCsvRow(lines[0]).map((h) => h.toLowerCase().trim())
     const emailIdx = header.indexOf('email')
     if (emailIdx === -1) {
-      return { ok: false, error: 'CSV must have an "email" column' }
+      return { ok: false, error: 'CSV harus memiliki kolom "email"' }
     }
     const nameIdx = header.indexOf('name')
     const roleIdx = header.indexOf('role')
@@ -560,7 +599,7 @@ export async function importCandidatesCsv(
     const errors: string[] = []
 
     for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(',').map((c) => c.trim())
+      const cols = parseCsvRow(lines[i]).map((c) => c.trim())
       const email = cols[emailIdx]?.toLowerCase()
 
       if (!email || !email.includes('@')) {

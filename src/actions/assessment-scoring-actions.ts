@@ -28,10 +28,29 @@ export async function getSessionResults(
       .single()
 
     if (sError || !session) {
-      return { ok: false, error: 'Session not found' }
+      return { ok: false, error: 'Sesi tidak ditemukan' }
     }
 
-    // Get answers with card details
+    // Fetch assessment to check result visibility flags
+    const { data: assessment } = await supabase
+      .from('assessments')
+      .select('show_results, allow_review')
+      .eq('id', session.assessment_id)
+      .single()
+
+    if (!assessment?.show_results) {
+      return { ok: false, error: 'Hasil tidak tersedia untuk asesmen ini' }
+    }
+
+    // Get answers with card details (only if review is allowed)
+    if (!assessment.allow_review) {
+      // Return session summary without answer details
+      return {
+        ok: true,
+        data: { session: session as AssessmentSession, answers: [] },
+      }
+    }
+
     const { data: answers, error: aError } = await supabase
       .from('assessment_answers')
       .select(`

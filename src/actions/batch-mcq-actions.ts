@@ -68,10 +68,26 @@ export async function draftBatchMCQFromText(input: DraftBatchInput): Promise<Dra
     return { ok: false, error: { message: 'Rate limit exceeded. Please try again later.', code: 'RATE_LIMITED' } }
   }
 
+  // Check ai_generation feature flag via user's org membership
+  const supabase = await createSupabaseServerClient()
+  const { data: membership } = await supabase
+    .from('organization_members')
+    .select('organizations(settings)')
+    .eq('user_id', user.id)
+    .limit(1)
+    .single()
+
+  if (membership?.organizations) {
+    const orgSettings = (membership.organizations as unknown as { settings: Record<string, unknown> }).settings
+    const features = orgSettings?.features as Record<string, boolean> | undefined
+    if (!features?.ai_generation) {
+      return { ok: false, error: { message: 'Fitur AI tidak aktif untuk organisasi ini', code: 'NOT_CONFIGURED' } }
+    }
+  }
+
   // V9: Fetch Golden List topics for AI classification
   let goldenTopics: string[] = []
   try {
-    const supabase = await createSupabaseServerClient()
     const { data: topics } = await supabase
       .from('tags')
       .select('name')

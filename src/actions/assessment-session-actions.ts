@@ -32,6 +32,11 @@ export async function startAssessmentSession(
   accessCode?: string
 ): Promise<ActionResultV2<AssessmentSession>> {
   return withOrgUser(async ({ user, supabase, org }) => {
+    // Check assessment_mode feature flag
+    if (!org.settings?.features?.assessment_mode) {
+      return { ok: false, error: 'Fitur asesmen tidak aktif' }
+    }
+
     // Fetch assessment
     const { data: assessment, error: aError } = await supabase
       .from('assessments')
@@ -60,10 +65,10 @@ export async function startAssessmentSession(
     // Check schedule window
     const now = new Date()
     if (assessment.start_date && new Date(assessment.start_date) > now) {
-      return { ok: false, error: 'This assessment has not started yet' }
+      return { ok: false, error: 'Asesmen belum dimulai' }
     }
     if (assessment.end_date && new Date(assessment.end_date) < now) {
-      return { ok: false, error: 'This assessment has closed' }
+      return { ok: false, error: 'Asesmen telah ditutup' }
     }
 
     // Check max attempts and cooldown
@@ -76,7 +81,7 @@ export async function startAssessmentSession(
         .order('completed_at', { ascending: false, nullsFirst: false })
 
       if (assessment.max_attempts && (count ?? 0) >= assessment.max_attempts) {
-        return { ok: false, error: 'Maximum attempts reached' }
+        return { ok: false, error: 'Batas percobaan telah tercapai' }
       }
 
       // Check cooldown period since last completed session
@@ -87,7 +92,7 @@ export async function startAssessmentSession(
           cooldownEnd.setMinutes(cooldownEnd.getMinutes() + assessment.cooldown_minutes)
           if (now < cooldownEnd) {
             const minutesLeft = Math.ceil((cooldownEnd.getTime() - now.getTime()) / 60000)
-            return { ok: false, error: `Please wait ${minutesLeft} minute${minutesLeft !== 1 ? 's' : ''} before retaking` }
+            return { ok: false, error: `Harap tunggu ${minutesLeft} menit sebelum mencoba lagi` }
           }
         }
       }
@@ -201,15 +206,20 @@ export async function submitAnswer(
       return { ok: false, error: 'Question not part of this session' }
     }
 
-    // Get the correct answer
+    // Get the correct answer + options for bound check
     const { data: card } = await supabase
       .from('card_templates')
-      .select('correct_index')
+      .select('correct_index, options')
       .eq('id', cardTemplateId)
       .single()
 
     if (!card) {
       return { ok: false, error: 'Question not found' }
+    }
+
+    // Validate selectedIndex against actual option count
+    if (Array.isArray(card.options) && selectedIndex >= card.options.length) {
+      return { ok: false, error: 'Jawaban tidak valid' }
     }
 
     const isCorrect = selectedIndex === card.correct_index

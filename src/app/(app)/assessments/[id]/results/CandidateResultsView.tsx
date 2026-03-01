@@ -137,9 +137,9 @@ export function CandidateResultsView({ assessmentId, sessionId }: { assessmentId
   if (error || !session) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-12 text-center">
-        <p className="text-red-600 dark:text-red-400 mb-4">{error ?? 'Session not found'}</p>
+        <p className="text-red-600 dark:text-red-400 mb-4">{error ?? 'Sesi tidak ditemukan'}</p>
         <Button variant="secondary" onClick={() => router.push('/assessments')}>
-          Back to Assessments
+          Kembali ke Asesmen
         </Button>
       </div>
     )
@@ -159,20 +159,20 @@ export function CandidateResultsView({ assessmentId, sessionId }: { assessmentId
           className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 mb-6"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to Assessments
+          Kembali ke Asesmen
         </button>
         <div className="rounded-xl p-6 text-center bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
           <CheckCircle2 className="h-12 w-12 mx-auto text-blue-600 mb-3" />
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">
-            Assessment Submitted
+            Asesmen Dikirim
           </h1>
           <p className="text-slate-600 dark:text-slate-400">
-            Your responses have been recorded. Results are not available for this assessment.
+            Jawaban Anda telah dicatat. Hasil tidak tersedia untuk asesmen ini.
           </p>
         </div>
         <div className="mt-8 text-center">
           <Button variant="secondary" onClick={() => router.push('/assessments')}>
-            Back to Assessments
+            Kembali ke Asesmen
           </Button>
         </div>
       </div>
@@ -186,7 +186,7 @@ export function CandidateResultsView({ assessmentId, sessionId }: { assessmentId
         className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 mb-6"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to Assessments
+        Kembali ke Asesmen
       </button>
 
       {/* Score Card */}
@@ -210,17 +210,17 @@ export function CandidateResultsView({ assessmentId, sessionId }: { assessmentId
           </span>
         </h1>
         <p className={`text-lg font-medium ${passed ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-          {passed ? 'Passed' : 'Not Passed'}
+          {passed ? 'Lulus' : 'Tidak Lulus'}
         </p>
         {assessment && (
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
-            {assessment.title} — Pass score: {assessment.pass_score}%
+            {assessment.title} — Skor lulus: {assessment.pass_score}%
           </p>
         )}
         <div className="flex items-center justify-center gap-6 mt-4 text-sm text-slate-600 dark:text-slate-400">
           <span className="inline-flex items-center gap-1">
             <BarChart3 className="h-4 w-4" />
-            {correctCount}/{totalCount} correct
+            {correctCount}/{totalCount} benar
           </span>
           {session.completed_at && (
             <span className="inline-flex items-center gap-1">
@@ -231,7 +231,7 @@ export function CandidateResultsView({ assessmentId, sessionId }: { assessmentId
         </div>
         {percentile && percentile.totalSessions > 1 && (
           <p className="text-sm text-blue-600 dark:text-blue-400 mt-3 font-medium">
-            Better than {percentile.percentile}% of takers · Rank {percentile.rank} of {percentile.totalSessions}
+            Lebih baik dari {percentile.percentile}% peserta · Peringkat {percentile.rank} dari {percentile.totalSessions}
           </p>
         )}
       </div>
@@ -244,7 +244,7 @@ export function CandidateResultsView({ assessmentId, sessionId }: { assessmentId
           onClick={() => {
             const html = `
 <!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Assessment Report</title>
+<html><head><meta charset="utf-8"><title>Laporan Asesmen</title>
 <style>
   body { font-family: system-ui, sans-serif; max-width: 700px; margin: 0 auto; padding: 40px 20px; color: #1e293b; }
   h1 { font-size: 24px; margin-bottom: 4px; }
@@ -259,27 +259,27 @@ export function CandidateResultsView({ assessmentId, sessionId }: { assessmentId
   .incorrect { color: #dc2626; font-weight: bold; }
   @media print { body { padding: 0; } }
 </style></head><body>
-<h1>${assessment?.title ?? 'Assessment Report'}</h1>
-<p class="meta">Date: ${session.completed_at ? new Date(session.completed_at).toLocaleDateString() : '—'} · Pass Score: ${assessment?.pass_score ?? 0}%</p>
+<h1>${assessment?.title ?? 'Laporan Asesmen'}</h1>
+<p class="meta">Tanggal: ${session.completed_at ? new Date(session.completed_at).toLocaleDateString('id-ID') : '—'} · Skor Lulus: ${assessment?.pass_score ?? 0}%</p>
 <div style="text-align:center;margin:24px 0;">
   <div class="score">${score}%</div>
-  <div class="status">${passed ? 'PASSED' : 'NOT PASSED'}</div>
-  <p class="meta">${correctCount} of ${totalCount} correct</p>
-  ${percentile && percentile.totalSessions > 1 ? `<p class="meta">Better than ${percentile.percentile}% of takers · Rank ${percentile.rank} of ${percentile.totalSessions}</p>` : ''}
+  <div class="status">${passed ? 'LULUS' : 'TIDAK LULUS'}</div>
+  <p class="meta">${correctCount} dari ${totalCount} benar</p>
+  ${percentile && percentile.totalSessions > 1 ? `<p class="meta">Lebih baik dari ${percentile.percentile}% peserta · Peringkat ${percentile.rank} dari ${percentile.totalSessions}</p>` : ''}
 </div>
 ${assessment?.allow_review ? `
-<h2>Question Review</h2>
+<h2>Tinjauan Soal</h2>
 <table>
-<thead><tr><th>#</th><th>Question</th><th>Your Answer</th><th>Result</th></tr></thead>
+<thead><tr><th>#</th><th>Soal</th><th>Jawaban Anda</th><th>Hasil</th></tr></thead>
 <tbody>
 ${answers.map((a, i) => `<tr>
   <td>${i + 1}</td>
   <td>${a.stem.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
-  <td>${a.selected_index != null ? a.options[a.selected_index]?.replace(/</g, '&lt;').replace(/>/g, '&gt;') ?? '—' : 'Not answered'}</td>
+  <td>${a.selected_index != null ? a.options[a.selected_index]?.replace(/</g, '&lt;').replace(/>/g, '&gt;') ?? '—' : 'Tidak dijawab'}</td>
   <td class="${a.is_correct ? 'correct' : 'incorrect'}">${a.is_correct ? '✓' : '✗'}</td>
 </tr>`).join('')}
 </tbody></table>` : ''}
-<p class="meta" style="margin-top:32px;text-align:center;">Generated by Cekatan · ${new Date().toLocaleDateString()}</p>
+<p class="meta" style="margin-top:32px;text-align:center;">Dibuat oleh Cekatan · ${new Date().toLocaleDateString('id-ID')}</p>
 </body></html>`
             const win = window.open('', '_blank')
             if (win) {
@@ -290,7 +290,7 @@ ${answers.map((a, i) => `<tr>
           }}
         >
           <FileText className="h-4 w-4 mr-1" />
-          Download PDF Report
+          Unduh Laporan PDF
         </Button>
         {certificationEnabled && passed && (
           <>
@@ -298,7 +298,7 @@ ${answers.map((a, i) => `<tr>
               <a href={session.certificate_url} target="_blank" rel="noopener noreferrer">
                 <Button size="sm" variant="secondary" className="ml-2">
                   <Download className="h-4 w-4 mr-1" />
-                  Download Certificate
+                  Unduh Sertifikat
                 </Button>
               </a>
             )}
@@ -308,7 +308,7 @@ ${answers.map((a, i) => `<tr>
               className="ml-2"
               onClick={() => router.push(`/assessments/${assessmentId}/certificate/${sessionId}`)}
             >
-              View Certificate
+              Lihat Sertifikat
             </Button>
           </>
         )}
@@ -318,7 +318,7 @@ ${answers.map((a, i) => `<tr>
       {weakAreas.length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">
-            Topic Breakdown
+            Rincian Topik
           </h2>
           <div className="space-y-2">
             {weakAreas.map((topic) => {
@@ -360,10 +360,10 @@ ${answers.map((a, i) => `<tr>
           <div className="mb-8 p-4 rounded-lg border border-blue-200 dark:border-blue-800/50 bg-blue-50/50 dark:bg-blue-900/10">
             <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-2 flex items-center gap-2">
               <BookOpen className="h-4 w-4 text-blue-600" />
-              Study Recommendations
+              Rekomendasi Belajar
             </h2>
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
-              Focus on these {weak.length} topic{weak.length !== 1 ? 's' : ''} to improve your score:
+              Fokus pada {weak.length} topik ini untuk meningkatkan skor Anda:
             </p>
             <div className="flex flex-wrap gap-2 mb-3">
               {weak.map((t) => (
@@ -382,7 +382,7 @@ ${answers.map((a, i) => `<tr>
               onClick={() => router.push(`/study/global?tags=${weakTagIds}`)}
             >
               <BookOpen className="h-4 w-4 mr-1" />
-              Study Weak Topics
+              Pelajari Topik Lemah
             </Button>
           </div>
         )
@@ -392,7 +392,7 @@ ${answers.map((a, i) => `<tr>
       {answers.length > 0 && assessment?.allow_review && (
         <div>
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">
-            Question Review
+            Tinjauan Soal
           </h2>
           <div className="space-y-4">
             {answers.map((answer, idx) => (
@@ -448,7 +448,7 @@ ${answers.map((a, i) => `<tr>
 
                 {answer.explanation && (
                   <div className="ml-9 mt-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-sm text-blue-800 dark:text-blue-300">
-                    <span className="font-medium">Explanation: </span>
+                    <span className="font-medium">Penjelasan: </span>
                     {answer.explanation}
                   </div>
                 )}
@@ -474,14 +474,14 @@ ${answers.map((a, i) => `<tr>
             onClick={() => router.push(`/assessments/${assessmentId}/certificate/${sessionId}`)}
           >
             <Trophy className="h-4 w-4 mr-2" />
-            View Certificate
+            Lihat Sertifikat
           </Button>
         </div>
       )}
 
       {answers.length > 0 && assessment && !assessment.allow_review && (
         <div className="mt-6 p-4 rounded-lg bg-slate-50 dark:bg-slate-800 text-center text-sm text-slate-500 dark:text-slate-400">
-          Answer review is not available for this assessment.
+          Tinjauan jawaban tidak tersedia untuk asesmen ini.
         </div>
       )}
 
@@ -490,7 +490,7 @@ ${answers.map((a, i) => `<tr>
         <div className="mt-8">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-3 flex items-center gap-2">
             <History className="h-5 w-5 text-slate-400" />
-            Your Attempts
+            Riwayat Percobaan
             {attemptData.maxAttempts && (
               <span className="text-sm font-normal text-slate-500">
                 ({attemptData.attempts.filter((a) => a.status === 'completed' || a.status === 'timed_out').length}/{attemptData.maxAttempts})
@@ -514,10 +514,10 @@ ${answers.map((a, i) => `<tr>
                   </span>
                   <div className="flex-1 min-w-0">
                     <span className="text-sm text-slate-700 dark:text-slate-300">
-                      {att.completed_at ? new Date(att.completed_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'In progress'}
+                      {att.completed_at ? new Date(att.completed_at).toLocaleDateString('id-ID', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Sedang berlangsung'}
                     </span>
                     {isCurrent && (
-                      <span className="ml-2 text-xs text-blue-600 dark:text-blue-400 font-medium">Current</span>
+                      <span className="ml-2 text-xs text-blue-600 dark:text-blue-400 font-medium">Saat ini</span>
                     )}
                   </div>
                   {att.score !== null ? (
@@ -547,7 +547,7 @@ ${answers.map((a, i) => `<tr>
         <div className="mt-6 text-center">
           <Button onClick={() => router.push(`/assessments/${assessmentId}/take`)}>
             <RotateCcw className="h-4 w-4 mr-2" />
-            Retake Assessment
+            Ulangi Asesmen
           </Button>
         </div>
       )}
@@ -555,14 +555,14 @@ ${answers.map((a, i) => `<tr>
       {attemptData && !attemptData.canRetake && attemptData.cooldownEndsAt && (
         <div className="mt-6 text-center">
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Retake available after {new Date(attemptData.cooldownEndsAt).toLocaleString()}
+            Ulangi tersedia setelah {new Date(attemptData.cooldownEndsAt).toLocaleString('id-ID')}
           </p>
         </div>
       )}
 
       <div className="mt-8 text-center">
         <Button variant="secondary" onClick={() => router.push('/assessments')}>
-          Back to Assessments
+          Kembali ke Asesmen
         </Button>
       </div>
     </div>

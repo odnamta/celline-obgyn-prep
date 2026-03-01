@@ -548,15 +548,20 @@ export async function submitPublicAnswer(
       return { ok: false, error: 'Pertanyaan bukan bagian dari sesi ini' }
     }
 
-    // Get the correct answer
+    // Get the correct answer + options for bound check
     const { data: card } = await supabase
       .from('card_templates')
-      .select('correct_index')
+      .select('correct_index, options')
       .eq('id', cardTemplateId)
       .single()
 
     if (!card) {
       return { ok: false, error: 'Pertanyaan tidak ditemukan' }
+    }
+
+    // Validate selectedIndex against actual option count
+    if (Array.isArray(card.options) && selectedIndex >= card.options.length) {
+      return { ok: false, error: 'Jawaban tidak valid' }
     }
 
     const isCorrect = selectedIndex === card.correct_index

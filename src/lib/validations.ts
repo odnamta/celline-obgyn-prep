@@ -157,7 +157,12 @@ export const createAssessmentSchema = z.object({
   shuffleQuestions: z.boolean().default(true),
   shuffleOptions: z.boolean().default(false),
   showResults: z.boolean().default(true),
-  maxAttempts: z.number().int().min(1).optional(),
+  maxAttempts: z.number().int().min(1).nullable().optional(),
+  cooldownMinutes: z.number().int().min(0).max(10080).nullable().optional(),
+  allowReview: z.boolean().optional(),
+  startDate: z.string().nullable().optional(),
+  endDate: z.string().nullable().optional(),
+  accessCode: z.string().max(50).nullable().optional(),
 });
 
 export const updateAssessmentSchema = z.object({
@@ -181,7 +186,7 @@ export const updateAssessmentSchema = z.object({
 export const submitAnswerSchema = z.object({
   sessionId: z.string().uuid('Invalid session ID'),
   cardTemplateId: z.string().uuid('Invalid card ID'),
-  selectedIndex: z.number().int().min(0),
+  selectedIndex: z.number().int().min(0).max(9),
 });
 
 // Export types inferred from schemas

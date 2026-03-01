@@ -20,7 +20,7 @@ import type { Assessment, AssessmentSession } from '@/types/database'
 import { usePageTitle } from '@/hooks/use-page-title'
 
 export default function CertificatePage() {
-  usePageTitle('Certificate')
+  usePageTitle('Sertifikat')
   const { org } = useOrg()
   const router = useRouter()
   const params = useParams()
@@ -53,7 +53,7 @@ export default function CertificatePage() {
       if (aResult.ok && aResult.data) setAssessment(aResult.data)
       if (sResult.ok && sResult.data) {
         if (!sResult.data.session.passed) {
-          setError('Certificate is only available for passed assessments')
+          setError('Sertifikat hanya tersedia untuk asesmen yang lulus')
         } else {
           setSession(sResult.data.session)
 
@@ -79,7 +79,7 @@ export default function CertificatePage() {
   if (loading) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-12 text-center text-slate-500">
-        Loading certificate...
+        Memuat sertifikat...
       </div>
     )
   }
@@ -87,9 +87,9 @@ export default function CertificatePage() {
   if (error || !session || !assessment) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-12 text-center">
-        <p className="text-red-600 dark:text-red-400 mb-4">{error ?? 'Certificate not found'}</p>
+        <p className="text-red-600 dark:text-red-400 mb-4">{error ?? 'Sertifikat tidak ditemukan'}</p>
         <Button variant="secondary" onClick={() => router.push('/assessments')}>
-          Back to Assessments
+          Kembali ke Asesmen
         </Button>
       </div>
     )
@@ -99,7 +99,7 @@ export default function CertificatePage() {
   const logoUrl = org.settings?.branding?.logo_url || ''
 
   const completedDate = session.completed_at
-    ? new Date(session.completed_at).toLocaleDateString('en-US', {
+    ? new Date(session.completed_at).toLocaleDateString('id-ID', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
@@ -115,25 +115,25 @@ export default function CertificatePage() {
           className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back
+          Kembali
         </button>
         <div className="flex items-center gap-2">
           {session.certificate_url ? (
             <a href={session.certificate_url} target="_blank" rel="noopener noreferrer">
               <Button size="sm">
                 <Download className="h-4 w-4 mr-2" />
-                Download PDF
+                Unduh PDF
               </Button>
             </a>
           ) : (
             <Button size="sm" onClick={handleGenerate} disabled={generating}>
               <Download className="h-4 w-4 mr-2" />
-              {generating ? 'Generating...' : 'Generate PDF'}
+              {generating ? 'Membuat...' : 'Buat PDF'}
             </Button>
           )}
           <Button size="sm" variant="secondary" onClick={() => window.print()}>
             <Printer className="h-4 w-4 mr-2" />
-            Print
+            Cetak
           </Button>
         </div>
       </div>
@@ -154,21 +154,21 @@ export default function CertificatePage() {
           </div>
 
           <h1 className="text-3xl font-bold tracking-wide text-slate-900 dark:text-slate-100 mb-2 uppercase print:text-black">
-            Certificate of Completion
+            Sertifikat Kelulusan
           </h1>
 
           <div className="w-24 h-0.5 mx-auto my-6" style={{ backgroundColor: primaryColor }} />
 
           <p className="text-slate-500 dark:text-slate-400 mb-1 print:text-slate-600">
-            This is to certify that
+            Dengan ini menyatakan bahwa
           </p>
 
           <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100 mb-6 print:text-black">
-            {candidateName ?? 'Candidate'}
+            {candidateName ?? 'Kandidat'}
           </p>
 
           <p className="text-slate-500 dark:text-slate-400 mb-1 print:text-slate-600">
-            has successfully passed
+            telah berhasil lulus
           </p>
 
           <p className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-6 print:text-black">
@@ -180,14 +180,14 @@ export default function CertificatePage() {
               <span className="block text-2xl font-bold" style={{ color: primaryColor }}>
                 {session.score}%
               </span>
-              <span>Score</span>
+              <span>Skor</span>
             </div>
             <div className="w-px h-10 bg-slate-200 dark:bg-slate-600" />
             <div>
               <span className="block text-2xl font-bold text-slate-900 dark:text-slate-100 print:text-black">
                 {assessment.pass_score}%
               </span>
-              <span>Pass Score</span>
+              <span>Skor Lulus</span>
             </div>
           </div>
 
@@ -202,7 +202,7 @@ export default function CertificatePage() {
                 <p className="font-medium text-slate-700 dark:text-slate-300 print:text-black">
                   {org.name}
                 </p>
-                <p>Issued on {completedDate}</p>
+                <p>Diterbitkan pada {completedDate}</p>
               </div>
             </div>
             <div className="text-right">

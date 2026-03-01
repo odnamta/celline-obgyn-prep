@@ -250,8 +250,8 @@ export async function publishAssessment(
 
     // Notify org members about the new assessment
     notifyOrgCandidates(
-      'New Assessment Available',
-      `"${assessment.title}" is now available to take.`,
+      'Asesmen Baru Tersedia',
+      `"${assessment.title}" kini tersedia untuk dikerjakan.`,
       `/assessments`
     ).catch(() => { /* fire-and-forget */ })
 
@@ -342,6 +342,10 @@ export async function unpublishAssessment(
 export async function batchPublishAssessments(
   assessmentIds: string[]
 ): Promise<ActionResultV2<{ published: number }>> {
+  if (assessmentIds.length > 100) {
+    return { ok: false, error: 'Maksimal 100 asesmen per batch' }
+  }
+
   return withOrgUser(async ({ supabase, org, role }) => {
     if (!hasMinimumRole(role, 'creator')) {
       return { ok: false, error: 'Insufficient permissions' }
@@ -353,9 +357,20 @@ export async function batchPublishAssessments(
       .in('id', assessmentIds)
       .eq('org_id', org.id)
       .eq('status', 'draft')
-      .select('id')
+      .select('id, public_code')
 
     if (error) return { ok: false, error: error.message }
+
+    // Generate public_code for each newly published assessment that doesn't have one
+    for (const assessment of data ?? []) {
+      if (!assessment.public_code) {
+        const code = generatePublicCode()
+        await supabase
+          .from('assessments')
+          .update({ public_code: code })
+          .eq('id', assessment.id)
+      }
+    }
 
     revalidatePath('/assessments')
     return { ok: true, data: { published: data?.length ?? 0 } }

@@ -201,7 +201,7 @@ describe('Positive Validation — Valid Inputs Always Parse', () => {
       fc.property(
         uuidArb,
         uuidArb,
-        fc.nat({ max: 10 }),
+        fc.nat({ max: 9 }),
         (sessionId, cardTemplateId, selectedIndex) => {
           const result = submitAnswerSchema.safeParse({ sessionId, cardTemplateId, selectedIndex })
           expect(result.success).toBe(true)
