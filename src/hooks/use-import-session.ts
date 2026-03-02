@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { generateImportSessionId } from '@/lib/import-session'
 import { getSessionStats } from '@/actions/session-actions'
 
@@ -46,9 +46,10 @@ export function useImportSession(deckId: string) {
   })
 
   // Handle deckId changes after initial mount
-  const [prevDeckId, setPrevDeckId] = useState(deckId)
-  if (prevDeckId !== deckId) {
-    setPrevDeckId(deckId)
+  const prevDeckIdRef = useRef(deckId)
+  useEffect(() => {
+    if (prevDeckIdRef.current === deckId) return
+    prevDeckIdRef.current = deckId
     const storageKey = `${STORAGE_KEY_PREFIX}${deckId}`
     let sid = localStorage.getItem(storageKey)
     if (!sid) {
@@ -62,7 +63,7 @@ export function useImportSession(deckId: string) {
       questionNumbers: [],
       isLoading: false,
     })
-  }
+  }, [deckId])
 
   // Refresh session stats
   const refreshStats = useCallback(async () => {

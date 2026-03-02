@@ -27,7 +27,7 @@ export async function reportTabSwitch(
       .single()
 
     if (!session) {
-      return { ok: false, error: 'Session not found' }
+      return { ok: false, error: 'Sesi tidak ditemukan' }
     }
 
     const newCount = ((session.tab_switch_count as number) ?? 0) + 1
@@ -57,7 +57,7 @@ export async function getSessionViolations(
 }>> {
   return withOrgUser(async ({ supabase, org, role }) => {
     if (!hasMinimumRole(role, 'creator')) {
-      return { ok: false, error: 'Insufficient permissions' }
+      return { ok: false, error: 'Izin tidak cukup' }
     }
 
     const { data: session } = await supabase
@@ -67,12 +67,12 @@ export async function getSessionViolations(
       .single()
 
     if (!session) {
-      return { ok: false, error: 'Session not found' }
+      return { ok: false, error: 'Sesi tidak ditemukan' }
     }
 
     const assessmentData = session.assessments as unknown as { org_id: string; title: string }
     if (assessmentData.org_id !== org.id) {
-      return { ok: false, error: 'Session not found' }
+      return { ok: false, error: 'Sesi tidak ditemukan' }
     }
 
     const { data: profile } = await supabase
@@ -103,7 +103,7 @@ export async function saveAssessmentTemplate(
 ): Promise<ActionResultV2<AssessmentTemplate>> {
   return withOrgUser(async ({ user, supabase, org, role }) => {
     if (!hasMinimumRole(role, 'creator')) {
-      return { ok: false, error: 'Requires creator role' }
+      return { ok: false, error: 'Memerlukan peran kreator' }
     }
 
     const { data, error } = await supabase
@@ -147,7 +147,7 @@ export async function deleteAssessmentTemplate(
 ): Promise<ActionResultV2<void>> {
   return withOrgUser(async ({ supabase, org, role }) => {
     if (!hasMinimumRole(role, 'creator')) {
-      return { ok: false, error: 'Requires creator role' }
+      return { ok: false, error: 'Memerlukan peran kreator' }
     }
 
     const { error } = await supabase
@@ -182,7 +182,7 @@ export async function getAssessmentPreviewQuestions(
 ): Promise<ActionResultV2<PreviewQuestion[]>> {
   return withOrgUser(async ({ supabase, org, role }) => {
     if (!hasMinimumRole(role, 'creator')) {
-      return { ok: false, error: 'Creator role required' }
+      return { ok: false, error: 'Memerlukan peran kreator' }
     }
 
     const { data: assessment } = await supabase
@@ -193,7 +193,7 @@ export async function getAssessmentPreviewQuestions(
       .single()
 
     if (!assessment) {
-      return { ok: false, error: 'Assessment not found' }
+      return { ok: false, error: 'Asesmen tidak ditemukan' }
     }
 
     const { data: cards, error } = await supabase

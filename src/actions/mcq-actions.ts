@@ -69,11 +69,11 @@ export async function createMCQAction(
         .single()
 
       if (deckError || !deckTemplate) {
-        return { ok: false, error: 'Deck not found in V2 schema. Please run migration.' }
+        return { ok: false, error: 'Dek tidak ditemukan' }
       }
 
       if (deckTemplate.author_id !== user.id) {
-        return { ok: false, error: 'Access denied' }
+        return { ok: false, error: 'Akses ditolak' }
       }
 
       // V8.0: Create card_template
@@ -160,12 +160,12 @@ export async function answerMCQAction(
         .single()
 
       if (cardError || !cardTemplate) {
-        return { ok: false, error: 'MCQ card not found in V2 schema' }
+        return { ok: false, error: 'Kartu MCQ tidak ditemukan' }
       }
 
       // Verify correct_index exists
       if (cardTemplate.correct_index === null) {
-        return { ok: false, error: 'Invalid MCQ card: missing correct_index' }
+        return { ok: false, error: 'Kartu MCQ tidak valid: indeks jawaban tidak ada' }
       }
 
       // Determine correctness (Requirement 2.4, 2.5)

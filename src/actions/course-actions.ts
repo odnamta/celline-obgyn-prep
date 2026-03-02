@@ -93,7 +93,7 @@ export async function updateCourseAction(
   if (data.description !== undefined) updateData.description = data.description
 
   if (Object.keys(updateData).length === 0) {
-    return { ok: false, error: 'No fields to update' }
+    return { ok: false, error: 'Tidak ada field yang diperbarui' }
   }
 
   return withOrgUser(async ({ supabase }) => {
@@ -123,7 +123,7 @@ export async function updateCourseAction(
  */
 export async function deleteCourseAction(courseId: string): Promise<ActionResultV2> {
   if (!courseId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(courseId)) {
-    return { ok: false, error: 'Invalid course ID' }
+    return { ok: false, error: 'ID kursus tidak valid' }
   }
 
   return withOrgUser(async ({ supabase }) => {
@@ -181,7 +181,7 @@ export async function createUnitAction(
         .limit(1)
 
       finalOrderIndex = existingUnits && existingUnits.length > 0
-        ? existingUnits[0].order_index + 1
+        ? (existingUnits[0].order_index ?? 0) + 1
         : 0
     }
 
@@ -226,7 +226,7 @@ export async function updateUnitAction(
   if (data.orderIndex !== undefined) updateData.order_index = data.orderIndex
 
   if (Object.keys(updateData).length === 0) {
-    return { ok: false, error: 'No fields to update' }
+    return { ok: false, error: 'Tidak ada field yang diperbarui' }
   }
 
   return withOrgUser(async ({ supabase }) => {
@@ -258,7 +258,7 @@ export async function updateUnitAction(
  */
 export async function deleteUnitAction(unitId: string): Promise<ActionResultV2> {
   if (!unitId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(unitId)) {
-    return { ok: false, error: 'Invalid unit ID' }
+    return { ok: false, error: 'ID unit tidak valid' }
   }
 
   return withOrgUser(async ({ supabase }) => {
@@ -376,7 +376,7 @@ export async function updateLessonAction(
   if (data.targetItemCount !== undefined) updateData.target_item_count = data.targetItemCount
 
   if (Object.keys(updateData).length === 0) {
-    return { ok: false, error: 'No fields to update' }
+    return { ok: false, error: 'Tidak ada field yang diperbarui' }
   }
 
   return withOrgUser(async ({ supabase }) => {
@@ -409,7 +409,7 @@ export async function updateLessonAction(
  */
 export async function deleteLessonAction(lessonId: string): Promise<ActionResultV2> {
   if (!lessonId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(lessonId)) {
-    return { ok: false, error: 'Invalid lesson ID' }
+    return { ok: false, error: 'ID pelajaran tidak valid' }
   }
 
   return withOrgUser(async ({ supabase }) => {
@@ -468,7 +468,7 @@ export async function addLessonItemAction(
       .single()
 
     if (cardError || !card) {
-      return { ok: false, error: 'Item not found or access denied' }
+      return { ok: false, error: 'Item tidak ditemukan atau akses ditolak' }
     }
 
     // If no orderIndex provided, get the next available index
@@ -515,7 +515,7 @@ export async function addLessonItemAction(
  */
 export async function removeLessonItemAction(lessonItemId: string): Promise<ActionResultV2> {
   if (!lessonItemId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(lessonItemId)) {
-    return { ok: false, error: 'Invalid lesson item ID' }
+    return { ok: false, error: 'ID item pelajaran tidak valid' }
   }
 
   return withOrgUser(async ({ supabase }) => {
@@ -568,11 +568,11 @@ export async function reorderLessonItemsAction(
         .eq('lesson_id', lessonId)
     )
 
-    const results = await Promise.all(updates)
+    const results = await Promise.allSettled(updates)
 
-    const errors = results.filter(r => r.error)
+    const errors = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.error))
     if (errors.length > 0) {
-      return { ok: false, error: 'Failed to reorder some items' }
+      return { ok: false, error: 'Gagal mengurutkan beberapa item' }
     }
 
     revalidatePath(`/lesson/${lessonId}`)
@@ -597,7 +597,7 @@ export interface LessonItemWithCard {
  */
 export async function getLessonItems(lessonId: string): Promise<ActionResultV2<LessonItemWithCard[]>> {
   if (!lessonId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(lessonId)) {
-    return { ok: false, error: 'Invalid lesson ID' }
+    return { ok: false, error: 'ID pelajaran tidak valid' }
   }
 
   return withOrgUser(async ({ supabase }) => {
@@ -689,7 +689,7 @@ export async function getLessonDetail(
       .single()
 
     if (lessonError || !lesson) {
-      return { ok: false, error: 'Lesson not found' }
+      return { ok: false, error: 'Pelajaran tidak ditemukan' }
     }
 
     const unit = (lesson as unknown as LessonWithUnitDetail).units
@@ -712,7 +712,7 @@ export async function getLessonDetail(
       .order('order_index', { ascending: true })
 
     if (lessonsError) {
-      return { ok: false, error: 'Failed to fetch lessons' }
+      return { ok: false, error: 'Gagal mengambil data pelajaran' }
     }
 
     // Fetch user's progress for all lessons in the course
@@ -724,7 +724,7 @@ export async function getLessonDetail(
       .in('lesson_id', lessonIds)
 
     if (progressError) {
-      return { ok: false, error: 'Failed to fetch progress' }
+      return { ok: false, error: 'Gagal mengambil data progres' }
     }
 
     const progressMap = buildProgressMap((progressRecords || []) as LessonProgress[])
@@ -796,11 +796,11 @@ export async function completeLessonAction(
 ): Promise<ActionResultV2<{ xpEarned: number; newTotalXp: number; newStreak: number; longestStreak: number }>> {
   // Validate inputs
   if (!lessonId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(lessonId)) {
-    return { ok: false, error: 'Invalid lesson ID' }
+    return { ok: false, error: 'ID pelajaran tidak valid' }
   }
 
   if (score < 0 || score > totalItems) {
-    return { ok: false, error: 'Invalid score' }
+    return { ok: false, error: 'Skor tidak valid' }
   }
 
   return withOrgUser(async ({ user, supabase }) => {
@@ -812,7 +812,7 @@ export async function completeLessonAction(
     .single()
 
   if (lessonError || !lesson) {
-    return { ok: false, error: 'Lesson not found or access denied' }
+    return { ok: false, error: 'Pelajaran tidak ditemukan atau akses ditolak' }
   }
 
   const now = new Date()

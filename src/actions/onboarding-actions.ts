@@ -27,7 +27,7 @@ export async function updateUserProfile(
       })
 
       if (updateError) {
-        return { ok: false, error: 'Unable to update profile. Please try again.' }
+        return { ok: false, error: 'Gagal memperbarui profil. Silakan coba lagi.' }
       }
 
       // Sync full_name to profiles table

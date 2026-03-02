@@ -475,7 +475,7 @@ export async function bulkCreateMCQV2(input: BulkCreateV2Input): Promise<BulkCre
         }
       } else if (createdTags) {
         for (let i = 0; i < createdTags.length; i++) {
-          tagNameToId.set(missingTagNames[i].toLowerCase(), createdTags[i].id)
+          tagNameToId.set(missingTagNames[i]?.toLowerCase() ?? '', createdTags[i].id)
         }
       }
     }
@@ -638,7 +638,7 @@ export async function getDeckDrafts(
       .single()
 
     if (deckError || !deck) {
-      return { ok: false, error: 'Deck not found' }
+      return { ok: false, error: 'Dek tidak ditemukan' }
     }
 
     if (deck.author_id !== user.id) {
@@ -672,7 +672,7 @@ export async function getDeckDrafts(
 
     if (draftsError) {
       logger.error('getDeckDrafts', draftsError)
-      return { ok: false, error: 'Failed to fetch drafts' }
+      return { ok: false, error: 'Gagal mengambil draf' }
     }
 
     // Transform to DraftCardSummary format
@@ -734,11 +734,11 @@ export async function bulkPublishDrafts(
 
     if (fetchError) {
       logger.error('bulkPublishDrafts.fetchCards', fetchError)
-      return { ok: false, error: 'Failed to fetch cards' }
+      return { ok: false, error: 'Gagal mengambil data kartu' }
     }
 
     if (!cards || cards.length !== cardIds.length) {
-      return { ok: false, error: 'Some cards not found' }
+      return { ok: false, error: 'Beberapa kartu tidak ditemukan' }
     }
 
     // Check all cards belong to user
@@ -756,7 +756,7 @@ export async function bulkPublishDrafts(
 
     if (updateError) {
       logger.error('bulkPublishDrafts.updateCards', updateError)
-      return { ok: false, error: 'Failed to publish cards' }
+      return { ok: false, error: 'Gagal mempublikasi kartu' }
     }
 
     // Revalidate deck pages
@@ -795,11 +795,11 @@ export async function bulkArchiveDrafts(
 
     if (fetchError) {
       logger.error('bulkArchiveDrafts.fetchCards', fetchError)
-      return { ok: false, error: 'Failed to fetch cards' }
+      return { ok: false, error: 'Gagal mengambil data kartu' }
     }
 
     if (!cards || cards.length !== cardIds.length) {
-      return { ok: false, error: 'Some cards not found' }
+      return { ok: false, error: 'Beberapa kartu tidak ditemukan' }
     }
 
     // Check all cards belong to user
@@ -817,7 +817,7 @@ export async function bulkArchiveDrafts(
 
     if (updateError) {
       logger.error('bulkArchiveDrafts.updateCards', updateError)
-      return { ok: false, error: 'Failed to archive cards' }
+      return { ok: false, error: 'Gagal mengarsipkan kartu' }
     }
 
     // Revalidate deck pages

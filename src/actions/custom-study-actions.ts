@@ -88,7 +88,7 @@ export async function getCustomSessionCardsV2(
     if (tagIds.length === 0 && deckIds.length === 0) {
       return {
         ok: false as const,
-        error: 'Please select at least one tag or deck',
+        error: 'Pilih minimal satu tag atau dek',
       }
     }
 
@@ -227,7 +227,7 @@ export async function getCustomSessionCardsV2(
       }
     } catch (error) {
       logger.error('getCustomSessionCards', error)
-      return { ok: false as const, error: 'Failed to fetch cards' }
+      return { ok: false as const, error: 'Gagal mengambil data kartu' }
     }
   }, undefined, RATE_LIMITS.standard)
 

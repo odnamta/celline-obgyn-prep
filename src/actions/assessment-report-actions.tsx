@@ -17,7 +17,7 @@ export async function exportAssessmentResultsPdf(
 ): Promise<ActionResultV2<{ url: string }>> {
   return withOrgUser(async ({ supabase, org, role }) => {
     if (!hasMinimumRole(role, 'creator')) {
-      return { ok: false, error: 'Insufficient permissions' }
+      return { ok: false, error: 'Izin tidak cukup' }
     }
 
     // Fetch assessment
@@ -29,7 +29,7 @@ export async function exportAssessmentResultsPdf(
       .single()
 
     if (!assessment) {
-      return { ok: false, error: 'Assessment not found' }
+      return { ok: false, error: 'Asesmen tidak ditemukan' }
     }
 
     // Fetch completed sessions with user info

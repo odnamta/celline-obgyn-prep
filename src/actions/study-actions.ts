@@ -21,7 +21,7 @@ export async function rateCardAction(
 ): Promise<NextCardResult> {
   const validationResult = ratingSchema.safeParse({ cardId, rating })
   if (!validationResult.success) {
-    return { ok: false, error: 'Invalid rating data' }
+    return { ok: false, error: 'Data rating tidak valid' }
   }
 
   return withUser(async ({ user, supabase }) => {
@@ -37,7 +37,7 @@ export async function rateCardAction(
         .single()
 
       if (cardError || !cardTemplate) {
-        return { ok: false, error: 'Card not found in V2 schema' }
+        return { ok: false, error: 'Kartu tidak ditemukan' }
       }
 
       // V8.0: Get current progress from user_card_progress
@@ -252,7 +252,7 @@ export async function getDueCardsForDeck(deckId: string): Promise<{
         .single()
 
       if (deckError || !deckTemplate) {
-        return { cards: [], error: 'Deck not found in V2 schema' }
+        return { cards: [], error: 'Dek tidak ditemukan' }
       }
 
       // V8.0: Fetch due cards from user_card_progress joined with card_templates

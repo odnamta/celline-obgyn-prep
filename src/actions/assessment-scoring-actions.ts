@@ -108,7 +108,7 @@ export async function getSessionPercentile(
       .single()
 
     if (!session || session.score == null) {
-      return { ok: false, error: 'Session not found or not scored' }
+      return { ok: false, error: 'Sesi tidak ditemukan atau belum dinilai' }
     }
 
     // Get all completed/timed_out sessions for this assessment
@@ -141,7 +141,7 @@ export async function getAssessmentResults(
 ): Promise<ActionResultV2<AssessmentSession[]>> {
   return withOrgUser(async ({ supabase, org, role }) => {
     if (!hasMinimumRole(role, 'creator')) {
-      return { ok: false, error: 'Insufficient permissions' }
+      return { ok: false, error: 'Izin tidak cukup' }
     }
 
     const { data, error } = await supabase
@@ -171,7 +171,7 @@ export async function getAssessmentResultsDetailed(
 }>> {
   return withOrgUser(async ({ supabase, org, role }) => {
     if (!hasMinimumRole(role, 'creator')) {
-      return { ok: false, error: 'Insufficient permissions' }
+      return { ok: false, error: 'Izin tidak cukup' }
     }
 
     // Get all sessions with user profile info
@@ -257,7 +257,7 @@ export async function exportResultsCsv(
 ): Promise<ActionResultV2<string>> {
   return withOrgUser(async ({ supabase, org, role }) => {
     if (!hasMinimumRole(role, 'creator')) {
-      return { ok: false, error: 'Insufficient permissions' }
+      return { ok: false, error: 'Izin tidak cukup' }
     }
 
     const { data: sessions } = await supabase
@@ -423,7 +423,7 @@ export async function getOrgQuestionBank(
 }>> {
   return withOrgUser(async ({ supabase, org, role }) => {
     if (!hasMinimumRole(role, 'creator')) {
-      return { ok: false, error: 'Insufficient permissions' }
+      return { ok: false, error: 'Izin tidak cukup' }
     }
 
     // Get org deck templates

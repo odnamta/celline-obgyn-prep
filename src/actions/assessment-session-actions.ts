@@ -201,7 +201,7 @@ export async function submitAnswer(
     }
 
     // Verify the card belongs to this session's question set
-    const questionOrder = session.question_order as string[]
+    const questionOrder = Array.isArray(session.question_order) ? session.question_order as string[] : []
     if (!questionOrder.includes(cardTemplateId)) {
       return { ok: false, error: 'Soal bukan bagian dari sesi ini' }
     }
@@ -281,7 +281,7 @@ export async function completeSession(
     const total = answers?.length ?? 0
     const correct = answers?.filter((a) => a.is_correct === true).length ?? 0
     const score = total > 0 ? Math.round((correct / total) * 100) : 0
-    const passScore = (session.assessments as unknown as { pass_score: number }).pass_score
+    const passScore = (session.assessments as unknown as { pass_score: number })?.pass_score ?? 0
     const passed = score >= passScore
 
     // Update session
@@ -472,7 +472,7 @@ export async function getSessionQuestions(
       .single()
 
     if (!session) {
-      return { ok: false, error: 'Session not found' }
+      return { ok: false, error: 'Sesi tidak ditemukan' }
     }
 
     const questionOrder = session.question_order as string[]
@@ -522,7 +522,7 @@ export async function getExistingAnswers(
       .single()
 
     if (!session) {
-      return { ok: false, error: 'Session not found' }
+      return { ok: false, error: 'Sesi tidak ditemukan' }
     }
 
     const { data: answers, error } = await supabase
@@ -644,7 +644,7 @@ export async function getActiveSessionsForAssessment(
 }>>> {
   return withOrgUser(async ({ supabase, org, role }) => {
     if (!hasMinimumRole(role, 'creator')) {
-      return { ok: false, error: 'Insufficient permissions' }
+      return { ok: false, error: 'Izin tidak cukup' }
     }
 
     const { data: sessions } = await supabase

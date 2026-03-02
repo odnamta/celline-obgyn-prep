@@ -42,7 +42,7 @@ export async function createOrganization(
     if (rpcError) {
       const msg = rpcError.message
       if (msg.includes('Slug already taken')) {
-        return { ok: false, error: 'This URL slug is already taken' }
+        return { ok: false, error: 'Slug URL ini sudah digunakan' }
       }
       return { ok: false, error: msg }
     }
@@ -57,7 +57,7 @@ export async function createOrganization(
       .single()
 
     if (fetchError || !org) {
-      return { ok: false, error: 'Organization created but failed to fetch details' }
+      return { ok: false, error: 'Organisasi dibuat tetapi gagal mengambil detail' }
     }
 
     revalidatePath('/dashboard')
@@ -108,7 +108,7 @@ export async function getMyOrganizations(): Promise<ActionResultV2<Array<Organiz
 export async function getOrgMembers(): Promise<ActionResultV2<OrganizationMemberWithProfile[]>> {
   return withOrgUser(async ({ supabase, org, role }) => {
     if (!hasMinimumRole(role, 'admin')) {
-      return { ok: false, error: 'Only admins can view member details' }
+      return { ok: false, error: 'Hanya admin yang dapat melihat detail anggota' }
     }
 
     const { data, error } = await supabase
@@ -159,7 +159,7 @@ export async function updateOrgSettings(
 ): Promise<ActionResultV2<void>> {
   return withOrgUser(async ({ user, supabase, org, role }) => {
     if (role !== 'owner' && role !== 'admin') {
-      return { ok: false, error: 'Only admins and owners can update org settings' }
+      return { ok: false, error: 'Hanya admin dan pemilik yang dapat memperbarui pengaturan' }
     }
 
     const validation = updateOrgSettingsSchema.safeParse({ orgId, ...updates })
@@ -199,7 +199,7 @@ export async function updateOrgSettings(
 export async function getOrgMemberActivity(): Promise<ActionResultV2<Record<string, { completedSessions: number; lastActive: string | null }>>> {
   return withOrgUser(async ({ supabase, org, role }) => {
     if (role !== 'owner' && role !== 'admin') {
-      return { ok: false, error: 'Insufficient permissions' }
+      return { ok: false, error: 'Izin tidak cukup' }
     }
 
     // Fetch completed sessions for this org — only the 2 columns needed for aggregation
@@ -236,7 +236,7 @@ export async function updateMemberRole(
 ): Promise<ActionResultV2<void>> {
   return withOrgUser(async ({ user, supabase, org, role }) => {
     if (role !== 'owner' && role !== 'admin') {
-      return { ok: false, error: 'Insufficient permissions' }
+      return { ok: false, error: 'Izin tidak cukup' }
     }
 
     // Fetch the target member
@@ -248,22 +248,22 @@ export async function updateMemberRole(
       .single()
 
     if (fetchError || !target) {
-      return { ok: false, error: 'Member not found' }
+      return { ok: false, error: 'Anggota tidak ditemukan' }
     }
 
     // Cannot change own role
     if (target.user_id === user.id) {
-      return { ok: false, error: 'Cannot change your own role' }
+      return { ok: false, error: 'Tidak dapat mengubah peran sendiri' }
     }
 
     // Only owner can promote to admin/owner
     if (newRole === 'owner' && role !== 'owner') {
-      return { ok: false, error: 'Only owners can transfer ownership' }
+      return { ok: false, error: 'Hanya pemilik yang dapat mentransfer kepemilikan' }
     }
 
     // Cannot demote another owner unless you're owner
     if (target.role === 'owner' && role !== 'owner') {
-      return { ok: false, error: 'Cannot modify owner role' }
+      return { ok: false, error: 'Tidak dapat mengubah peran pemilik' }
     }
 
     const { error } = await supabase
@@ -304,18 +304,18 @@ export async function removeMember(
       .single()
 
     if (fetchError || !target) {
-      return { ok: false, error: 'Member not found' }
+      return { ok: false, error: 'Anggota tidak ditemukan' }
     }
 
     // Check permissions: self-removal always OK, otherwise need admin+
     const isSelf = target.user_id === user.id
     if (!isSelf && role !== 'owner' && role !== 'admin') {
-      return { ok: false, error: 'Insufficient permissions' }
+      return { ok: false, error: 'Izin tidak cukup' }
     }
 
     // Only owners can remove other owners
     if (target.role === 'owner' && !isSelf && role !== 'owner') {
-      return { ok: false, error: 'Only owners can remove other owners' }
+      return { ok: false, error: 'Hanya pemilik yang dapat menghapus pemilik lain' }
     }
 
     // Cannot remove the last owner
@@ -327,7 +327,7 @@ export async function removeMember(
         .eq('role', 'owner')
 
       if ((count ?? 0) <= 1) {
-        return { ok: false, error: 'Cannot remove the last owner' }
+        return { ok: false, error: 'Tidak dapat menghapus pemilik terakhir' }
       }
     }
 
@@ -400,7 +400,7 @@ export async function switchOrganization(
       .single()
 
     if (error || !membership) {
-      return { ok: false, error: 'You are not a member of this organization' }
+      return { ok: false, error: 'Anda bukan anggota organisasi ini' }
     }
 
     // Set active org cookie
@@ -430,7 +430,7 @@ export async function transferOwnership(
 ): Promise<ActionResultV2<void>> {
   return withOrgUser(async ({ user, supabase, org, role }) => {
     if (role !== 'owner') {
-      return { ok: false, error: 'Only the owner can transfer ownership' }
+      return { ok: false, error: 'Hanya pemilik yang dapat mentransfer kepemilikan' }
     }
 
     // Fetch target member
@@ -441,8 +441,8 @@ export async function transferOwnership(
       .eq('org_id', org.id)
       .single()
 
-    if (!target) return { ok: false, error: 'Member not found' }
-    if (target.user_id === user.id) return { ok: false, error: 'Already the owner' }
+    if (!target) return { ok: false, error: 'Anggota tidak ditemukan' }
+    if (target.user_id === user.id) return { ok: false, error: 'Sudah menjadi pemilik' }
 
     const originalRole = target.role as string
 
@@ -469,7 +469,7 @@ export async function transferOwnership(
         .update({ role: originalRole })
         .eq('id', targetMemberId)
         .eq('org_id', org.id)
-      return { ok: false, error: 'Transfer failed — changes reverted' }
+      return { ok: false, error: 'Transfer gagal — perubahan dikembalikan' }
     }
 
     logAuditEvent(supabase, org.id, user.id, 'ownership.transferred', {
@@ -488,7 +488,7 @@ export async function transferOwnership(
 export async function deleteOrganization(): Promise<ActionResultV2<void>> {
   return withOrgUser(async ({ user, supabase, org, role }) => {
     if (role !== 'owner') {
-      return { ok: false, error: 'Only the owner can delete the organization' }
+      return { ok: false, error: 'Hanya pemilik yang dapat menghapus organisasi' }
     }
 
     // Delete the org directly — ON DELETE CASCADE handles members.
@@ -526,7 +526,7 @@ export async function joinOrgBySlug(
       .single()
 
     if (!org) {
-      return { ok: false, error: 'Organization not found' }
+      return { ok: false, error: 'Organisasi tidak ditemukan' }
     }
 
     // Check if already a member
@@ -538,7 +538,7 @@ export async function joinOrgBySlug(
       .maybeSingle()
 
     if (existing) {
-      return { ok: false, error: 'You are already a member of this organization' }
+      return { ok: false, error: 'Anda sudah menjadi anggota organisasi ini' }
     }
 
     // Add as candidate

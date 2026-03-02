@@ -1,45 +1,45 @@
 import { z } from 'zod';
 
 export const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  email: z.string().email('Email tidak valid'),
+  password: z.string().min(6, 'Kata sandi minimal 6 karakter'),
 });
 
 export const registerSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  email: z.string().email('Email tidak valid'),
+  password: z.string().min(6, 'Kata sandi minimal 6 karakter'),
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
-  message: 'Passwords do not match',
+  message: 'Kata sandi tidak cocok',
   path: ['confirmPassword'],
 });
 
 export const createDeckSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(100, 'Title too long'),
+  title: z.string().min(1, 'Judul wajib diisi').max(100, 'Judul terlalu panjang'),
 });
 
 export const createCardSchema = z.object({
-  deckId: z.string().uuid('Invalid deck ID'),
-  front: z.string().min(1, 'Front content is required'),
-  back: z.string().min(1, 'Back content is required'),
-  imageUrl: z.string().url('Invalid URL').optional().or(z.literal('')),
+  deckId: z.string().uuid('ID dek tidak valid'),
+  front: z.string().min(1, 'Konten depan wajib diisi'),
+  back: z.string().min(1, 'Konten belakang wajib diisi'),
+  imageUrl: z.string().url('URL tidak valid').optional().or(z.literal('')),
 });
 
 export const ratingSchema = z.object({
-  cardId: z.string().uuid('Invalid card ID'),
+  cardId: z.string().uuid('ID kartu tidak valid'),
   rating: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
 });
 
 export const createMCQSchema = z.object({
-  deckId: z.string().uuid('Invalid deck ID'),
-  stem: z.string().min(1, 'Question stem is required'),
-  options: z.array(z.string().min(1, 'Option cannot be empty')).min(2, 'At least 2 options required'),
-  correctIndex: z.number().int('Correct index must be an integer').min(0, 'Correct index must be non-negative'),
+  deckId: z.string().uuid('ID dek tidak valid'),
+  stem: z.string().min(1, 'Soal wajib diisi'),
+  options: z.array(z.string().min(1, 'Opsi tidak boleh kosong')).min(2, 'Minimal 2 opsi diperlukan'),
+  correctIndex: z.number().int('Indeks jawaban harus bilangan bulat').min(0, 'Indeks jawaban tidak boleh negatif'),
   explanation: z.string().optional(),
-  imageUrl: z.string().url('Invalid URL').optional().or(z.literal('')),
+  imageUrl: z.string().url('URL tidak valid').optional().or(z.literal('')),
 }).refine(
   (data) => data.correctIndex < data.options.length,
-  { message: 'Correct index must be within options bounds', path: ['correctIndex'] }
+  { message: 'Indeks jawaban harus dalam rentang opsi', path: ['correctIndex'] }
 );
 
 // ============================================
@@ -47,52 +47,52 @@ export const createMCQSchema = z.object({
 // ============================================
 
 export const createCourseSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(200, 'Title too long'),
-  description: z.string().max(2000, 'Description too long').optional(),
+  title: z.string().min(1, 'Judul wajib diisi').max(200, 'Judul terlalu panjang'),
+  description: z.string().max(2000, 'Deskripsi terlalu panjang').optional(),
 });
 
 export const updateCourseSchema = z.object({
-  courseId: z.string().uuid('Invalid course ID'),
-  title: z.string().min(1, 'Title is required').max(200, 'Title too long').optional(),
-  description: z.string().max(2000, 'Description too long').optional(),
+  courseId: z.string().uuid('ID kursus tidak valid'),
+  title: z.string().min(1, 'Judul wajib diisi').max(200, 'Judul terlalu panjang').optional(),
+  description: z.string().max(2000, 'Deskripsi terlalu panjang').optional(),
 });
 
 export const createUnitSchema = z.object({
-  courseId: z.string().uuid('Invalid course ID'),
-  title: z.string().min(1, 'Title is required').max(200, 'Title too long'),
+  courseId: z.string().uuid('ID kursus tidak valid'),
+  title: z.string().min(1, 'Judul wajib diisi').max(200, 'Judul terlalu panjang'),
   orderIndex: z.number().int().min(0).optional(),
 });
 
 export const updateUnitSchema = z.object({
-  unitId: z.string().uuid('Invalid unit ID'),
-  title: z.string().min(1, 'Title is required').max(200, 'Title too long').optional(),
+  unitId: z.string().uuid('ID unit tidak valid'),
+  title: z.string().min(1, 'Judul wajib diisi').max(200, 'Judul terlalu panjang').optional(),
   orderIndex: z.number().int().min(0).optional(),
 });
 
 export const createLessonSchema = z.object({
-  unitId: z.string().uuid('Invalid unit ID'),
-  title: z.string().min(1, 'Title is required').max(200, 'Title too long'),
+  unitId: z.string().uuid('ID unit tidak valid'),
+  title: z.string().min(1, 'Judul wajib diisi').max(200, 'Judul terlalu panjang'),
   orderIndex: z.number().int().min(0).optional(),
   targetItemCount: z.number().int().min(1).max(100).optional(),
 });
 
 export const updateLessonSchema = z.object({
-  lessonId: z.string().uuid('Invalid lesson ID'),
-  title: z.string().min(1, 'Title is required').max(200, 'Title too long').optional(),
+  lessonId: z.string().uuid('ID pelajaran tidak valid'),
+  title: z.string().min(1, 'Judul wajib diisi').max(200, 'Judul terlalu panjang').optional(),
   orderIndex: z.number().int().min(0).optional(),
   targetItemCount: z.number().int().min(1).max(100).optional(),
 });
 
 export const addLessonItemSchema = z.object({
-  lessonId: z.string().uuid('Invalid lesson ID'),
+  lessonId: z.string().uuid('ID pelajaran tidak valid'),
   itemType: z.enum(['mcq', 'card']),
-  itemId: z.string().uuid('Invalid item ID'),
+  itemId: z.string().uuid('ID item tidak valid'),
   orderIndex: z.number().int().min(0).optional(),
 });
 
 export const reorderLessonItemsSchema = z.object({
-  lessonId: z.string().uuid('Invalid lesson ID'),
-  itemIds: z.array(z.string().uuid('Invalid item ID')).min(1, 'At least one item required'),
+  lessonId: z.string().uuid('ID pelajaran tidak valid'),
+  itemIds: z.array(z.string().uuid('ID item tidak valid')).min(1, 'Minimal satu item diperlukan'),
 });
 
 // ============================================
@@ -107,16 +107,16 @@ const RESERVED_SLUGS = new Set([
 ])
 
 export const createOrgSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(100, 'Name too long'),
+  name: z.string().min(1, 'Nama wajib diisi').max(100, 'Nama terlalu panjang'),
   slug: z.string()
-    .min(3, 'Slug must be at least 3 characters')
-    .max(50, 'Slug too long')
-    .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$/, 'Slug must be lowercase alphanumeric with hyphens, cannot start or end with hyphen')
-    .refine((s) => !RESERVED_SLUGS.has(s), 'This slug is reserved and cannot be used'),
+    .min(3, 'Slug minimal 3 karakter')
+    .max(50, 'Slug terlalu panjang')
+    .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$/, 'Slug harus huruf kecil alfanumerik dengan tanda hubung, tidak boleh diawali atau diakhiri tanda hubung')
+    .refine((s) => !RESERVED_SLUGS.has(s), 'Slug ini sudah digunakan dan tidak dapat dipakai'),
 });
 
 export const updateOrgSettingsSchema = z.object({
-  orgId: z.string().uuid('Invalid org ID'),
+  orgId: z.string().uuid('ID organisasi tidak valid'),
   name: z.string().min(1).max(100).optional(),
   settings: z.object({
     features: z.object({
@@ -130,7 +130,7 @@ export const updateOrgSettingsSchema = z.object({
       erp_integration: z.boolean(),
     }).partial().optional(),
     branding: z.object({
-      primary_color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Must be a valid hex color (e.g. #1e40af)'),
+      primary_color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Harus berupa warna hex yang valid (contoh: #1e40af)'),
       logo_url: z.string().url().or(z.literal('')),
     }).partial().optional(),
     default_language: z.string().optional(),
@@ -138,8 +138,8 @@ export const updateOrgSettingsSchema = z.object({
 });
 
 export const inviteMemberSchema = z.object({
-  orgId: z.string().uuid('Invalid org ID'),
-  email: z.string().email('Invalid email address'),
+  orgId: z.string().uuid('ID organisasi tidak valid'),
+  email: z.string().email('Email tidak valid'),
   role: z.enum(['admin', 'creator', 'candidate']),
 });
 
@@ -148,12 +148,12 @@ export const inviteMemberSchema = z.object({
 // ============================================
 
 export const createAssessmentSchema = z.object({
-  deckTemplateId: z.string().uuid('Invalid deck ID'),
-  title: z.string().min(1, 'Title is required').max(200, 'Title too long'),
-  description: z.string().max(2000, 'Description too long').optional(),
-  timeLimitMinutes: z.number().int().min(1, 'Minimum 1 minute').max(480, 'Maximum 8 hours'),
-  passScore: z.number().int().min(0).max(100, 'Pass score must be 0-100'),
-  questionCount: z.number().int().min(1, 'At least 1 question').max(500, 'Maximum 500 questions'),
+  deckTemplateId: z.string().uuid('ID dek tidak valid'),
+  title: z.string().min(1, 'Judul wajib diisi').max(200, 'Judul terlalu panjang'),
+  description: z.string().max(2000, 'Deskripsi terlalu panjang').optional(),
+  timeLimitMinutes: z.number().int().min(1, 'Minimal 1 menit').max(480, 'Maksimal 8 jam'),
+  passScore: z.number().int().min(0).max(100, 'Skor lulus harus 0-100'),
+  questionCount: z.number().int().min(1, 'Minimal 1 soal').max(500, 'Maksimal 500 soal'),
   shuffleQuestions: z.boolean().default(true),
   shuffleOptions: z.boolean().default(false),
   showResults: z.boolean().default(true),
@@ -166,7 +166,7 @@ export const createAssessmentSchema = z.object({
 });
 
 export const updateAssessmentSchema = z.object({
-  assessmentId: z.string().uuid('Invalid assessment ID'),
+  assessmentId: z.string().uuid('ID asesmen tidak valid'),
   title: z.string().min(1).max(200).optional(),
   description: z.string().max(2000).optional(),
   timeLimitMinutes: z.number().int().min(1).max(480).optional(),
@@ -184,8 +184,8 @@ export const updateAssessmentSchema = z.object({
 });
 
 export const submitAnswerSchema = z.object({
-  sessionId: z.string().uuid('Invalid session ID'),
-  cardTemplateId: z.string().uuid('Invalid card ID'),
+  sessionId: z.string().uuid('ID sesi tidak valid'),
+  cardTemplateId: z.string().uuid('ID kartu tidak valid'),
   selectedIndex: z.number().int().min(0).max(9),
 });
 

@@ -657,7 +657,7 @@ export async function completePublicSession(
     const total = answers?.length ?? 0
     const correct = answers?.filter((a) => a.is_correct === true).length ?? 0
     const score = total > 0 ? Math.round((correct / total) * 100) : 0
-    const passScore = (session.assessments as unknown as { pass_score: number }).pass_score
+    const passScore = (session.assessments as unknown as { pass_score: number })?.pass_score ?? 0
     const passed = score >= passScore
 
     // Update session

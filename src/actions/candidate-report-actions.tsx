@@ -17,7 +17,7 @@ export async function exportCandidateReportPdf(
 ): Promise<ActionResultV2<{ url: string }>> {
   return withOrgUser(async ({ supabase, org, role }) => {
     if (!hasMinimumRole(role, 'creator')) {
-      return { ok: false, error: 'Insufficient permissions' }
+      return { ok: false, error: 'Izin tidak cukup' }
     }
 
     // Verify user is in org
@@ -29,7 +29,7 @@ export async function exportCandidateReportPdf(
       .maybeSingle()
 
     if (!membership) {
-      return { ok: false, error: 'Candidate not found in this organization' }
+      return { ok: false, error: 'Kandidat tidak ditemukan di organisasi ini' }
     }
 
     // Fetch profile
@@ -40,7 +40,7 @@ export async function exportCandidateReportPdf(
       .single()
 
     if (!profile) {
-      return { ok: false, error: 'Profile not found' }
+      return { ok: false, error: 'Profil tidak ditemukan' }
     }
 
     // Fetch completed sessions scoped to org

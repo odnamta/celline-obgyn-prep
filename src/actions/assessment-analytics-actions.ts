@@ -71,7 +71,7 @@ export async function getAssessmentAnalyticsSummary(
     // Average time (time_limit - time_remaining at completion)
     let avgTimeMinutes: number | null = null
     const timeLimitMinutes = orgSessions[0]
-      ? (orgSessions[0].assessments as unknown as { time_limit_minutes: number }).time_limit_minutes
+      ? (orgSessions[0].assessments as unknown as { time_limit_minutes: number })?.time_limit_minutes ?? null
       : null
     if (timeLimitMinutes && completed.length > 0) {
       const totalTimeSeconds = completed.reduce((sum, s) => {

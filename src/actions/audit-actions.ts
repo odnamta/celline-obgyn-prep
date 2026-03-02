@@ -54,7 +54,7 @@ export async function getAuditLogs(opts?: {
 }): Promise<ActionResultV2<{ logs: AuditLogWithActor[]; total: number }>> {
   return withOrgUser(async ({ supabase, org, role }) => {
     if (!hasMinimumRole(role, 'admin')) {
-      return { ok: false, error: 'Insufficient permissions — admin required' }
+      return { ok: false, error: 'Izin tidak cukup — diperlukan admin' }
     }
 
     const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 100)

@@ -47,7 +47,7 @@ export async function createBookSource(
       .single()
 
     if (error) {
-      return { ok: false, error: 'Failed to create book source' }
+      return { ok: false, error: 'Gagal membuat sumber buku' }
     }
 
     return { ok: true, data: data as BookSource }
@@ -100,7 +100,7 @@ export async function getBookSource(id: string): Promise<ActionResultV2<BookSour
       .single()
 
     if (error) {
-      return { ok: false, error: 'Book source not found' }
+      return { ok: false, error: 'Sumber buku tidak ditemukan' }
     }
 
     return { ok: true, data: data as BookSource }
@@ -130,7 +130,7 @@ export async function updateBookSource(
     if (updates.specialty !== undefined) updateData.specialty = updates.specialty
 
     if (Object.keys(updateData).length === 0) {
-      return { ok: false, error: 'No fields to update' }
+      return { ok: false, error: 'Tidak ada field yang diperbarui' }
     }
 
     const { data, error } = await supabase
@@ -143,7 +143,7 @@ export async function updateBookSource(
       .single()
 
     if (error) {
-      return { ok: false, error: 'Failed to update book source' }
+      return { ok: false, error: 'Gagal memperbarui sumber buku' }
     }
 
     return { ok: true, data: data as BookSource }
@@ -164,7 +164,7 @@ export async function deleteBookSource(id: string): Promise<ActionResultV2<void>
       .eq('org_id', org.id)
 
     if (error) {
-      return { ok: false, error: 'Failed to delete book source' }
+      return { ok: false, error: 'Gagal menghapus sumber buku' }
     }
 
     return { ok: true }

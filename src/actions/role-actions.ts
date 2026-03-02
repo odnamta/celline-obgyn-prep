@@ -28,7 +28,7 @@ export async function createRoleProfile(input: {
 }): Promise<ActionResultV2<RoleProfile>> {
   return withOrgUser(async ({ supabase, org, role }) => {
     if (!canManageRoleProfiles(role)) {
-      return { ok: false, error: 'Admin access required' }
+      return { ok: false, error: 'Diperlukan akses admin' }
     }
 
     const { data, error } = await supabase
@@ -74,7 +74,7 @@ export async function updateRoleProfile(
 
   return withOrgUser(async ({ supabase, org, role }) => {
     if (!canManageRoleProfiles(role)) {
-      return { ok: false, error: 'Admin access required' }
+      return { ok: false, error: 'Diperlukan akses admin' }
     }
 
     const validated = validation.data
@@ -107,7 +107,7 @@ export async function updateRoleProfile(
 export async function deleteRoleProfile(id: string): Promise<ActionResultV2<null>> {
   return withOrgUser(async ({ supabase, org, role }) => {
     if (!canManageRoleProfiles(role)) {
-      return { ok: false, error: 'Admin access required' }
+      return { ok: false, error: 'Diperlukan akses admin' }
     }
 
     const { error } = await supabase
@@ -208,7 +208,7 @@ export async function setRoleSkillRequirements(
 ): Promise<ActionResultV2<null>> {
   return withOrgUser(async ({ supabase, org, role }) => {
     if (!canManageRoleProfiles(role)) {
-      return { ok: false, error: 'Admin access required' }
+      return { ok: false, error: 'Diperlukan akses admin' }
     }
 
     // Verify the role profile belongs to this org
@@ -261,7 +261,7 @@ export async function assignEmployeeRole(
 ): Promise<ActionResultV2<EmployeeRoleAssignment>> {
   return withOrgUser(async ({ user, supabase, org, role }) => {
     if (!canAssignRoles(role)) {
-      return { ok: false, error: 'Admin access required' }
+      return { ok: false, error: 'Diperlukan akses admin' }
     }
 
     const { data, error } = await supabase
@@ -277,7 +277,7 @@ export async function assignEmployeeRole(
 
     if (error) {
       if (error.code === '23505') {
-        return { ok: false, error: 'Employee already assigned to this role' }
+        return { ok: false, error: 'Karyawan sudah ditugaskan ke peran ini' }
       }
       return { ok: false, error: error.message }
     }
@@ -322,7 +322,7 @@ export async function unassignEmployeeRole(
 ): Promise<ActionResultV2<null>> {
   return withOrgUser(async ({ supabase, org, role }) => {
     if (!canAssignRoles(role)) {
-      return { ok: false, error: 'Admin access required' }
+      return { ok: false, error: 'Diperlukan akses admin' }
     }
 
     const { error } = await supabase
@@ -429,7 +429,7 @@ export async function getRoleProfileEmployees(
 }>> {
   return withOrgUser(async ({ supabase, org, role }) => {
     if (!canAssignRoles(role)) {
-      return { ok: false, error: 'Admin access required' }
+      return { ok: false, error: 'Diperlukan akses admin' }
     }
 
     const { data: assignments } = await supabase
@@ -470,7 +470,7 @@ export async function getUnassignedMembers(
 ): Promise<ActionResultV2<{ userId: string; email: string; fullName: string | null }[]>> {
   return withOrgUser(async ({ supabase, org, role }) => {
     if (!canAssignRoles(role)) {
-      return { ok: false, error: 'Admin access required' }
+      return { ok: false, error: 'Diperlukan akses admin' }
     }
 
     // Get all org members

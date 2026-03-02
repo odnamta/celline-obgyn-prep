@@ -248,7 +248,7 @@ export async function getUserSubject(): Promise<ActionResultV2<{ subject: string
       return { ok: true, data: { subject } }
     } catch (error) {
       logger.error('getUserSubject', error)
-      return { ok: false, error: 'Failed to fetch subject' }
+      return { ok: false, error: 'Gagal mengambil data subjek' }
     }
   }, RATE_LIMITS.standard)
 }

@@ -23,17 +23,17 @@ export async function inviteMember(
 ): Promise<ActionResultV2<Invitation>> {
   return withOrgUser(async ({ user, supabase, org, role: userRole }) => {
     if (userRole !== 'owner' && userRole !== 'admin') {
-      return { ok: false, error: 'Only admins and owners can invite members' }
+      return { ok: false, error: 'Hanya admin dan pemilik yang dapat mengundang anggota' }
     }
 
     const validation = inviteMemberSchema.safeParse({ orgId: org.id, email, role })
     if (!validation.success) {
-      return { ok: false, error: validation.error.issues[0]?.message ?? 'Validation failed' }
+      return { ok: false, error: validation.error.issues[0]?.message ?? 'Data tidak valid' }
     }
 
     // Cannot invite as owner
     if (role === 'owner') {
-      return { ok: false, error: 'Cannot invite someone as owner. Promote after joining.' }
+      return { ok: false, error: 'Tidak bisa mengundang sebagai pemilik. Promosikan setelah bergabung.' }
     }
 
     // V20.6: Check if already a member — fetch user ID first to avoid nested query
@@ -52,7 +52,7 @@ export async function inviteMember(
         .maybeSingle()
 
       if (existingMember) {
-        return { ok: false, error: 'This user is already a member' }
+        return { ok: false, error: 'Pengguna ini sudah menjadi anggota' }
       }
     }
 
@@ -67,7 +67,7 @@ export async function inviteMember(
       .maybeSingle()
 
     if (existingInvite) {
-      return { ok: false, error: 'An invitation is already pending for this email' }
+      return { ok: false, error: 'Undangan sudah dikirim untuk email ini' }
     }
 
     // Create invitation
@@ -97,7 +97,7 @@ export async function inviteMember(
 export async function getOrgInvitations(): Promise<ActionResultV2<Invitation[]>> {
   return withOrgUser(async ({ supabase, org, role }) => {
     if (role !== 'owner' && role !== 'admin') {
-      return { ok: false, error: 'Insufficient permissions' }
+      return { ok: false, error: 'Izin tidak cukup' }
     }
 
     const { data, error } = await supabase
@@ -138,12 +138,12 @@ export async function acceptInvitation(
       .single()
 
     if (fetchError || !invitation) {
-      return { ok: false, error: 'Invalid or expired invitation' }
+      return { ok: false, error: 'Undangan tidak valid atau sudah kedaluwarsa' }
     }
 
     // Check email matches (if user has email)
     if (user.email && invitation.email.toLowerCase() !== user.email.toLowerCase()) {
-      return { ok: false, error: 'This invitation was sent to a different email address' }
+      return { ok: false, error: 'Undangan ini dikirim ke alamat email yang berbeda' }
     }
 
     // Check not already a member
@@ -160,7 +160,7 @@ export async function acceptInvitation(
         .from('invitations')
         .update({ accepted_at: new Date().toISOString() })
         .eq('id', invitation.id)
-      return { ok: false, error: 'You are already a member of this organization' }
+      return { ok: false, error: 'Anda sudah menjadi anggota organisasi ini' }
     }
 
     // Create membership (regular client — user is joining, RLS allows this)
@@ -173,7 +173,7 @@ export async function acceptInvitation(
       })
 
     if (memberError) {
-      return { ok: false, error: 'Failed to join organization' }
+      return { ok: false, error: 'Gagal bergabung ke organisasi' }
     }
 
     // Mark invitation as accepted
@@ -196,7 +196,7 @@ export async function revokeInvitation(
 ): Promise<ActionResultV2<void>> {
   return withOrgUser(async ({ supabase, org, role }) => {
     if (role !== 'owner' && role !== 'admin') {
-      return { ok: false, error: 'Insufficient permissions' }
+      return { ok: false, error: 'Izin tidak cukup' }
     }
 
     const { error } = await supabase

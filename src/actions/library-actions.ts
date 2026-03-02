@@ -91,12 +91,12 @@ export async function subscribeToDeck(deckTemplateId: string): Promise<ActionRes
         .single()
 
       if (deckError || !deck) {
-        return { ok: false, error: 'Deck not found' }
+        return { ok: false, error: 'Dek tidak ditemukan' }
       }
 
       // Check visibility: must be public OR user is author
       if (deck.visibility !== 'public' && deck.author_id !== user.id) {
-        return { ok: false, error: 'Deck not found or not accessible' }
+        return { ok: false, error: 'Dek tidak ditemukan atau tidak dapat diakses' }
       }
 
       // Upsert subscription (create or reactivate)
