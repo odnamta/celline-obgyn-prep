@@ -16,6 +16,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://cekatan.com'),
   title: {
     default: "Cekatan",
     template: "%s - Cekatan",

@@ -7,7 +7,7 @@
 **Deployment:** Docker Compose on Office Mini (Arya) → `https://cekatan.com`
 **Deploy workflow:** Push to main → Mini's cron pulls every 2min → `docker compose build && up -d`
 **Port:** 3301 (host) → 3000 (container). Config: `output: 'standalone'` in next.config.ts.
-**Supabase:** `hltuqxtemjpwfwjolyey` — currently **PAUSED** (free tier limit: 2 active projects). Resume to enable auth/data.
+**Supabase:** Self-hosted on Office Mini (Arya) → `https://db.cekatan.com` (Kong :8000, Studio :3001). Cloud project `hltuqxtemjpwfwjolyey` is DEPRECATED.
 
 **Architecture:** ONE platform, TWO modes (Study Mode + Assessment Mode).
 **Multi-tenant:** Each organization is a tenant with its own content, users, and configuration.
@@ -177,11 +177,11 @@ npm run seed         # Seed database with sample data
 
 ## Environment Variables
 
-Required in `.env.local`:
+Required in `.env.local` (dev) / `.env.production` (deploy):
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+NEXT_PUBLIC_SUPABASE_URL=https://db.cekatan.com
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<arya-supabase-anon-key>
+SUPABASE_SERVICE_ROLE_KEY=<arya-supabase-service-role-key>
 OPENAI_API_KEY=your-openai-api-key
 RESEND_API_KEY=your-resend-api-key
 NEXT_PUBLIC_APP_URL=https://cekatan.com
